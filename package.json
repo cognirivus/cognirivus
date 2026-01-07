@@ -14,6 +14,7 @@
 		"lint": "prettier --check . && eslint ."
 	},
 	"devDependencies": {
+		"@ai-sdk/svelte": "^4.0.18",
 		"@eslint/compat": "^1.4.0",
 		"@eslint/js": "^9.39.1",
 		"@sveltejs/adapter-auto": "^7.0.0",
@@ -23,6 +24,7 @@
 		"@tailwindcss/typography": "^0.5.19",
 		"@tailwindcss/vite": "^4.1.17",
 		"@types/node": "^22",
+		"ai": "^6.0.18",
 		"eslint": "^9.39.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.13.1",
@@ -35,12 +37,14 @@
 		"tailwindcss": "^4.1.17",
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.48.1",
-		"vite": "^7.2.6"
+		"vite": "^7.2.6",
+		"zod": "^4.3.5"
 	},
 	"dependencies": {
 		"@auth/core": "^0.37.4",
 		"@convex-dev/auth": "^0.0.87",
 		"@mmailaender/convex-auth-svelte": "^0.1.3",
+		"@openrouter/ai-sdk-provider": "^1.5.4",
 		"convex": "^1.31.2",
 		"convex-svelte": "^0.0.12"
 	}
