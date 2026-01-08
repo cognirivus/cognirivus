@@ -6,8 +6,8 @@ export const getDashboardStats = query({
 		const userId = await getAuthUserId(ctx);
 		if (!userId) return null;
 
-		const messages = await ctx.db
-			.query('messages')
+		const usageLogs = await ctx.db
+			.query('usage_logs')
 			.withIndex('by_user', (q) => q.eq('userId', userId))
 			.collect();
 
@@ -16,35 +16,32 @@ export const getDashboardStats = query({
 		let totalCompletionTokens = 0;
 		let totalCost = 0;
 		let cancelledCount = 0;
-		let assistantMessageCount = 0;
+		let totalGenerations = usageLogs.length;
 
 		const modelStats: Record<string, { tokens: number; cost: number; count: number }> = {};
 		const dailyStats: Record<string, { tokens: number; cost: number }> = {};
 
-		for (const m of messages) {
-			if (m.role === 'assistant') {
-				assistantMessageCount++;
-				if (m.usage) {
-					totalTokens += m.usage.totalTokens;
-					totalPromptTokens += m.usage.promptTokens;
-					totalCompletionTokens += m.usage.completionTokens;
-				}
-				if (m.cost) totalCost += m.cost;
-				if (m.isCancelled || m.metadata?.cancelled) cancelledCount++;
-
-				// Model Stats
-				const model = m.model || 'unknown';
-				if (!modelStats[model]) modelStats[model] = { tokens: 0, cost: 0, count: 0 };
-				modelStats[model].tokens += m.usage?.totalTokens || 0;
-				modelStats[model].cost += m.cost || 0;
-				modelStats[model].count++;
+		for (const log of usageLogs) {
+			totalTokens += log.totalTokens;
+			totalPromptTokens += log.promptTokens;
+			totalCompletionTokens += log.completionTokens;
+			if (log.cost) totalCost += log.cost;
+			if (log.metadata?.cancelled || log.metadata?.finish_reason === 'cancelled') {
+				cancelledCount++;
 			}
 
-			// Daily Stats (all messages contribute to "activity")
-			const date = new Date(m.createdAt).toISOString().split('T')[0];
+			// Model Stats
+			const model = log.model || 'unknown';
+			if (!modelStats[model]) modelStats[model] = { tokens: 0, cost: 0, count: 0 };
+			modelStats[model].tokens += log.totalTokens;
+			modelStats[model].cost += log.cost || 0;
+			modelStats[model].count++;
+
+			// Daily Stats
+			const date = new Date(log.createdAt).toISOString().split('T')[0];
 			if (!dailyStats[date]) dailyStats[date] = { tokens: 0, cost: 0 };
-			if (m.usage) dailyStats[date].tokens += m.usage.totalTokens;
-			if (m.cost) dailyStats[date].cost += m.cost;
+			dailyStats[date].tokens += log.totalTokens;
+			if (log.cost) dailyStats[date].cost += log.cost;
 		}
 
 		return {
@@ -53,10 +50,10 @@ export const getDashboardStats = query({
 				totalPromptTokens,
 				totalCompletionTokens,
 				totalCost,
-				totalMessages: messages.length,
-				assistantMessageCount,
+				totalMessages: totalGenerations, // Technically total assistant responses logged
+				assistantMessageCount: totalGenerations,
 				cancelledCount,
-				cancellationRate: assistantMessageCount > 0 ? cancelledCount / assistantMessageCount : 0
+				cancellationRate: totalGenerations > 0 ? cancelledCount / totalGenerations : 0
 			},
 			modelBreakdown: Object.entries(modelStats).map(([name, stats]) => ({
 				name,

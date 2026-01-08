@@ -36,6 +36,7 @@
 		chatState.status = 'ready';
 		chatState.stopChat = null;
 		chatState.viewContext = null;
+		chatState.resetStats();
 	});
 </script>
 

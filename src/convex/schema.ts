@@ -30,6 +30,19 @@ const schema = defineSchema({
 		userId: v.id('users'),
 		updatedAt: v.number()
 	}).index('by_user', ['userId']),
+	usage_logs: defineTable({
+		userId: v.id('users'),
+		messageId: v.id('messages'),
+		model: v.string(),
+		promptTokens: v.number(),
+		completionTokens: v.number(),
+		totalTokens: v.number(),
+		cost: v.optional(v.number()),
+		createdAt: v.number(),
+		metadata: v.optional(v.any())
+	})
+		.index('by_user', ['userId'])
+		.index('by_created_at', ['createdAt']),
 	cancellations: defineTable({
 		messageId: v.id('messages')
 	}).index('by_message', ['messageId'])

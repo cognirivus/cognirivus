@@ -81,9 +81,9 @@
 							{formatNumber(stats.summary.totalTokens)}
 						</div>
 						<p class="text-xs text-zinc-400 dark:text-zinc-500">
-							{formatNumber(stats.summary.totalPromptTokens)} in / {formatNumber(
+							{formatNumber(stats.summary.totalPromptTokens)} Prompt · {formatNumber(
 								stats.summary.totalCompletionTokens
-							)} out
+							)} Completions
 						</p>
 					</div>
 				</div>

@@ -19,10 +19,14 @@
 		return result;
 	});
 
-	// Auto-expand reasoning if it's the last message and streaming
+	// Auto-expand reasoning while it's active, collapse when response starts
 	$effect(() => {
-		if (isLast && isStreaming && message.reasoning) {
-			expandedReasoning = true;
+		if (isLast && isStreaming) {
+			if (message.reasoning && !message.body) {
+				expandedReasoning = true;
+			} else if (message.body) {
+				expandedReasoning = false;
+			}
 		}
 	});
 </script>
@@ -105,7 +109,7 @@
 					</div>
 					<div class="flex items-center gap-2">
 						<span>Prompt: {message.usage.promptTokens}</span>
-						<span>Compl: {message.usage.completionTokens}</span>
+						<span>Completions: {message.usage.completionTokens}</span>
 						{#if message.cost !== undefined}
 							<span class="font-medium text-zinc-600 dark:text-zinc-300">
 								${message.cost.toFixed(6)}

@@ -207,6 +207,18 @@ export const generate = action({
 							},
 							metadata: data // Store everything
 						});
+
+						// 7. Permanently log usage
+						await ctx.runMutation(internal.usage.logUsage, {
+							userId,
+							messageId,
+							model: modelToUse,
+							promptTokens: data.native_tokens_prompt,
+							completionTokens: data.native_tokens_completion,
+							totalTokens: data.native_tokens_prompt + data.native_tokens_completion,
+							cost: data.total_cost,
+							metadata: data
+						});
 					}
 				}
 			} catch (e) {

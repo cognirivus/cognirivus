@@ -14,6 +14,7 @@ import type * as chat from "../chat.js";
 import type * as http from "../http.js";
 import type * as messages from "../messages.js";
 import type * as threads from "../threads.js";
+import type * as usage from "../usage.js";
 import type * as users from "../users.js";
 
 import type {
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   messages: typeof messages;
   threads: typeof threads;
+  usage: typeof usage;
   users: typeof users;
 }>;
 

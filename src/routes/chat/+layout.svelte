@@ -9,10 +9,15 @@
 	let { children } = $props();
 	const chatState = setChatContext();
 
-	// Initialize sidebar state on mount for mobile
+	// Browser responsiveness
 	$effect(() => {
-		if (browser && window.innerWidth < 768) {
-			chatState.sidebarOpen = false;
+		if (browser) {
+			const checkMobile = () => {
+				chatState.isMobile = window.innerWidth < 768;
+			};
+			checkMobile();
+			window.addEventListener('resize', checkMobile);
+			return () => window.removeEventListener('resize', checkMobile);
 		}
 	});
 </script>
@@ -25,7 +30,7 @@
 		class="fixed top-0 right-0 left-0 z-30 flex h-14 items-center border-b border-zinc-200 bg-white/80 px-4 backdrop-blur-md md:hidden dark:border-zinc-800 dark:bg-zinc-900/80"
 	>
 		<button
-			onclick={() => (chatState.sidebarOpen = !chatState.sidebarOpen)}
+			onclick={() => chatState.toggleSidebar()}
 			class="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
 		>
 			<Menu class="h-6 w-6" />
@@ -35,23 +40,23 @@
 
 	<Sidebar />
 
-	{#if chatState.sidebarOpen}
+	{#if chatState.isSidebarOpen && chatState.isMobile}
 		<!-- Mobile Overlay -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			onclick={() => (chatState.sidebarOpen = false)}
+			onclick={() => chatState.setSidebar(false)}
 			class="fixed inset-0 z-30 bg-zinc-950/20 backdrop-blur-sm transition-opacity duration-300 md:hidden"
 		></div>
 	{/if}
 
 	<div class="relative flex flex-1 flex-col overflow-hidden pt-14 md:pt-0">
 		<!-- Desktop Toggle Button -->
-		<div class="absolute top-4 left-4 z-20 hidden md:block">
+		<div class="absolute top-4 left-4 z-50 hidden md:block">
 			<button
-				onclick={() => (chatState.sidebarOpen = !chatState.sidebarOpen)}
+				onclick={() => chatState.toggleSidebar()}
 				class="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-				title={chatState.sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+				title={chatState.isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
 			>
 				<PanelLeft class="h-5 w-5" />
 			</button>

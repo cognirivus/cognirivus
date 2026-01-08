@@ -37,7 +37,7 @@
 </script>
 
 <div
-	class="pointer-events-none fixed right-0 bottom-0 left-0 z-20 px-4 pt-8 pb-4 transition-all duration-300 {chatState.sidebarOpen
+	class="pointer-events-none fixed right-0 bottom-0 left-0 z-20 px-4 pt-8 pb-4 transition-all duration-300 {chatState.isSidebarOpen
 		? 'md:left-64'
 		: 'md:left-0'}"
 >
@@ -156,7 +156,7 @@
 													>
 												</div>
 												<div class="flex justify-between">
-													<span class="text-zinc-500">Completion</span>
+													<span class="text-zinc-500">Completions</span>
 													<span class="font-medium text-zinc-900 dark:text-zinc-100"
 														>{totalCompletionTokens.toLocaleString()}</span
 													>

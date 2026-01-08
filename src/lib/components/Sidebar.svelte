@@ -25,11 +25,12 @@
 </script>
 
 <aside
-	class="fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col border-r border-zinc-200 bg-zinc-50 transition-all duration-300 dark:border-zinc-800 dark:bg-zinc-950 {chatState.sidebarOpen
-		? 'translate-x-0'
-		: '-translate-x-full'} md:relative md:translate-x-0 {chatState.sidebarOpen
-		? 'md:w-64 md:opacity-100'
-		: 'overflow-hidden md:pointer-events-none md:w-0 md:border-none md:opacity-0'}"
+	class="fixed inset-y-0 left-0 z-50 flex h-full w-64 flex-col border-r border-zinc-200 bg-zinc-50 transition-all duration-300 dark:border-zinc-800 dark:bg-zinc-950
+    {chatState.isSidebarOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0'}
+    md:relative md:translate-x-0 md:opacity-100
+    {chatState.isSidebarOpen
+		? 'md:w-64'
+		: 'md:pointer-events-none md:w-0 md:overflow-hidden md:border-none'}"
 >
 	<div class="flex items-center gap-2 p-4">
 		<a
@@ -40,7 +41,7 @@
 			New Chat
 		</a>
 		<button
-			onclick={() => (chatState.sidebarOpen = false)}
+			onclick={() => chatState.setSidebar(false)}
 			class="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 md:hidden dark:border-zinc-800 dark:bg-zinc-900"
 		>
 			<X class="h-5 w-5" />

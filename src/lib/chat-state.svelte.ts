@@ -9,13 +9,40 @@ export class ChatContext {
 	// Local streaming status
 	status = $state<ChatStatus>('ready');
 	isActuallyStreaming = $state(false);
-	sidebarOpen = $state(true);
+	isMobile = $state(false);
+	sidebarOpenDesktop = $state(true);
+	sidebarOpenMobile = $state(false);
+
+	isSidebarOpen = $derived(this.isMobile ? this.sidebarOpenMobile : this.sidebarOpenDesktop);
+
+	toggleSidebar() {
+		if (this.isMobile) {
+			this.sidebarOpenMobile = !this.sidebarOpenMobile;
+		} else {
+			this.sidebarOpenDesktop = !this.sidebarOpenDesktop;
+		}
+	}
+
+	setSidebar(value: boolean) {
+		if (this.isMobile) {
+			this.sidebarOpenMobile = value;
+		} else {
+			this.sidebarOpenDesktop = value;
+		}
+	}
 
 	// Session stats
 	totalTokens = $state(0);
 	totalPromptTokens = $state(0);
 	totalCompletionTokens = $state(0);
 	totalCost = $state(0);
+
+	resetStats() {
+		this.totalTokens = 0;
+		this.totalPromptTokens = 0;
+		this.totalCompletionTokens = 0;
+		this.totalCost = 0;
+	}
 
 	// Callbacks to be filled by the active page
 	handleSubmit = $state<((e?: Event) => void) | null>(null);
