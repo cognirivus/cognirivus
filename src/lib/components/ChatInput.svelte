@@ -98,12 +98,12 @@
 											selectedModel = model.id;
 											showModelSelector = false;
 										}}
-										class="w-full rounded-lg px-3 py-2 text-left text-[11px] font-medium transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800 {selectedModel ===
+										class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[11px] font-medium transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800 {selectedModel ===
 										model.id
 											? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
 											: 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200'}"
 									>
-										{model.name}
+										<span>{model.name}</span>
 									</button>
 								{/each}
 							</div>

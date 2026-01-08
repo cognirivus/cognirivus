@@ -2,7 +2,7 @@
 	import { useQuery } from 'convex-svelte';
 	import { api } from '../../../convex/_generated/api';
 	import { Coins, Zap, MessageSquare, Ban, TrendingUp, BarChart3 } from '@lucide/svelte';
-	import { fade, slide } from 'svelte/transition';
+	import UsageSkeleton from '$lib/components/UsageSkeleton.svelte';
 
 	const statsQuery = useQuery(api.analytics.getDashboardStats, {});
 
@@ -34,11 +34,7 @@
 		</div>
 
 		{#if statsQuery.isLoading}
-			<div class="flex h-64 items-center justify-center">
-				<div
-					class="h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-800 dark:border-zinc-800 dark:border-t-zinc-50"
-				></div>
-			</div>
+			<UsageSkeleton />
 		{:else if statsQuery.error}
 			<div
 				class="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400"
@@ -49,7 +45,7 @@
 			{@const stats = statsQuery.data}
 
 			<!-- Summary Cards -->
-			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" in:fade>
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 				<div
 					class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
 				>
@@ -138,7 +134,6 @@
 				<!-- Model Breakdown -->
 				<div
 					class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-					in:slide
 				>
 					<div class="mb-6 flex items-center justify-between">
 						<h3 class="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-50">
@@ -173,7 +168,6 @@
 				<!-- Daily Activity -->
 				<div
 					class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-					in:slide
 				>
 					<div class="mb-6 flex items-center justify-between">
 						<h3 class="flex items-center gap-2 font-bold text-zinc-900 dark:text-zinc-50">

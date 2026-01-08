@@ -29,7 +29,7 @@ export class ChatContext {
 		{ id: 'openai/gpt-oss-20b', name: 'GPT OSS 20B' },
 		{ id: 'openai/gpt-oss-120b', name: 'GPT OSS 120B' },
 		{ id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite' },
-		{ id: 'qwen/qwen3-235b-a22b-2507', name: 'Qwen: Qwen3 235B A22B Instruct 2507' }
+		{ id: 'qwen/qwen3-235b-a22b-2507', name: 'Qwen 3 Instruct' }
 	];
 
 	constructor() {}

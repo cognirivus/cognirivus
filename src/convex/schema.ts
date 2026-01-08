@@ -22,7 +22,9 @@ const schema = defineSchema({
 		isCancelled: v.optional(v.boolean()),
 		cost: v.optional(v.number()),
 		metadata: v.optional(v.any())
-	}).index('by_thread', ['threadId']),
+	})
+		.index('by_thread', ['threadId'])
+		.index('by_user', ['userId']),
 	threads: defineTable({
 		title: v.string(),
 		userId: v.id('users'),

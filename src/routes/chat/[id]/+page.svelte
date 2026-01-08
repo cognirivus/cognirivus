@@ -10,12 +10,13 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 
+	import MessageItem from '$lib/components/MessageItem.svelte';
+	import SkeletonLoader from '$lib/components/SkeletonLoader.svelte';
+
 	const threadId = $derived(page.params.id as Id<'threads'>);
 
 	const client = useConvexClient();
 	const chatState = useChatContext();
-	let expandedReasoningIds = $state<Record<string, boolean>>({});
-	let revealedMetadataIds = $state<Record<string, boolean>>({});
 	let viewingContextId = $state<string | null>(null);
 	let viewport = $state<HTMLElement>();
 
@@ -59,7 +60,7 @@
 	// Trigger AI response for new chats
 	$effect(() => {
 		if (messages.length === 0) return;
-		const lastMessage = messages[messages.length - 1];
+		const lastMessage = messages[lastMessageIndex];
 
 		if (
 			chatState.shouldTrigger &&
@@ -72,6 +73,8 @@
 		}
 	});
 
+	const lastMessageIndex = $derived(messages.length - 1);
+
 	async function triggerResponse() {
 		chatState.status = 'streaming';
 		try {
@@ -81,9 +84,6 @@
 				includeReasoning: chatState.includeReasoning
 			});
 		} catch (e: any) {
-			// If status is ready, it means the user manually clicked "Stop"
-			// which often triggers a 'Connection lost' or 'Action in flight' error.
-			// We ignore those for a cleaner experience.
 			if ((chatState.status as string) === 'ready') {
 				console.log('Cognirivus: Generation stopped by user.');
 			} else {
@@ -119,17 +119,13 @@
 	$effect(() => {
 		chatState.handleSubmit = handleSubmit;
 		chatState.stopChat = async () => {
-			// 1. Set local state to stop spinner
 			chatState.status = 'ready';
-
-			// 2. Find the last assistant message (the one being generated)
-			const lastMessage = messages[messages.length - 1];
+			const lastMessage = messages[lastMessageIndex];
 			if (lastMessage && lastMessage.role === 'assistant') {
-				// 3. Call cancel mutation
 				await client.mutation(api.messages.cancel, { messageId: lastMessage._id });
 			}
 		};
-		chatState.viewContext = () => (viewingContextId = messages[messages.length - 1]?._id);
+		chatState.viewContext = () => (viewingContextId = messages[lastMessageIndex]?._id);
 
 		// Calculate totals
 		let tokens = 0;
@@ -149,7 +145,7 @@
 
 		// Sync isActuallyStreaming
 		if (chatState.status === 'streaming') {
-			const lastMessage = messages[messages.length - 1];
+			const lastMessage = messages[lastMessageIndex];
 			chatState.isActuallyStreaming =
 				!!lastMessage &&
 				lastMessage.role === 'assistant' &&
@@ -158,162 +154,26 @@
 			chatState.isActuallyStreaming = false;
 		}
 	});
-
-	function getParts(message: any) {
-		const parts = [{ type: 'text', text: message.body }];
-		if (message.reasoning) {
-			parts.unshift({ type: 'reasoning', text: message.reasoning });
-		}
-		return parts;
-	}
 </script>
 
 {#if browser}
 	<!-- Scrollable Message Area -->
 	<div bind:this={viewport} class="flex-1 overflow-y-auto px-4">
 		{#if messagesQuery?.isLoading && messages.length === 0}
-			<div
-				class="pointer-events-none fixed inset-0 flex items-center justify-center transition-all duration-300 {chatState.sidebarOpen
-					? 'md:left-64'
-					: 'md:left-0'}"
-			>
-				<div class="flex flex-col items-center gap-4">
-					<div
-						class="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800 dark:border-zinc-800 dark:border-t-zinc-200"
-					></div>
-					<div class="animate-pulse text-sm text-zinc-500 dark:text-zinc-400">
-						Initializing chat...
-					</div>
-				</div>
-			</div>
+			<SkeletonLoader />
 		{:else}
 			<div class="mx-auto flex max-w-3xl flex-col space-y-8 pt-8 pb-48 md:pt-20">
 				{#each messages as message, messageIndex (message._id)}
-					{@const parts = getParts(message)}
-					<!-- svelte-ignore a11y_click_events_have_key_events -->
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div
-						onclick={() => (revealedMetadataIds[message._id] = !revealedMetadataIds[message._id])}
-						class="group flex w-full cursor-pointer {message.role === 'user'
-							? 'justify-end'
-							: 'justify-start'}"
-					>
-						<div class="flex flex-col gap-1">
-							<div
-								class="{message.role === 'user'
-									? 'rounded-2xl rounded-tr-sm bg-zinc-900 px-5 py-3 text-zinc-50 shadow-md dark:bg-zinc-100 dark:text-zinc-900'
-									: 'bg-transparent px-1 py-1 text-zinc-800 dark:text-zinc-200'} text-[0.95rem] leading-relaxed"
-							>
-								{#if message.role === 'assistant'}
-									<div class="flex items-start gap-3">
-										<div
-											class="prose prose-zinc dark:prose-invert prose-headings:font-semibold prose-p:leading-7 max-w-none"
-										>
-											{#each parts as part}
-												{#if part.type === 'reasoning'}
-													<div
-														class="mb-4 flex flex-col gap-2 text-sm text-zinc-500 dark:text-zinc-400"
-													>
-														<button
-															onclick={() =>
-																(expandedReasoningIds[message._id] =
-																	!expandedReasoningIds[message._id])}
-															class="flex items-center gap-2 font-medium transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
-														>
-															<Brain class="h-3.5 w-3.5" />
-															<span>Reasoning</span>
-															{#if expandedReasoningIds[message._id] || (messageIndex === messages.length - 1 && chatState.status === 'streaming')}
-																<ChevronDown class="h-3.5 w-3.5" />
-															{:else}
-																<ChevronRight class="h-3.5 w-3.5" />
-															{/if}
-														</button>
-														{#if expandedReasoningIds[message._id] || (messageIndex === messages.length - 1 && chatState.status === 'streaming')}
-															<div
-																class="ml-1.5 border-l-2 border-zinc-200 py-1 pl-4 whitespace-pre-wrap text-zinc-600 italic dark:border-zinc-800 dark:text-zinc-400"
-															>
-																{part.text}
-															</div>
-														{/if}
-													</div>
-												{:else if part.type === 'text'}
-													<div>{part.text}</div>
-												{/if}
-											{/each}
-										</div>
-									</div>
-								{:else}
-									<div class="whitespace-pre-wrap">
-										{#each parts as part}
-											{#if part.type === 'text'}
-												{part.text}
-											{/if}
-										{/each}
-									</div>
-								{/if}
-							</div>
-
-							{#if message.role === 'assistant' && message.usage}
-								<div
-									class="px-1 transition-opacity duration-200 {revealedMetadataIds[message._id]
-										? 'opacity-100'
-										: 'opacity-0 group-hover:opacity-100'}"
-								>
-									<div class="flex flex-col gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
-										<div class="flex items-center gap-2">
-											<span class="font-medium text-zinc-500 dark:text-zinc-400"
-												>{message.model || 'Unknown Model'}</span
-											>
-											<span class="text-zinc-400 dark:text-zinc-600">•</span>
-											<span>{new Date(message.createdAt).toLocaleString()}</span>
-										</div>
-										<div class="flex items-center gap-2">
-											<span>Prompt: {message.usage.promptTokens}</span>
-											<span>Compl: {message.usage.completionTokens}</span>
-											{#if message.cost !== undefined}
-												<span class="font-medium text-zinc-600 dark:text-zinc-300">
-													${message.cost.toFixed(6)}
-												</span>
-											{/if}
-											{#if message.isCancelled || message.metadata?.cancelled}
-												<div
-													class="flex items-center gap-1 text-[9px] font-semibold tracking-tight text-red-500/80 uppercase"
-												>
-													<Square class="h-2 w-2" fill="currentColor" />
-													<span>Cancelled</span>
-												</div>
-											{/if}
-										</div>
-									</div>
-								</div>
-							{/if}
-
-							{#if message.role === 'user'}
-								<div
-									class="flex items-center justify-end gap-2 px-1 transition-opacity duration-200 {revealedMetadataIds[
-										message._id
-									]
-										? 'opacity-100'
-										: 'opacity-0 group-hover:opacity-100'}"
-								>
-									<span class="text-[10px] text-zinc-400 dark:text-zinc-500">
-										{new Date(message.createdAt).toLocaleString()}
-									</span>
-									<button
-										onclick={() => (viewingContextId = message._id)}
-										class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-medium text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-400"
-										title="View context sent to AI"
-									>
-										<Terminal class="h-3 w-3" />
-									</button>
-								</div>
-							{/if}
-						</div>
-					</div>
+					<MessageItem
+						{message}
+						isLast={messageIndex === lastMessageIndex}
+						isStreaming={chatState.status === 'streaming'}
+						onViewContext={(id) => (viewingContextId = id)}
+					/>
 				{/each}
 
 				{#if chatState.status === 'streaming'}
-					{@const latestMessage = messages[messages.length - 1]}
+					{@const latestMessage = messages[lastMessageIndex]}
 					{@const showDots =
 						latestMessage?.role === 'user' ||
 						(latestMessage?.role === 'assistant' && !latestMessage.body)}

@@ -8,7 +8,7 @@ export const getDashboardStats = query({
 
 		const messages = await ctx.db
 			.query('messages')
-			.filter((q) => q.eq(q.field('userId'), userId))
+			.withIndex('by_user', (q) => q.eq('userId', userId))
 			.collect();
 
 		let totalTokens = 0;
