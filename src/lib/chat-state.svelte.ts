@@ -8,12 +8,6 @@ export class ChatContext {
 
 	// Local streaming status
 	status = $state<ChatStatus>('ready');
-	activeThreadId = $state<string | null>(null);
-
-	// Mock for backward compatibility in templates
-	streamingContent = { text: '', reasoning: '' };
-	tabId = '';
-	streamerId = null;
 
 	// Callbacks to be filled by the active page
 	handleSubmit = $state<((e?: Event) => void) | null>(null);

@@ -16,6 +16,19 @@ export const list = query({
 	}
 });
 
+export const get = query({
+	args: { id: v.id('threads') },
+	handler: async (ctx, { id }) => {
+		const userId = await getAuthUserId(ctx);
+		if (userId === null) return null;
+
+		const thread = await ctx.db.get(id);
+		if (!thread || thread.userId !== userId) return null;
+
+		return thread;
+	}
+});
+
 export const create = mutation({
 	args: { title: v.string() },
 	handler: async (ctx, { title }) => {

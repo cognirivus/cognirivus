@@ -9,6 +9,7 @@
 	import { useChatContext } from '$lib/chat-state.svelte';
 
 	import { tick } from 'svelte';
+	import { goto } from '$app/navigation';
 
 	const threadId = $derived(page.params.id as Id<'threads'>);
 	let lastSyncedThreadId = $state<Id<'threads'> | null>(null);
@@ -66,6 +67,20 @@
 	const historicalMessages = $derived.by(() => {
 		if (!threadId) return null;
 		return useQuery(api.messages.list, { threadId: threadId });
+	});
+
+	// Verify thread ownership and existence
+	const threadDetails = $derived.by(() => {
+		if (!threadId) return null;
+		return useQuery(api.threads.get, { id: threadId });
+	});
+
+	// Redirect if thread is not found or unauthorized
+	$effect(() => {
+		if (browser && threadDetails?.data === null && !threadDetails.isLoading) {
+			console.warn('Cognirivus: Thread not found or unauthorized, redirecting...');
+			goto('/chat');
+		}
 	});
 
 	// Track message count to detect new messages from Convex
