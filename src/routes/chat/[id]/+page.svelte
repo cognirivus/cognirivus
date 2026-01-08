@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { Chat } from '@ai-sdk/svelte';
-	import { Brain, ChevronDown, ChevronRight, Code, X } from '@lucide/svelte';
+	import { Brain, ChevronDown, ChevronRight, Code, Terminal, X } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '../../../convex/_generated/api';
@@ -12,7 +11,6 @@
 	import { goto } from '$app/navigation';
 
 	const threadId = $derived(page.params.id as Id<'threads'>);
-	let lastSyncedThreadId = $state<Id<'threads'> | null>(null);
 
 	const client = useConvexClient();
 	const chatState = useChatContext();
@@ -32,41 +30,21 @@
 		}
 	};
 
-	// Auto-scroll when messages update
-	$effect(() => {
-		// This ensures we track deep changes in message parts and status changes
-		chat.status;
-		if (chat.messages.length > 0) {
-			chat.messages[chat.messages.length - 1].parts;
-			scrollToBottom();
-		}
-	});
-
-	const chat = new Chat({
-		onFinish: async ({ message }) => {
-			if (threadId) {
-				const body = message.parts
-					.filter((p) => p.type === 'text')
-					.map((p) => p.text)
-					.join('');
-				const reasoning = message.parts
-					.filter((p) => p.type === 'reasoning')
-					.map((p) => p.text)
-					.join('');
-				await client.mutation(api.messages.send, {
-					body,
-					reasoning: reasoning || undefined,
-					threadId: threadId,
-					role: 'assistant'
-				});
-			}
-		}
-	});
-
 	// Fetch messages for selected thread
-	const historicalMessages = $derived.by(() => {
+	const messagesQuery = $derived.by(() => {
 		if (!threadId) return null;
 		return useQuery(api.messages.list, { threadId: threadId });
+	});
+
+	const messages = $derived(messagesQuery?.data || []);
+
+	// Auto-scroll when messages update
+	$effect(() => {
+		if (messages.length > 0) {
+			// Accessing messages to track dependency
+			messages[messages.length - 1];
+			scrollToBottom();
+		}
 	});
 
 	// Verify thread ownership and existence
@@ -83,67 +61,47 @@
 		}
 	});
 
-	// Track message count to detect new messages from Convex
-	let lastMessageCount = $state(0);
-
-	// Sync historical messages to chat object
-	$effect(() => {
-		if (!threadId || !historicalMessages?.data) return;
-
-		const isThreadChange = lastSyncedThreadId !== threadId;
-		const hasNewMessages = historicalMessages.data.length !== lastMessageCount;
-		const isLocallyStreaming = chat.status === 'streaming' || chat.status === 'submitted';
-
-		// Sync history when thread changes OR new remote messages arrive
-		if (isThreadChange || (hasNewMessages && !isLocallyStreaming)) {
-			chat.messages = historicalMessages.data.map((m) => {
-				const parts: any[] = [{ type: 'text', text: m.body }];
-				if (m.reasoning) {
-					parts.unshift({ type: 'reasoning', text: m.reasoning });
-				}
-				return {
-					id: m._id,
-					role: m.role,
-					content: m.body, // Added for compatibility
-					parts
-				};
-			});
-			lastSyncedThreadId = threadId;
-			lastMessageCount = historicalMessages.data.length;
-			scrollToBottom();
-		}
-	});
-
 	// Trigger AI response for new chats
 	$effect(() => {
-		const lastMessage = chat.messages[chat.messages.length - 1];
+		if (messages.length === 0) return;
+		const lastMessage = messages[messages.length - 1];
+
 		if (
 			chatState.shouldTrigger &&
-			chat.messages.length > 0 &&
+			messages.length > 0 &&
 			lastMessage?.role === 'user' &&
-			chat.status === 'ready'
+			chatState.status !== 'streaming'
 		) {
 			console.log('Cognirivus: Found new chat trigger, initializing AI response...');
 			chatState.shouldTrigger = false;
-
-			const options = {
-				body: {
-					model: chatState.selectedModel,
-					includeReasoning: chatState.includeReasoning
-				}
-			};
-
-			// Use regenerate() as confirmed by user, casting to any for type safety
-			const chatAny = chat as any;
-			if (typeof chatAny.regenerate === 'function') {
-				chatAny.regenerate(options);
-			} else if (typeof chatAny.reload === 'function') {
-				chatAny.reload(options);
-			} else {
-				console.error('Cognirivus: No suitable AI trigger method found on chat object');
-			}
+			triggerResponse();
 		}
 	});
+
+	async function triggerResponse() {
+		chatState.status = 'streaming';
+		try {
+			await client.action(api.chat.generate, {
+				threadId,
+				model: chatState.selectedModel,
+				includeReasoning: chatState.includeReasoning
+			});
+		} catch (e: any) {
+			// If status is ready, it means the user manually clicked "Stop"
+			// which often triggers a 'Connection lost' or 'Action in flight' error.
+			// We ignore those for a cleaner experience.
+			if (chatState.status === 'ready') {
+				console.log('Cognirivus: Generation stopped by user.');
+			} else {
+				console.error('Failed to generate response:', e);
+				chatState.status = 'error';
+			}
+		} finally {
+			if (chatState.status === 'streaming') {
+				chatState.status = 'ready';
+			}
+		}
+	}
 
 	async function handleSubmit(event?: Event) {
 		event?.preventDefault();
@@ -153,36 +111,67 @@
 		chatState.input = '';
 
 		// Save user message to Convex
-		client.mutation(api.messages.send, {
+		await client.mutation(api.messages.send, {
 			body: currentInput,
 			threadId: threadId,
 			role: 'user'
 		});
 
-		// Send to AI
-		chat.sendMessage(
-			{ text: currentInput },
-			{
-				body: {
-					model: chatState.selectedModel,
-					includeReasoning: chatState.includeReasoning
-				}
-			}
-		);
+		// Generate AI response
+		triggerResponse();
 		scrollToBottom();
 	}
 
 	$effect(() => {
 		chatState.handleSubmit = handleSubmit;
-		chatState.stopChat = () => chat.stop();
-		chatState.viewContext = () => (viewingContextId = chat.messages[chat.messages.length - 1]?.id);
+		chatState.stopChat = async () => {
+			// 1. Set local state to stop spinner
+			chatState.status = 'ready';
+
+			// 2. Find the last assistant message (the one being generated)
+			const lastMessage = messages[messages.length - 1];
+			if (lastMessage && lastMessage.role === 'assistant') {
+				// 3. Call cancel mutation
+				await client.mutation(api.messages.cancel, { messageId: lastMessage._id });
+			}
+		};
+		chatState.viewContext = () => (viewingContextId = messages[messages.length - 1]?._id);
+
+		// Calculate totals
+		let tokens = 0;
+		let cost = 0;
+		for (const m of messages) {
+			if (m.usage?.totalTokens) tokens += m.usage.totalTokens;
+			if (m.cost) cost += m.cost;
+		}
+		chatState.totalTokens = tokens;
+		chatState.totalCost = cost;
+
+		// Sync isActuallyStreaming
+		if (chatState.status === 'streaming') {
+			const lastMessage = messages[messages.length - 1];
+			chatState.isActuallyStreaming =
+				!!lastMessage &&
+				lastMessage.role === 'assistant' &&
+				(!!lastMessage.body || !!lastMessage.reasoning);
+		} else {
+			chatState.isActuallyStreaming = false;
+		}
 	});
+
+	function getParts(message: any) {
+		const parts = [{ type: 'text', text: message.body }];
+		if (message.reasoning) {
+			parts.unshift({ type: 'reasoning', text: message.reasoning });
+		}
+		return parts;
+	}
 </script>
 
 {#if browser}
 	<!-- Scrollable Message Area -->
 	<div bind:this={viewport} class="flex-1 overflow-y-auto px-4">
-		{#if historicalMessages?.isLoading && chat.messages.length === 0}
+		{#if messagesQuery?.isLoading && messages.length === 0}
 			<div class="flex h-full items-center justify-center">
 				<div class="flex flex-col items-center gap-4">
 					<div
@@ -195,7 +184,8 @@
 			</div>
 		{:else}
 			<div class="mx-auto flex max-w-3xl flex-col space-y-8 pt-20 pb-48">
-				{#each chat.messages as message, messageIndex (message.id)}
+				{#each messages as message, messageIndex (message._id)}
+					{@const parts = getParts(message)}
 					<div
 						class="group flex w-full {message.role === 'user' ? 'justify-end' : 'justify-start'}"
 					>
@@ -210,26 +200,26 @@
 										<div
 											class="prose prose-zinc dark:prose-invert prose-headings:font-semibold prose-p:leading-7 max-w-none"
 										>
-											{#each message.parts as part}
+											{#each parts as part}
 												{#if part.type === 'reasoning'}
 													<div
 														class="mb-4 flex flex-col gap-2 text-sm text-zinc-500 dark:text-zinc-400"
 													>
 														<button
 															onclick={() =>
-																(expandedReasoningIds[message.id] =
-																	!expandedReasoningIds[message.id])}
+																(expandedReasoningIds[message._id] =
+																	!expandedReasoningIds[message._id])}
 															class="flex items-center gap-2 font-medium transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
 														>
 															<Brain class="h-3.5 w-3.5" />
 															<span>Reasoning</span>
-															{#if expandedReasoningIds[message.id] || (messageIndex === chat.messages.length - 1 && chat.status === 'streaming')}
+															{#if expandedReasoningIds[message._id] || (messageIndex === messages.length - 1 && chatState.status === 'streaming')}
 																<ChevronDown class="h-3.5 w-3.5" />
 															{:else}
 																<ChevronRight class="h-3.5 w-3.5" />
 															{/if}
 														</button>
-														{#if expandedReasoningIds[message.id] || (messageIndex === chat.messages.length - 1 && chat.status === 'streaming')}
+														{#if expandedReasoningIds[message._id] || (messageIndex === messages.length - 1 && chatState.status === 'streaming')}
 															<div
 																class="ml-1.5 border-l-2 border-zinc-200 py-1 pl-4 whitespace-pre-wrap text-zinc-600 italic dark:border-zinc-800 dark:text-zinc-400"
 															>
@@ -245,7 +235,7 @@
 									</div>
 								{:else}
 									<div class="whitespace-pre-wrap">
-										{#each message.parts as part}
+										{#each parts as part}
 											{#if part.type === 'text'}
 												{part.text}
 											{/if}
@@ -254,14 +244,35 @@
 								{/if}
 							</div>
 
+							{#if message.role === 'assistant' && message.usage}
+								<div class="px-1 opacity-0 transition-opacity group-hover:opacity-100">
+									<div class="flex flex-col gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
+										<div>
+											<span class="font-medium text-zinc-500 dark:text-zinc-400"
+												>{message.model || 'Unknown Model'}</span
+											>
+										</div>
+										<div class="flex gap-2">
+											<span>Prompt: {message.usage.promptTokens}</span>
+											<span>Compl: {message.usage.completionTokens}</span>
+											{#if message.cost !== undefined}
+												<span class="font-medium text-zinc-600 dark:text-zinc-300">
+													${message.cost}
+												</span>
+											{/if}
+										</div>
+									</div>
+								</div>
+							{/if}
+
 							{#if message.role === 'user'}
 								<div class="flex justify-end px-1">
 									<button
-										onclick={() => (viewingContextId = message.id)}
+										onclick={() => (viewingContextId = message._id)}
 										class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-medium text-zinc-400 opacity-0 transition-all group-hover:opacity-100 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-400"
 										title="View context sent to AI"
 									>
-										<Code class="h-3 w-3" />
+										<Terminal class="h-3 w-3" />
 									</button>
 								</div>
 							{/if}
@@ -269,12 +280,12 @@
 					</div>
 				{/each}
 
-				{#if chat.status === 'streaming' || chat.status === 'submitted'}
-					{@const latestMessage = chat.messages[chat.messages.length - 1]}
+				{#if chatState.status === 'streaming'}
+					{@const latestMessage = messages[messages.length - 1]}
 					{@const showDots =
 						latestMessage?.role === 'user' ||
-						(latestMessage?.role === 'assistant' &&
-							!latestMessage.parts.some((p: any) => p.text?.trim() || p.type === 'reasoning'))}
+						(latestMessage?.role === 'assistant' && !latestMessage.body)}
+
 					{#if showDots}
 						<div
 							class="flex w-full animate-in justify-start duration-300 fade-in slide-in-from-bottom-2"
@@ -321,14 +332,11 @@
 			<div class="flex-1 overflow-auto p-6 font-mono text-xs">
 				<pre class="rounded-xl bg-zinc-50 p-4 text-zinc-800 dark:bg-zinc-950/50 dark:text-zinc-300">
 {JSON.stringify(
-						chat.messages
-							.slice(0, chat.messages.findIndex((m) => m.id === viewingContextId) + 1)
+						messages
+							.slice(0, messages.findIndex((m) => m._id === viewingContextId) + 1)
 							.map((m) => ({
 								role: m.role,
-								content: m.parts
-									.filter((p) => p.type === 'text')
-									.map((p) => p.text)
-									.join('')
+								content: m.body
 							})),
 						null,
 						2

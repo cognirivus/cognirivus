@@ -8,6 +8,11 @@ export class ChatContext {
 
 	// Local streaming status
 	status = $state<ChatStatus>('ready');
+	isActuallyStreaming = $state(false);
+
+	// Session stats
+	totalTokens = $state(0);
+	totalCost = $state(0);
 
 	// Callbacks to be filled by the active page
 	handleSubmit = $state<((e?: Event) => void) | null>(null);

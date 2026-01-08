@@ -25,6 +25,9 @@
 				bind:selectedModel={chatState.selectedModel}
 				bind:includeReasoning={chatState.includeReasoning}
 				viewContext={chatState.viewContext ? () => chatState.viewContext?.() : null}
+				totalTokens={chatState.totalTokens}
+				totalCost={chatState.totalCost}
+				isActuallyStreaming={chatState.isActuallyStreaming}
 			/>
 		{/if}
 	</div>

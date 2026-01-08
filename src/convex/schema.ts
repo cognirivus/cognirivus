@@ -10,13 +10,27 @@ const schema = defineSchema({
 		userId: v.id('users'),
 		threadId: v.id('threads'),
 		role: v.union(v.literal('user'), v.literal('assistant')),
-		createdAt: v.number()
+		createdAt: v.number(),
+		model: v.optional(v.string()),
+		usage: v.optional(
+			v.object({
+				promptTokens: v.number(),
+				completionTokens: v.number(),
+				totalTokens: v.number()
+			})
+		),
+		isCancelled: v.optional(v.boolean()),
+		cost: v.optional(v.number()),
+		metadata: v.optional(v.any())
 	}).index('by_thread', ['threadId']),
 	threads: defineTable({
 		title: v.string(),
 		userId: v.id('users'),
 		updatedAt: v.number()
-	}).index('by_user', ['userId'])
+	}).index('by_user', ['userId']),
+	cancellations: defineTable({
+		messageId: v.id('messages')
+	}).index('by_message', ['messageId'])
 });
 
 export default schema;

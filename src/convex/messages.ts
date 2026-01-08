@@ -50,3 +50,95 @@ export const send = mutation({
 		await ctx.db.patch(threadId, { updatedAt: Date.now() });
 	}
 });
+
+import { internalMutation } from './_generated/server';
+
+export const internalCreate = internalMutation({
+	args: {
+		body: v.string(),
+		reasoning: v.optional(v.string()),
+		userId: v.id('users'),
+		threadId: v.id('threads'),
+		role: v.union(v.literal('user'), v.literal('assistant')),
+		model: v.optional(v.string())
+	},
+	handler: async (ctx, args) => {
+		const id = await ctx.db.insert('messages', {
+			...args,
+			createdAt: Date.now()
+		});
+		await ctx.db.patch(args.threadId, { updatedAt: Date.now() });
+		return id;
+	}
+});
+
+export const internalUpdate = internalMutation({
+	args: {
+		messageId: v.id('messages'),
+		body: v.string(),
+		usage: v.optional(
+			v.object({
+				promptTokens: v.number(),
+				completionTokens: v.number(),
+				totalTokens: v.number()
+			})
+		),
+		cost: v.optional(v.number()),
+		metadata: v.optional(v.any()),
+		reasoning: v.optional(v.string()),
+		isCancelled: v.optional(v.boolean())
+	},
+	handler: async (ctx, { messageId, body, usage, cost, metadata, reasoning, isCancelled }) => {
+		const updates: any = { body };
+		if (usage) updates.usage = usage;
+		if (cost !== undefined) updates.cost = cost;
+		if (metadata) updates.metadata = metadata;
+		if (reasoning !== undefined) updates.reasoning = reasoning;
+		if (isCancelled !== undefined) updates.isCancelled = isCancelled;
+		await ctx.db.patch(messageId, updates);
+	}
+});
+
+export const cancel = mutation({
+	args: { messageId: v.id('messages') },
+	handler: async (ctx, { messageId }) => {
+		const userId = await getAuthUserId(ctx);
+		if (!userId) throw new Error('Unauthorized');
+		const message = await ctx.db.get(messageId);
+		if (!message || message.userId !== userId) return;
+
+		// Move signal to a separate table to avoid OptimisticConcurrencyControlFailure
+		const existing = await ctx.db
+			.query('cancellations')
+			.withIndex('by_message', (q) => q.eq('messageId', messageId))
+			.unique();
+
+		if (!existing) {
+			await ctx.db.insert('cancellations', { messageId });
+		}
+	}
+});
+
+export const checkCancelled = query({
+	args: { messageId: v.id('messages') },
+	handler: async (ctx, { messageId }) => {
+		const cancellation = await ctx.db
+			.query('cancellations')
+			.withIndex('by_message', (q) => q.eq('messageId', messageId))
+			.unique();
+		return !!cancellation;
+	}
+});
+
+export const internalCleanupCancellation = internalMutation({
+	args: { messageId: v.id('messages') },
+	handler: async (ctx, { messageId }) => {
+		const cancellation = await ctx.db
+			.query('cancellations')
+			.withIndex('by_message', (q) => q.eq('messageId', messageId))
+			.unique();
+		if (cancellation) {
+			await ctx.db.delete(cancellation._id);
+		}
+	}
+});

@@ -9,7 +9,10 @@
 		models = [],
 		selectedModel = $bindable(),
 		includeReasoning = $bindable(),
-		viewContext = null
+		viewContext = null,
+		totalTokens = 0,
+		totalCost = 0,
+		isActuallyStreaming = false
 	} = $props();
 
 	let showModelSelector = $state(false);
@@ -101,14 +104,36 @@
 					{/if}
 				</div>
 
-				<div class="flex items-center gap-2">
+				<div class="flex items-center gap-3">
+					{#if totalTokens > 0 || totalCost > 0}
+						<div
+							class="flex items-center gap-2 text-[10px] font-medium text-zinc-400 dark:text-zinc-500"
+						>
+							{#if totalTokens > 0}
+								<span>{totalTokens.toLocaleString()} tokens</span>
+							{/if}
+							{#if totalCost > 0}
+								{#if totalTokens > 0}
+									<span class="text-zinc-300 dark:text-zinc-700">|</span>
+								{/if}
+								<span class="text-zinc-500 dark:text-zinc-400">${totalCost.toFixed(6)}</span>
+							{/if}
+						</div>
+					{/if}
+
 					{#if chatStatus === 'streaming'}
 						<button
 							type="button"
 							onclick={stopChat}
-							class="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-200 text-zinc-900 transition-colors hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+							class="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
 						>
-							<Square class="h-3.5 w-3.5" fill="currentColor" />
+							{#if isActuallyStreaming}
+								<Square class="h-3.5 w-3.5" fill="currentColor" />
+							{:else}
+								<div
+									class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-800 dark:border-zinc-700 dark:border-t-zinc-200"
+								></div>
+							{/if}
 						</button>
 					{:else}
 						<button
