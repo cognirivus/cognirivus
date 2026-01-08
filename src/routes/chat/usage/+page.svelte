@@ -2,7 +2,7 @@
 	import { useQuery } from 'convex-svelte';
 	import { api } from '../../../convex/_generated/api';
 	import { Coins, Zap, MessageSquare, Ban, TrendingUp, BarChart3 } from '@lucide/svelte';
-	import UsageSkeleton from '$lib/components/UsageSkeleton.svelte';
+	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 
 	const statsQuery = useQuery(api.analytics.getDashboardStats, {});
 
@@ -34,7 +34,9 @@
 		</div>
 
 		{#if statsQuery.isLoading}
-			<UsageSkeleton />
+			<div class="flex h-64 items-center justify-center">
+				<Loader variant="circular" size="lg" />
+			</div>
 		{:else if statsQuery.error}
 			<div
 				class="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-400"

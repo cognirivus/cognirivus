@@ -155,3 +155,16 @@
 		@apply bg-background text-foreground;
 	}
 }
+
+/* Typing loader animation */
+@keyframes typing {
+	0%,
+	100% {
+		opacity: 0.4;
+		transform: scale(0.8);
+	}
+	50% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}

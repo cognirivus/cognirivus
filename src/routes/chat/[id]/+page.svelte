@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Brain, ChevronDown, ChevronRight, Code, Terminal, X, Square } from '@lucide/svelte';
+	import { X } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '../../../convex/_generated/api';
@@ -11,7 +11,7 @@
 	import { goto } from '$app/navigation';
 
 	import MessageItem from '$lib/components/MessageItem.svelte';
-	import SkeletonLoader from '$lib/components/SkeletonLoader.svelte';
+	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 
 	const threadId = $derived(page.params.id as Id<'threads'>);
 
@@ -160,7 +160,9 @@
 	<!-- Scrollable Message Area -->
 	<div bind:this={viewport} class="flex-1 overflow-y-auto px-4 [scrollbar-gutter:stable]">
 		{#if messagesQuery?.isLoading && messages.length === 0}
-			<SkeletonLoader />
+			<div class="flex h-full items-center justify-center">
+				<Loader variant="circular" size="lg" />
+			</div>
 		{:else}
 			<div class="mx-auto flex max-w-3xl flex-col space-y-8 pt-8 pb-48 md:pt-20">
 				{#each messages as message, messageIndex (message._id)}
@@ -174,27 +176,15 @@
 
 				{#if chatState.status === 'streaming'}
 					{@const latestMessage = messages[lastMessageIndex]}
-					{@const showDots =
+					{@const showLoader =
 						latestMessage?.role === 'user' ||
-						(latestMessage?.role === 'assistant' && !latestMessage.body)}
+						(latestMessage?.role === 'assistant' &&
+							!latestMessage.body &&
+							!latestMessage.reasoning)}
 
-					{#if showDots}
-						<div
-							class="flex w-full animate-in justify-start duration-300 fade-in slide-in-from-bottom-2"
-						>
-							<div class="flex items-center gap-2 px-2 py-6">
-								<div class="flex gap-2">
-									<div
-										class="h-2 w-2 animate-bounce rounded-full bg-zinc-400 dark:bg-zinc-600"
-									></div>
-									<div
-										class="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:0.2s] dark:bg-zinc-600"
-									></div>
-									<div
-										class="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:0.4s] dark:bg-zinc-600"
-									></div>
-								</div>
-							</div>
+					{#if showLoader}
+						<div class="flex w-full justify-start px-2 py-4">
+							<Loader variant="typing" />
 						</div>
 					{/if}
 				{/if}
