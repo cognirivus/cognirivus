@@ -1,5 +1,9 @@
 <script lang="ts">
 	import { Brain, ChevronDown, ChevronRight, Terminal, Square } from '@lucide/svelte';
+	import { Streamdown } from 'svelte-streamdown';
+	import Code from 'svelte-streamdown/code';
+	import Mermaid from 'svelte-streamdown/mermaid';
+	import Math from 'svelte-streamdown/math';
 
 	let { message, isLast, isStreaming, onViewContext } = $props<{
 		message: any;
@@ -29,66 +33,80 @@
 			}
 		}
 	});
+
+	const streamdownComponents = { code: Code, mermaid: Mermaid, math: Math };
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	onclick={() => (revealedMetadata = !revealedMetadata)}
-	class="group flex w-full cursor-pointer {message.role === 'user'
-		? 'justify-end'
-		: 'justify-start'}"
+	class="group flex w-full cursor-pointer flex-col {message.role === 'user'
+		? 'items-end'
+		: 'items-start'}"
 >
-	<div class="flex flex-col gap-1">
+	<div
+		class="flex flex-col gap-1 {message.role === 'user' ? 'max-w-[90%] md:max-w-[85%]' : 'w-full'}"
+	>
 		<div
 			class="{message.role === 'user'
 				? 'rounded-2xl rounded-tr-sm bg-zinc-900 px-5 py-3 text-zinc-50 shadow-md dark:bg-zinc-100 dark:text-zinc-900'
-				: 'bg-transparent px-1 py-1 text-zinc-800 dark:text-zinc-200'} text-[0.95rem] leading-relaxed"
+				: 'bg-transparent text-zinc-800 dark:text-zinc-200'} text-[0.95rem] leading-relaxed"
 		>
 			{#if message.role === 'assistant'}
-				<div class="flex items-start gap-3">
-					<div
-						class="prose prose-zinc prose-headings:font-semibold prose-p:leading-7 dark:prose-invert max-w-none"
-					>
-						{#each parts as part}
-							{#if part.type === 'reasoning'}
-								<div class="mb-4 flex flex-col gap-2 text-sm text-zinc-500 dark:text-zinc-400">
-									<button
-										onclick={(e) => {
-											e.stopPropagation();
-											expandedReasoning = !expandedReasoning;
-										}}
-										class="flex items-center gap-2 font-medium transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
-									>
-										<Brain class="h-3.5 w-3.5" />
-										<span>Reasoning</span>
-										{#if expandedReasoning}
-											<ChevronDown class="h-3.5 w-3.5" />
-										{:else}
-											<ChevronRight class="h-3.5 w-3.5" />
-										{/if}
-									</button>
+				<div class="flex w-full min-w-0 flex-col gap-3">
+					{#each parts as part}
+						{#if part.type === 'reasoning'}
+							<div class="flex flex-col gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+								<button
+									onclick={(e) => {
+										e.stopPropagation();
+										expandedReasoning = !expandedReasoning;
+									}}
+									class="flex items-center gap-2 font-medium transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
+								>
+									<Brain class="h-3.5 w-3.5" />
+									<span>Reasoning</span>
 									{#if expandedReasoning}
-										<div
-											class="ml-1.5 border-l-2 border-zinc-200 py-1 pl-4 whitespace-pre-wrap text-zinc-600 italic dark:border-zinc-800 dark:text-zinc-400"
-										>
-											{part.text}
-										</div>
+										<ChevronDown class="h-3.5 w-3.5" />
+									{:else}
+										<ChevronRight class="h-3.5 w-3.5" />
 									{/if}
-								</div>
-							{:else if part.type === 'text'}
-								<div class="whitespace-pre-wrap">{part.text}</div>
-							{/if}
-						{/each}
-					</div>
+								</button>
+								{#if expandedReasoning}
+									<div
+										class="ml-1.5 min-w-0 overflow-x-auto border-l-2 border-zinc-200 py-1 pl-4 text-zinc-600 italic dark:border-zinc-800 dark:text-zinc-400"
+									>
+										<Streamdown
+											content={part.text}
+											baseTheme="shadcn"
+											class="prose prose-zinc prose-headings:font-semibold prose-p:leading-7 dark:prose-invert max-w-none"
+											animation={{
+												enabled: isLast && isStreaming && !message.body,
+												type: 'blur'
+											}}
+											components={streamdownComponents}
+										/>
+									</div>
+								{/if}
+							</div>
+						{:else if part.type === 'text'}
+							<div
+								class="prose prose-zinc prose-headings:font-semibold prose-p:leading-7 dark:prose-invert max-w-none"
+							>
+								<Streamdown
+									content={part.text}
+									baseTheme="shadcn"
+									animation={{ enabled: isLast && isStreaming, type: 'blur' }}
+									components={streamdownComponents}
+								/>
+							</div>
+						{/if}
+					{/each}
 				</div>
 			{:else}
 				<div class="whitespace-pre-wrap">
-					{#each parts as part}
-						{#if part.type === 'text'}
-							{part.text}
-						{/if}
-					{/each}
+					{message.body}
 				</div>
 			{/if}
 		</div>

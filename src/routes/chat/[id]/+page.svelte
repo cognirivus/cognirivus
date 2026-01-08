@@ -158,7 +158,7 @@
 
 {#if browser}
 	<!-- Scrollable Message Area -->
-	<div bind:this={viewport} class="flex-1 overflow-y-auto px-4">
+	<div bind:this={viewport} class="flex-1 overflow-y-auto px-4 [scrollbar-gutter:stable]">
 		{#if messagesQuery?.isLoading && messages.length === 0}
 			<SkeletonLoader />
 		{:else}

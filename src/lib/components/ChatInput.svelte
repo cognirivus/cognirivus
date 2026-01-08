@@ -37,7 +37,7 @@
 </script>
 
 <div
-	class="pointer-events-none fixed right-0 bottom-0 left-0 z-20 px-4 pt-8 pb-4 transition-all duration-300 {chatState.isSidebarOpen
+	class="pointer-events-none fixed right-0 bottom-0 left-0 z-20 pt-8 pr-[calc(1rem+var(--scrollbar-width))] pb-4 pl-4 transition-all duration-300 {chatState.isSidebarOpen
 		? 'md:left-64'
 		: 'md:left-0'}"
 >
