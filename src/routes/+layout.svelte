@@ -2,6 +2,8 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { setupConvexAuth } from '@mmailaender/convex-auth-svelte/sveltekit';
+	import { ModeWatcher } from 'mode-watcher';
+	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 
 	// Import data from +layout.server.ts
 	let { children, data } = $props();
@@ -24,4 +26,10 @@
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<ModeWatcher />
+
+<div class="fixed top-4 right-4 z-50">
+	<ThemeToggle />
+</div>
+
 {@render children()}
