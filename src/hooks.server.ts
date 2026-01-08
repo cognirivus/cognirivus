@@ -6,6 +6,7 @@ import {
 } from '@mmailaender/convex-auth-svelte/sveltekit/server';
 
 const isPublicRoute = createRouteMatcher([
+	'/',
 	'/signin'
 	// Note: No need to add '/api/auth' here as the handleAuth middleware
 	// will process those requests before this middleware runs
