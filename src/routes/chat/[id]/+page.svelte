@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Brain, ChevronDown, ChevronRight, Code, Terminal, X } from '@lucide/svelte';
+	import { Brain, ChevronDown, ChevronRight, Code, Terminal, X, Square } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '../../../convex/_generated/api';
@@ -72,7 +72,6 @@
 			lastMessage?.role === 'user' &&
 			chatState.status !== 'streaming'
 		) {
-			console.log('Cognirivus: Found new chat trigger, initializing AI response...');
 			chatState.shouldTrigger = false;
 			triggerResponse();
 		}
@@ -90,7 +89,7 @@
 			// If status is ready, it means the user manually clicked "Stop"
 			// which often triggers a 'Connection lost' or 'Action in flight' error.
 			// We ignore those for a cleaner experience.
-			if (chatState.status === 'ready') {
+			if ((chatState.status as string) === 'ready') {
 				console.log('Cognirivus: Generation stopped by user.');
 			} else {
 				console.error('Failed to generate response:', e);
@@ -139,12 +138,18 @@
 
 		// Calculate totals
 		let tokens = 0;
+		let promptTokens = 0;
+		let completionTokens = 0;
 		let cost = 0;
 		for (const m of messages) {
 			if (m.usage?.totalTokens) tokens += m.usage.totalTokens;
+			if (m.usage?.promptTokens) promptTokens += m.usage.promptTokens;
+			if (m.usage?.completionTokens) completionTokens += m.usage.completionTokens;
 			if (m.cost) cost += m.cost;
 		}
 		chatState.totalTokens = tokens;
+		chatState.totalPromptTokens = promptTokens;
+		chatState.totalCompletionTokens = completionTokens;
 		chatState.totalCost = cost;
 
 		// Sync isActuallyStreaming
@@ -247,18 +252,28 @@
 							{#if message.role === 'assistant' && message.usage}
 								<div class="px-1 opacity-0 transition-opacity group-hover:opacity-100">
 									<div class="flex flex-col gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
-										<div>
+										<div class="flex items-center gap-2">
 											<span class="font-medium text-zinc-500 dark:text-zinc-400"
 												>{message.model || 'Unknown Model'}</span
 											>
+											<span class="text-zinc-400 dark:text-zinc-600">•</span>
+											<span>{new Date(message.createdAt).toLocaleString()}</span>
 										</div>
-										<div class="flex gap-2">
+										<div class="flex items-center gap-2">
 											<span>Prompt: {message.usage.promptTokens}</span>
 											<span>Compl: {message.usage.completionTokens}</span>
 											{#if message.cost !== undefined}
 												<span class="font-medium text-zinc-600 dark:text-zinc-300">
-													${message.cost}
+													${message.cost.toFixed(6)}
 												</span>
+											{/if}
+											{#if message.isCancelled || message.metadata?.cancelled}
+												<div
+													class="flex items-center gap-1 text-[9px] font-semibold tracking-tight text-red-500/80 uppercase"
+												>
+													<Square class="h-2 w-2" fill="currentColor" />
+													<span>Cancelled</span>
+												</div>
 											{/if}
 										</div>
 									</div>
@@ -266,10 +281,15 @@
 							{/if}
 
 							{#if message.role === 'user'}
-								<div class="flex justify-end px-1">
+								<div
+									class="flex items-center justify-end gap-2 px-1 opacity-0 transition-opacity group-hover:opacity-100"
+								>
+									<span class="text-[10px] text-zinc-400 dark:text-zinc-500">
+										{new Date(message.createdAt).toLocaleString()}
+									</span>
 									<button
 										onclick={() => (viewingContextId = message._id)}
-										class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-medium text-zinc-400 opacity-0 transition-all group-hover:opacity-100 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-400"
+										class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-medium text-zinc-400 transition-all hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-400"
 										title="View context sent to AI"
 									>
 										<Terminal class="h-3 w-3" />

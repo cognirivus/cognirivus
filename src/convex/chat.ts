@@ -19,7 +19,7 @@ export const generate = action({
 		// 2. Prepare OpenRouter payload
 		const openRouterMessages = messages.map((m) => ({
 			role: m.role,
-			content: m.body
+			content: m.isCancelled || m.metadata?.cancelled ? `[CANCELLED BY USER] ${m.body}` : m.body
 		}));
 
 		// 3. Call OpenRouter
@@ -48,9 +48,6 @@ export const generate = action({
 			throw new Error(`OpenRouter error: ${response.statusText}`);
 		}
 
-		// Capture Generation ID from headers or (more reliably) it might be in the first chunk,
-		// but typically OpenRouter returns it in the response if not streaming, or we get it via a separate getter if we have an ID.
-		// Actually, checking OpenRouter docs, for streaming 'chat/completions', the ID is in the chunks: `id: "gen-..."`
 		let generationId = '';
 
 		if (!response.body) throw new Error('No response body');
@@ -80,21 +77,6 @@ export const generate = action({
 				if (done) break;
 
 				chunkCount++;
-				if (chunkCount % 10 === 0) {
-					const isCancelled = await ctx.runQuery(api.messages.checkCancelled, { messageId });
-					if (isCancelled) {
-						isStopped = true;
-						controller.abort(); // Signal OpenRouter to stop billing/generation
-						await ctx.runMutation(internal.messages.internalCleanupCancellation, { messageId });
-						await ctx.runMutation(internal.messages.internalUpdate, {
-							messageId,
-							body: fullContent,
-							reasoning: fullReasoning || undefined,
-							isCancelled: true
-						});
-						break;
-					}
-				}
 
 				const chunk = decoder.decode(value, { stream: true });
 				buffer += chunk;
@@ -109,14 +91,13 @@ export const generate = action({
 						try {
 							const json = JSON.parse(trimmed.replace('data: ', ''));
 
-							// Capture ID on first chunk
+							// Capture ID on first chunk - MUST happen before we might break
 							if (json.id && !generationId) {
 								generationId = json.id;
 							}
 
 							if (json.usage) {
-								// Final usage update from stream (may be approximate cost, but good token counts)
-								// We will overwrite this with exact data from /generation later if successful
+								// Final usage update from stream
 								await ctx.runMutation(internal.messages.internalUpdate, {
 									messageId,
 									body: fullContent,
@@ -154,6 +135,23 @@ export const generate = action({
 						}
 					}
 				}
+
+				// Check for cancellation AFTER processing chunks (so generationId is captured)
+				if (chunkCount % 10 === 0) {
+					const isCancelled = await ctx.runQuery(api.messages.checkCancelled, { messageId });
+					if (isCancelled) {
+						isStopped = true;
+						controller.abort(); // Signal OpenRouter to stop billing/generation
+						await ctx.runMutation(internal.messages.internalCleanupCancellation, { messageId });
+						await ctx.runMutation(internal.messages.internalUpdate, {
+							messageId,
+							body: fullContent,
+							reasoning: fullReasoning || undefined,
+							isCancelled: true
+						});
+						break;
+					}
+				}
 			}
 		} catch (e: any) {
 			if (e.name === 'AbortError') {
@@ -176,7 +174,7 @@ export const generate = action({
 			}
 		}
 
-		// 6. Fetch Full Metadata (Cost, etc.)
+		// 6. Fetch Full Metadata (Cost, etc.) - ALWAYS run this for both completed and cancelled
 		if (generationId) {
 			try {
 				// Small delay to ensure OpenRouter has processed the stats
@@ -203,9 +201,9 @@ export const generate = action({
 							isCancelled: isStopped ? true : undefined,
 							cost: data.total_cost,
 							usage: {
-								promptTokens: data.tokens_prompt,
-								completionTokens: data.tokens_completion,
-								totalTokens: data.tokens_prompt + data.tokens_completion
+								promptTokens: data.native_tokens_prompt,
+								completionTokens: data.native_tokens_completion,
+								totalTokens: data.native_tokens_prompt + data.native_tokens_completion
 							},
 							metadata: data // Store everything
 						});

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus, Trash2 } from '@lucide/svelte';
+	import { Plus, Trash2, BarChart3 } from '@lucide/svelte';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
 	import type { Id } from '../../convex/_generated/dataModel';
@@ -46,8 +46,8 @@
 				{#each threads.data as thread}
 					<a
 						href="/chat/{thread._id}"
-						class="group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors {page.params.id ===
-						thread._id
+						class="group flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors {page
+							.params.id === thread._id
 							? 'bg-zinc-200 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
 							: 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900'}"
 					>
@@ -63,5 +63,18 @@
 				{/each}
 			{/if}
 		</div>
+	</div>
+
+	<div class="mt-auto border-t border-zinc-200 p-4 dark:border-zinc-800">
+		<a
+			href="/chat/usage"
+			class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50 {page
+				.url.pathname === '/chat/usage'
+				? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50'
+				: ''}"
+		>
+			<BarChart3 class="h-4 w-4" />
+			Usage
+		</a>
 	</div>
 </aside>

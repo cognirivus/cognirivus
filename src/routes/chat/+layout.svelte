@@ -3,6 +3,7 @@
 	import ChatInput from '$lib/components/ChatInput.svelte';
 	import { setChatContext } from '$lib/chat-state.svelte';
 	import { browser } from '$app/environment';
+	import { page } from '$app/state';
 
 	let { children } = $props();
 	const chatState = setChatContext();
@@ -15,7 +16,7 @@
 	<div class="flex flex-1 flex-col overflow-hidden">
 		{@render children()}
 
-		{#if browser}
+		{#if browser && page.url.pathname !== '/chat/usage'}
 			<ChatInput
 				bind:input={chatState.input}
 				handleSubmit={(e: Event) => chatState.handleSubmit?.(e)}
@@ -26,6 +27,8 @@
 				bind:includeReasoning={chatState.includeReasoning}
 				viewContext={chatState.viewContext ? () => chatState.viewContext?.() : null}
 				totalTokens={chatState.totalTokens}
+				totalPromptTokens={chatState.totalPromptTokens}
+				totalCompletionTokens={chatState.totalCompletionTokens}
 				totalCost={chatState.totalCost}
 				isActuallyStreaming={chatState.isActuallyStreaming}
 			/>

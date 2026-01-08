@@ -11,11 +11,14 @@
 		includeReasoning = $bindable(),
 		viewContext = null,
 		totalTokens = 0,
+		totalPromptTokens = 0,
+		totalCompletionTokens = 0,
 		totalCost = 0,
 		isActuallyStreaming = false
 	} = $props();
 
 	let showModelSelector = $state(false);
+	let showTokenDetail = $state(false);
 </script>
 
 <div
@@ -107,10 +110,47 @@
 				<div class="flex items-center gap-3">
 					{#if totalTokens > 0 || totalCost > 0}
 						<div
-							class="flex items-center gap-2 text-[10px] font-medium text-zinc-400 dark:text-zinc-500"
+							class="relative flex items-center gap-2 text-[10px] font-medium text-zinc-400 dark:text-zinc-500"
 						>
 							{#if totalTokens > 0}
-								<span>{totalTokens.toLocaleString()} tokens</span>
+								<div
+									class="relative flex cursor-help items-center gap-1.5 transition-colors hover:text-zinc-600 dark:hover:text-zinc-300"
+									onmouseenter={() => (showTokenDetail = true)}
+									onmouseleave={() => (showTokenDetail = false)}
+								>
+									<span>{totalTokens.toLocaleString()} tokens</span>
+
+									{#if showTokenDetail}
+										<div
+											class="absolute bottom-full left-0 z-50 mb-3 w-48 overflow-hidden rounded-xl border border-zinc-200 bg-white p-3 shadow-xl backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/95"
+										>
+											<div class="mb-2 text-[11px] font-bold text-zinc-900 dark:text-zinc-50">
+												Session Usage
+											</div>
+											<div class="space-y-1.5">
+												<div class="flex justify-between">
+													<span class="text-zinc-500">Prompt</span>
+													<span class="text-zinc-900 dark:text-zinc-100"
+														>{totalPromptTokens.toLocaleString()}</span
+													>
+												</div>
+												<div class="flex justify-between">
+													<span class="text-zinc-500">Completion</span>
+													<span class="text-zinc-900 dark:text-zinc-100"
+														>{totalCompletionTokens.toLocaleString()}</span
+													>
+												</div>
+												<div class="my-1 h-[1px] bg-zinc-100 dark:bg-zinc-800"></div>
+												<div class="flex justify-between font-semibold">
+													<span class="text-zinc-700 dark:text-zinc-300">Total Cost</span>
+													<span class="text-zinc-900 dark:text-zinc-100"
+														>${totalCost.toFixed(6)}</span
+													>
+												</div>
+											</div>
+										</div>
+									{/if}
+								</div>
 							{/if}
 							{#if totalCost > 0}
 								{#if totalTokens > 0}

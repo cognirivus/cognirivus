@@ -12,6 +12,8 @@ export class ChatContext {
 
 	// Session stats
 	totalTokens = $state(0);
+	totalPromptTokens = $state(0);
+	totalCompletionTokens = $state(0);
 	totalCost = $state(0);
 
 	// Callbacks to be filled by the active page
