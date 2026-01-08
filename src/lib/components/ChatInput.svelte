@@ -16,7 +16,7 @@
 </script>
 
 <div
-	class="fixed right-0 bottom-0 left-64 z-20 bg-gradient-to-t from-zinc-50 via-zinc-50/95 to-transparent p-1 dark:from-zinc-950 dark:via-zinc-950/95"
+	class="fixed right-0 bottom-0 left-64 z-20 bg-gradient-to-t from-zinc-50 via-zinc-50/95 to-transparent px-4 pt-8 pb-4 dark:from-zinc-950 dark:via-zinc-950/95"
 >
 	<form onsubmit={handleSubmit} class="mx-auto max-w-3xl">
 		<div
@@ -35,8 +35,8 @@
 				}}
 			></textarea>
 
-			<div class="flex items-center justify-between px-2 pb-2">
-				<div class="flex items-center gap-1">
+			<div class="flex items-center justify-between px-3 pb-3">
+				<div class="flex items-center gap-2">
 					<div class="relative flex items-center gap-1">
 						<button
 							type="button"

@@ -8,6 +8,10 @@ export const list = query({
 		const userId = await getAuthUserId(ctx);
 		if (userId === null) return [];
 
+		// Verify user owns this thread
+		const thread = await ctx.db.get(threadId);
+		if (!thread || thread.userId !== userId) return [];
+
 		return await ctx.db
 			.query('messages')
 			.withIndex('by_thread', (q) => q.eq('threadId', threadId))
@@ -26,6 +30,12 @@ export const send = mutation({
 		const userId = await getAuthUserId(ctx);
 		if (userId === null) {
 			throw new Error('Not authenticated');
+		}
+
+		// Verify user owns this thread
+		const thread = await ctx.db.get(threadId);
+		if (!thread || thread.userId !== userId) {
+			throw new Error('Thread not found or unauthorized');
 		}
 
 		await ctx.db.insert('messages', {

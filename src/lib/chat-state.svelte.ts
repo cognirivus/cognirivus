@@ -1,40 +1,24 @@
-import { lsSync } from 'rune-sync/localstorage';
+type ChatStatus = 'ready' | 'submitted' | 'streaming' | 'error';
 
 export class ChatContext {
-	// Persistent settings and drafts
-	settings = lsSync('cognirivus-chat-settings-v3', {
-		selectedModel: 'openai/gpt-oss-20b',
-		includeReasoning: true,
-		input: ''
-	});
+	// Settings and drafts (local to tab)
+	selectedModel = $state('openai/gpt-oss-20b');
+	includeReasoning = $state(true);
+	input = $state('');
 
-	// Shorthand getters/setters for existing code compatibility
-	get input() {
-		return this.settings.input;
-	}
-	set input(value: string) {
-		this.settings.input = value;
-	}
+	// Local streaming status
+	status = $state<ChatStatus>('ready');
+	activeThreadId = $state<string | null>(null);
 
-	get selectedModel() {
-		return this.settings.selectedModel;
-	}
-	set selectedModel(value: string) {
-		this.settings.selectedModel = value;
-	}
-
-	get includeReasoning() {
-		return this.settings.includeReasoning;
-	}
-	set includeReasoning(value: boolean) {
-		this.settings.includeReasoning = value;
-	}
+	// Mock for backward compatibility in templates
+	streamingContent = { text: '', reasoning: '' };
+	tabId = '';
+	streamerId = null;
 
 	// Callbacks to be filled by the active page
 	handleSubmit = $state<((e?: Event) => void) | null>(null);
 	stopChat = $state<(() => void) | null>(null);
 	viewContext = $state<(() => void) | null>(null);
-	status = $state<'idle' | 'submitted' | 'streaming' | 'error' | 'ready'>('idle');
 
 	// Flag to trigger AI response after navigation
 	shouldTrigger = $state(false);

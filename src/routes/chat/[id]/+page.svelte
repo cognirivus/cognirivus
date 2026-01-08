@@ -62,21 +62,25 @@
 		}
 	});
 
-	// Synchronize chat status to global state
-	$effect(() => {
-		chatState.status = chat.status;
-	});
-
 	// Fetch messages for selected thread
 	const historicalMessages = $derived.by(() => {
 		if (!threadId) return null;
 		return useQuery(api.messages.list, { threadId: threadId });
 	});
 
+	// Track message count to detect new messages from Convex
+	let lastMessageCount = $state(0);
+
 	// Sync historical messages to chat object
 	$effect(() => {
-		if (threadId && historicalMessages?.data && lastSyncedThreadId !== threadId) {
-			const isFirstLoad = lastSyncedThreadId === null;
+		if (!threadId || !historicalMessages?.data) return;
+
+		const isThreadChange = lastSyncedThreadId !== threadId;
+		const hasNewMessages = historicalMessages.data.length !== lastMessageCount;
+		const isLocallyStreaming = chat.status === 'streaming' || chat.status === 'submitted';
+
+		// Sync history when thread changes OR new remote messages arrive
+		if (isThreadChange || (hasNewMessages && !isLocallyStreaming)) {
 			chat.messages = historicalMessages.data.map((m) => {
 				const parts: any[] = [{ type: 'text', text: m.body }];
 				if (m.reasoning) {
@@ -85,20 +89,43 @@
 				return {
 					id: m._id,
 					role: m.role,
+					content: m.body, // Added for compatibility
 					parts
 				};
 			});
 			lastSyncedThreadId = threadId;
+			lastMessageCount = historicalMessages.data.length;
+			scrollToBottom();
+		}
+	});
 
-			if (chatState.shouldTrigger) {
-				chatState.shouldTrigger = false; // Reset immediately
-				chat.regenerate({
-					body: {
-						model: chatState.selectedModel,
-						includeReasoning: chatState.includeReasoning
-					}
-				});
-				scrollToBottom();
+	// Trigger AI response for new chats
+	$effect(() => {
+		const lastMessage = chat.messages[chat.messages.length - 1];
+		if (
+			chatState.shouldTrigger &&
+			chat.messages.length > 0 &&
+			lastMessage?.role === 'user' &&
+			chat.status === 'ready'
+		) {
+			console.log('Cognirivus: Found new chat trigger, initializing AI response...');
+			chatState.shouldTrigger = false;
+
+			const options = {
+				body: {
+					model: chatState.selectedModel,
+					includeReasoning: chatState.includeReasoning
+				}
+			};
+
+			// Use regenerate() as confirmed by user, casting to any for type safety
+			const chatAny = chat as any;
+			if (typeof chatAny.regenerate === 'function') {
+				chatAny.regenerate(options);
+			} else if (typeof chatAny.reload === 'function') {
+				chatAny.reload(options);
+			} else {
+				console.error('Cognirivus: No suitable AI trigger method found on chat object');
 			}
 		}
 	});
@@ -140,104 +167,121 @@
 {#if browser}
 	<!-- Scrollable Message Area -->
 	<div bind:this={viewport} class="flex-1 overflow-y-auto px-4">
-		<div class="mx-auto flex max-w-3xl flex-col space-y-8 pt-8 pb-48">
-			{#each chat.messages as message, messageIndex (messageIndex)}
-				<div class="group flex w-full {message.role === 'user' ? 'justify-end' : 'justify-start'}">
-					<div class="flex flex-col gap-1">
-						<div
-							class="{message.role === 'user'
-								? 'rounded-2xl rounded-tr-sm bg-zinc-900 px-5 py-3 text-zinc-50 shadow-md dark:bg-zinc-100 dark:text-zinc-900'
-								: 'bg-transparent px-1 py-1 text-zinc-800 dark:text-zinc-200'} text-[0.95rem] leading-relaxed"
-						>
-							{#if message.role === 'assistant'}
-								<div class="flex items-start gap-3">
-									<div
-										class="prose max-w-none prose-zinc dark:prose-invert prose-headings:font-semibold prose-p:leading-7"
-									>
-										{#each message.parts as part}
-											{#if part.type === 'reasoning'}
-												<div
-													class="mb-4 flex flex-col gap-2 text-sm text-zinc-500 dark:text-zinc-400"
-												>
-													<button
-														onclick={() =>
-															(expandedReasoningIds[message.id] =
-																!expandedReasoningIds[message.id])}
-														class="flex items-center gap-2 font-medium transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
+		{#if historicalMessages?.isLoading && chat.messages.length === 0}
+			<div class="flex h-full items-center justify-center">
+				<div class="flex flex-col items-center gap-4">
+					<div
+						class="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800 dark:border-zinc-800 dark:border-t-zinc-200"
+					></div>
+					<div class="animate-pulse text-sm text-zinc-500 dark:text-zinc-400">
+						Initializing chat...
+					</div>
+				</div>
+			</div>
+		{:else}
+			<div class="mx-auto flex max-w-3xl flex-col space-y-8 pt-20 pb-48">
+				{#each chat.messages as message, messageIndex (message.id)}
+					<div
+						class="group flex w-full {message.role === 'user' ? 'justify-end' : 'justify-start'}"
+					>
+						<div class="flex flex-col gap-1">
+							<div
+								class="{message.role === 'user'
+									? 'rounded-2xl rounded-tr-sm bg-zinc-900 px-5 py-3 text-zinc-50 shadow-md dark:bg-zinc-100 dark:text-zinc-900'
+									: 'bg-transparent px-1 py-1 text-zinc-800 dark:text-zinc-200'} text-[0.95rem] leading-relaxed"
+							>
+								{#if message.role === 'assistant'}
+									<div class="flex items-start gap-3">
+										<div
+											class="prose prose-zinc dark:prose-invert prose-headings:font-semibold prose-p:leading-7 max-w-none"
+										>
+											{#each message.parts as part}
+												{#if part.type === 'reasoning'}
+													<div
+														class="mb-4 flex flex-col gap-2 text-sm text-zinc-500 dark:text-zinc-400"
 													>
-														<Brain class="h-3.5 w-3.5" />
-														<span>Reasoning</span>
-														{#if expandedReasoningIds[message.id] || (messageIndex === chat.messages.length - 1 && chat.status === 'streaming')}
-															<ChevronDown class="h-3.5 w-3.5" />
-														{:else}
-															<ChevronRight class="h-3.5 w-3.5" />
-														{/if}
-													</button>
-													{#if expandedReasoningIds[message.id] || (messageIndex === chat.messages.length - 1 && chat.status === 'streaming')}
-														<div
-															class="ml-1.5 border-l-2 border-zinc-200 py-1 pl-4 whitespace-pre-wrap text-zinc-600 italic dark:border-zinc-800 dark:text-zinc-400"
+														<button
+															onclick={() =>
+																(expandedReasoningIds[message.id] =
+																	!expandedReasoningIds[message.id])}
+															class="flex items-center gap-2 font-medium transition-colors hover:text-zinc-700 dark:hover:text-zinc-300"
 														>
-															{part.text}
-														</div>
-													{/if}
-												</div>
-											{:else if part.type === 'text'}
-												<div>{part.text}</div>
+															<Brain class="h-3.5 w-3.5" />
+															<span>Reasoning</span>
+															{#if expandedReasoningIds[message.id] || (messageIndex === chat.messages.length - 1 && chat.status === 'streaming')}
+																<ChevronDown class="h-3.5 w-3.5" />
+															{:else}
+																<ChevronRight class="h-3.5 w-3.5" />
+															{/if}
+														</button>
+														{#if expandedReasoningIds[message.id] || (messageIndex === chat.messages.length - 1 && chat.status === 'streaming')}
+															<div
+																class="ml-1.5 border-l-2 border-zinc-200 py-1 pl-4 whitespace-pre-wrap text-zinc-600 italic dark:border-zinc-800 dark:text-zinc-400"
+															>
+																{part.text}
+															</div>
+														{/if}
+													</div>
+												{:else if part.type === 'text'}
+													<div>{part.text}</div>
+												{/if}
+											{/each}
+										</div>
+									</div>
+								{:else}
+									<div class="whitespace-pre-wrap">
+										{#each message.parts as part}
+											{#if part.type === 'text'}
+												{part.text}
 											{/if}
 										{/each}
 									</div>
-								</div>
-							{:else}
-								<div class="whitespace-pre-wrap">
-									{#each message.parts as part}
-										{#if part.type === 'text'}
-											{part.text}
-										{/if}
-									{/each}
+								{/if}
+							</div>
+
+							{#if message.role === 'user'}
+								<div class="flex justify-end px-1">
+									<button
+										onclick={() => (viewingContextId = message.id)}
+										class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-medium text-zinc-400 opacity-0 transition-all group-hover:opacity-100 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-400"
+										title="View context sent to AI"
+									>
+										<Code class="h-3 w-3" />
+									</button>
 								</div>
 							{/if}
 						</div>
-
-						{#if message.role === 'user'}
-							<div class="flex justify-end px-1">
-								<button
-									onclick={() => (viewingContextId = message.id)}
-									class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-medium text-zinc-400 opacity-0 transition-all group-hover:opacity-100 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-400"
-									title="View context sent to AI"
-								>
-									<Code class="h-3 w-3" />
-								</button>
-							</div>
-						{/if}
 					</div>
-				</div>
-			{/each}
+				{/each}
 
-			{#if chat.status === 'streaming' || chat.status === 'submitted'}
-				{@const latestMessage = chat.messages[chat.messages.length - 1]}
-				{@const showDots =
-					latestMessage?.role === 'user' ||
-					(latestMessage?.role === 'assistant' &&
-						!latestMessage.parts.some((p: any) => p.text?.trim() || p.type === 'reasoning'))}
-				{#if showDots}
-					<div
-						class="animate-in fade-in slide-in-from-bottom-2 flex w-full justify-start duration-300"
-					>
-						<div class="flex items-center gap-2 px-2 py-6">
-							<div class="flex gap-2">
-								<div class="h-2 w-2 animate-bounce rounded-full bg-zinc-400 dark:bg-zinc-600"></div>
-								<div
-									class="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:0.2s] dark:bg-zinc-600"
-								></div>
-								<div
-									class="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:0.4s] dark:bg-zinc-600"
-								></div>
+				{#if chat.status === 'streaming' || chat.status === 'submitted'}
+					{@const latestMessage = chat.messages[chat.messages.length - 1]}
+					{@const showDots =
+						latestMessage?.role === 'user' ||
+						(latestMessage?.role === 'assistant' &&
+							!latestMessage.parts.some((p: any) => p.text?.trim() || p.type === 'reasoning'))}
+					{#if showDots}
+						<div
+							class="flex w-full animate-in justify-start duration-300 fade-in slide-in-from-bottom-2"
+						>
+							<div class="flex items-center gap-2 px-2 py-6">
+								<div class="flex gap-2">
+									<div
+										class="h-2 w-2 animate-bounce rounded-full bg-zinc-400 dark:bg-zinc-600"
+									></div>
+									<div
+										class="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:0.2s] dark:bg-zinc-600"
+									></div>
+									<div
+										class="h-2 w-2 animate-bounce rounded-full bg-zinc-400 [animation-delay:0.4s] dark:bg-zinc-600"
+									></div>
+								</div>
 							</div>
 						</div>
-					</div>
+					{/if}
 				{/if}
-			{/if}
-		</div>
+			</div>
+		{/if}
 	</div>
 {/if}
 
@@ -246,7 +290,7 @@
 		class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/20 p-4 backdrop-blur-sm dark:bg-zinc-950/50"
 	>
 		<div
-			class="animate-in fade-in zoom-in-95 flex h-[80vh] w-full max-w-4xl flex-col rounded-2xl border border-zinc-200 bg-white shadow-2xl duration-200 dark:border-zinc-800 dark:bg-zinc-900"
+			class="flex h-[80vh] w-full max-w-4xl animate-in flex-col rounded-2xl border border-zinc-200 bg-white shadow-2xl duration-200 zoom-in-95 fade-in dark:border-zinc-800 dark:bg-zinc-900"
 		>
 			<div
 				class="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800"
