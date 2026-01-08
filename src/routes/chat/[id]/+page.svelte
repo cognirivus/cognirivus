@@ -32,10 +32,7 @@
 	};
 
 	// Fetch messages for selected thread
-	const messagesQuery = $derived.by(() => {
-		if (!threadId) return null;
-		return useQuery(api.messages.list, { threadId: threadId });
-	});
+	const messagesQuery = useQuery(api.messages.list, () => ({ threadId: threadId }));
 
 	const messages = $derived(messagesQuery?.data || []);
 
@@ -49,10 +46,7 @@
 	});
 
 	// Verify thread ownership and existence
-	const threadDetails = $derived.by(() => {
-		if (!threadId) return null;
-		return useQuery(api.threads.get, { id: threadId });
-	});
+	const threadDetails = useQuery(api.threads.get, () => ({ id: threadId }));
 
 	// Redirect if thread is not found or unauthorized
 	$effect(() => {
