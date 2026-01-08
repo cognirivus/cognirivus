@@ -19,7 +19,7 @@
 	}
 </script>
 
-<div class="flex h-full flex-col overflow-y-auto p-6 pt-12">
+<div class="flex h-full flex-col overflow-y-auto p-6 pt-4 md:pt-12">
 	<div class="mx-auto flex w-full max-w-6xl flex-col gap-8">
 		<!-- Header -->
 		<div class="flex items-center justify-between">

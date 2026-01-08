@@ -9,6 +9,7 @@ export class ChatContext {
 	// Local streaming status
 	status = $state<ChatStatus>('ready');
 	isActuallyStreaming = $state(false);
+	sidebarOpen = $state(true);
 
 	// Session stats
 	totalTokens = $state(0);

@@ -1,10 +1,13 @@
 <script lang="ts">
-	import { Plus, Trash2, BarChart3 } from '@lucide/svelte';
+	import { Plus, Trash2, BarChart3, X } from '@lucide/svelte';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
 	import type { Id } from '../../convex/_generated/dataModel';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { useChatContext } from '$lib/chat-state.svelte';
+
+	const chatState = useChatContext();
 
 	const threads = useQuery(api.threads.list, {});
 	const client = useConvexClient();
@@ -22,16 +25,26 @@
 </script>
 
 <aside
-	class="flex h-full w-64 flex-col border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950"
+	class="fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col border-r border-zinc-200 bg-zinc-50 transition-all duration-300 dark:border-zinc-800 dark:bg-zinc-950 {chatState.sidebarOpen
+		? 'translate-x-0'
+		: '-translate-x-full'} md:relative md:translate-x-0 {chatState.sidebarOpen
+		? 'md:w-64 md:opacity-100'
+		: 'overflow-hidden md:pointer-events-none md:w-0 md:border-none md:opacity-0'}"
 >
-	<div class="p-4">
+	<div class="flex items-center gap-2 p-4">
 		<a
 			href="/chat"
-			class="flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+			class="flex flex-1 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
 		>
 			<Plus class="h-4 w-4" />
 			New Chat
 		</a>
+		<button
+			onclick={() => (chatState.sidebarOpen = false)}
+			class="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 md:hidden dark:border-zinc-800 dark:bg-zinc-900"
+		>
+			<X class="h-5 w-5" />
+		</button>
 	</div>
 
 	<div class="flex-1 overflow-y-auto px-2 py-2">

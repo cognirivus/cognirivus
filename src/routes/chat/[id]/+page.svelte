@@ -15,6 +15,7 @@
 	const client = useConvexClient();
 	const chatState = useChatContext();
 	let expandedReasoningIds = $state<Record<string, boolean>>({});
+	let revealedMetadataIds = $state<Record<string, boolean>>({});
 	let viewingContextId = $state<string | null>(null);
 	let viewport = $state<HTMLElement>();
 
@@ -177,7 +178,11 @@
 	<!-- Scrollable Message Area -->
 	<div bind:this={viewport} class="flex-1 overflow-y-auto px-4">
 		{#if messagesQuery?.isLoading && messages.length === 0}
-			<div class="flex h-full items-center justify-center">
+			<div
+				class="pointer-events-none fixed inset-0 flex items-center justify-center transition-all duration-300 {chatState.sidebarOpen
+					? 'md:left-64'
+					: 'md:left-0'}"
+			>
 				<div class="flex flex-col items-center gap-4">
 					<div
 						class="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-800 dark:border-zinc-800 dark:border-t-zinc-200"
@@ -188,11 +193,16 @@
 				</div>
 			</div>
 		{:else}
-			<div class="mx-auto flex max-w-3xl flex-col space-y-8 pt-20 pb-48">
+			<div class="mx-auto flex max-w-3xl flex-col space-y-8 pt-8 pb-48 md:pt-20">
 				{#each messages as message, messageIndex (message._id)}
 					{@const parts = getParts(message)}
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
-						class="group flex w-full {message.role === 'user' ? 'justify-end' : 'justify-start'}"
+						onclick={() => (revealedMetadataIds[message._id] = !revealedMetadataIds[message._id])}
+						class="group flex w-full cursor-pointer {message.role === 'user'
+							? 'justify-end'
+							: 'justify-start'}"
 					>
 						<div class="flex flex-col gap-1">
 							<div
@@ -250,7 +260,11 @@
 							</div>
 
 							{#if message.role === 'assistant' && message.usage}
-								<div class="px-1 opacity-0 transition-opacity group-hover:opacity-100">
+								<div
+									class="px-1 transition-opacity duration-200 {revealedMetadataIds[message._id]
+										? 'opacity-100'
+										: 'opacity-0 group-hover:opacity-100'}"
+								>
 									<div class="flex flex-col gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
 										<div class="flex items-center gap-2">
 											<span class="font-medium text-zinc-500 dark:text-zinc-400"
@@ -282,7 +296,11 @@
 
 							{#if message.role === 'user'}
 								<div
-									class="flex items-center justify-end gap-2 px-1 opacity-0 transition-opacity group-hover:opacity-100"
+									class="flex items-center justify-end gap-2 px-1 transition-opacity duration-200 {revealedMetadataIds[
+										message._id
+									]
+										? 'opacity-100'
+										: 'opacity-0 group-hover:opacity-100'}"
 								>
 									<span class="text-[10px] text-zinc-400 dark:text-zinc-500">
 										{new Date(message.createdAt).toLocaleString()}
@@ -350,7 +368,8 @@
 				</button>
 			</div>
 			<div class="flex-1 overflow-auto p-6 font-mono text-xs">
-				<pre class="rounded-xl bg-zinc-50 p-4 text-zinc-800 dark:bg-zinc-950/50 dark:text-zinc-300">
+				<pre
+					class="rounded-xl bg-zinc-50 p-4 break-words whitespace-pre-wrap text-zinc-800 dark:bg-zinc-950/50 dark:text-zinc-300">
 {JSON.stringify(
 						messages
 							.slice(0, messages.findIndex((m) => m._id === viewingContextId) + 1)
