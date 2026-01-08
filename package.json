@@ -43,9 +43,11 @@
 	"dependencies": {
 		"@auth/core": "^0.37.4",
 		"@convex-dev/auth": "^0.0.87",
+		"@lucide/svelte": "^0.562.0",
 		"@mmailaender/convex-auth-svelte": "^0.1.3",
 		"@openrouter/ai-sdk-provider": "^1.5.4",
 		"convex": "^1.31.2",
-		"convex-svelte": "^0.0.12"
+		"convex-svelte": "^0.0.12",
+		"rune-sync": "^0.2.0"
 	}
 }

@@ -8,12 +8,22 @@ const openrouter = createOpenRouter({
 });
 
 export const POST: RequestHandler = async ({ request }) => {
-	const { messages } = await request.json();
+	const { messages, model, includeReasoning } = await request.json();
 
-	const result = streamText({
-		model: openrouter.chat('qwen/qwen3-235b-a22b-2507'),
-		messages: await convertToModelMessages(messages)
-	});
+	try {
+		const result = streamText({
+			model: openrouter.chat(model || 'openai/gpt-oss-20b'),
+			messages: await convertToModelMessages(messages),
+			providerOptions: {
+				openrouter: {
+					include_reasoning: includeReasoning ?? true
+				}
+			}
+		});
 
-	return result.toUIMessageStreamResponse();
+		return result.toUIMessageStreamResponse();
+	} catch (error) {
+		console.error('streamText error:', error);
+		throw error;
+	}
 };
