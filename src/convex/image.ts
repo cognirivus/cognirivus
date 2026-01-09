@@ -198,10 +198,16 @@ export const list = query({
 			images.map(async (img) => ({
 				id: img._id,
 				prompt: img.prompt,
+				negativePrompt: img.negativePrompt,
 				url: await ctx.storage.getUrl(img.imageId),
 				createdAt: img.createdAt,
 				source: img.messageId ? ('chat' as const) : ('image' as const),
-				messageId: img.messageId
+				messageId: img.messageId,
+				provider: img.provider,
+				model: img.model,
+				aspectRatio: img.aspectRatio,
+				width: img.width,
+				height: img.height
 			}))
 		);
 	}

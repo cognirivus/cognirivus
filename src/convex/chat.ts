@@ -18,6 +18,10 @@ export const generate = action({
 		// 1. Get previous messages
 		const messages = await ctx.runQuery(api.messages.list, { threadId });
 
+		// Get the last user message for image prompt
+		const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
+		const userPrompt = lastUserMessage?.body || 'Chat generated image';
+
 		// 2. Prepare OpenRouter payload
 		const openRouterMessages = messages.map((m) => ({
 			role: m.role,
@@ -219,7 +223,7 @@ export const generate = action({
 							// Save to generated_images table for unified image gallery
 							await ctx.runMutation(internal.image.saveGeneration, {
 								userId,
-								prompt: fullContent || 'Chat generated image',
+								prompt: userPrompt,
 								provider: 'openrouter',
 								model: modelToUse,
 								aspectRatio: imageAspectRatio || '1:1',
