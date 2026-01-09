@@ -22,7 +22,11 @@ export const list = query({
 				const imageUrls = await Promise.all(
 					(msg.images || []).map((storageId) => ctx.storage.getUrl(storageId))
 				);
-				return { ...msg, imageUrls: imageUrls.filter((url) => url !== null) as string[] };
+				return {
+					...msg,
+					imageUrls: imageUrls.filter((url) => url !== null) as string[],
+					deletedImageCount: msg.deletedImages?.length || 0
+				};
 			})
 		);
 	}

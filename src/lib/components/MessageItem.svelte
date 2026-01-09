@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Terminal, Square, Image } from '@lucide/svelte';
+	import { Terminal, Square, Image, ImageOff } from '@lucide/svelte';
 	import { Message, MessageContent } from '$lib/components/prompt-kit/message/index.js';
 	import {
 		Reasoning,
@@ -61,10 +61,18 @@
 				content={message.body}
 				class="w-full max-w-none bg-transparent p-0"
 			/>
-			{#if message.imageUrls?.length > 0}
+			{#if message.imageUrls?.length > 0 || message.deletedImageCount > 0}
 				<div class="mt-2 flex flex-wrap gap-2">
 					{#each message.imageUrls as url}
 						<img src={url} alt="Generated content" class="max-w-md rounded-lg shadow-md" />
+					{/each}
+					{#each Array(message.deletedImageCount || 0) as _}
+						<div
+							class="flex h-32 w-32 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-zinc-300 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800"
+						>
+							<ImageOff class="h-6 w-6 text-zinc-400" />
+							<span class="text-[10px] text-zinc-400">Deleted</span>
+						</div>
 					{/each}
 				</div>
 			{:else if message.metadata?.isGeneratingImage}

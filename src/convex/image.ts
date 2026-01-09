@@ -1,4 +1,4 @@
-import { action, query, internalMutation } from './_generated/server';
+import { action, query, mutation, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { getAuthUserId } from '@convex-dev/auth/server';
@@ -210,5 +210,38 @@ export const list = query({
 				height: img.height
 			}))
 		);
+	}
+});
+
+export const remove = mutation({
+	args: {
+		id: v.id('generated_images')
+	},
+	handler: async (ctx, { id }) => {
+		const userId = await getAuthUserId(ctx);
+		if (!userId) throw new Error('Unauthorized');
+
+		const image = await ctx.db.get(id);
+		if (!image) throw new Error('Image not found');
+		if (image.userId !== userId) throw new Error('Unauthorized');
+
+		// Delete from storage
+		await ctx.storage.delete(image.imageId);
+
+		// If this was a chat image, move from images to deletedImages
+		if (image.messageId) {
+			const message = await ctx.db.get(image.messageId);
+			if (message && message.images) {
+				const updatedImages = message.images.filter((imgId) => imgId !== image.imageId);
+				const deletedImages = [...(message.deletedImages || []), image.imageId];
+				await ctx.db.patch(image.messageId, {
+					images: updatedImages.length > 0 ? updatedImages : undefined,
+					deletedImages
+				});
+			}
+		}
+
+		// Delete from generated_images table
+		await ctx.db.delete(id);
 	}
 });

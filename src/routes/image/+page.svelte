@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronDown, Download, Image, Loader2, Sparkles, Settings, X } from '@lucide/svelte';
+	import { ChevronDown, Download, Image, Loader2, Sparkles, Settings, Trash2, X } from '@lucide/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
 	import { onMount } from 'svelte';
@@ -93,6 +93,19 @@
 		a.href = generatedUrl;
 		a.download = `generated-${Date.now()}.png`;
 		a.click();
+	}
+
+	async function deleteImage() {
+		if (!selectedHistoryImage) return;
+		if (!confirm('Are you sure you want to delete this image? This cannot be undone.')) return;
+
+		try {
+			await client.mutation(api.image.remove, { id: selectedHistoryImage.id });
+			generatedUrl = null;
+			selectedHistoryImage = null;
+		} catch (e: any) {
+			alert('Failed to delete image: ' + e.message);
+		}
 	}
 </script>
 
@@ -294,6 +307,15 @@
 							>
 								<Download class="h-4 w-4" />
 							</button>
+							{#if selectedHistoryImage}
+								<button
+									onclick={deleteImage}
+									class="flex h-9 w-9 items-center justify-center rounded-full bg-red-500/80 text-white backdrop-blur-sm transition-colors hover:bg-red-600"
+									title="Delete"
+								>
+									<Trash2 class="h-4 w-4" />
+								</button>
+							{/if}
 							<button
 								onclick={() => {
 									generatedUrl = null;
