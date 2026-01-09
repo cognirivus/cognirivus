@@ -62,27 +62,27 @@ export const generate = action({
 		let imageBlob: Blob;
 
 		if (provider === 'modal') {
-			// Call Modal endpoint
-			const response = await fetch(
-				process.env.MODAL_IMAGE_ENDPOINT ||
-					'https://chiragrohit--z-image-turbo-web-zimagemodel-web-app.modal.run/',
-				{
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						accept: 'application/json'
-					},
-					body: JSON.stringify({
-						prompt,
-						negative_prompt: negativePrompt || '',
-						height: dimensions.height,
-						width: dimensions.width,
-						seed: seed || Math.floor(Math.random() * 1000000),
-						num_inference_steps: steps || 30,
-						guidance_scale: guidance || 7.5
-					})
-				}
-			);
+			const modalEndpoint = process.env.MODAL_IMAGE_ENDPOINT;
+			if (!modalEndpoint) {
+				throw new Error('MODAL_IMAGE_ENDPOINT environment variable is not set');
+			}
+
+			const response = await fetch(modalEndpoint, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					accept: 'application/json'
+				},
+				body: JSON.stringify({
+					prompt,
+					negative_prompt: negativePrompt || '',
+					height: dimensions.height,
+					width: dimensions.width,
+					seed: seed || Math.floor(Math.random() * 1000000),
+					num_inference_steps: steps || 30,
+					guidance_scale: guidance || 7.5
+				})
+			});
 
 			if (!response.ok) {
 				throw new Error(`Modal error: ${response.statusText}`);
@@ -170,7 +170,8 @@ export const saveGeneration = internalMutation({
 		aspectRatio: v.string(),
 		width: v.number(),
 		height: v.number(),
-		imageId: v.id('_storage')
+		imageId: v.id('_storage'),
+		messageId: v.optional(v.id('messages'))
 	},
 	handler: async (ctx, args) => {
 		await ctx.db.insert('generated_images', {
@@ -186,56 +187,22 @@ export const list = query({
 		const userId = await getAuthUserId(ctx);
 		if (!userId) return [];
 
-		// Fetch images from generated_images table
-		const generatedImages = await ctx.db
+		// All images are now in generated_images table (both standalone and chat-generated)
+		const images = await ctx.db
 			.query('generated_images')
 			.withIndex('by_user', (q) => q.eq('userId', userId))
 			.order('desc')
-			.take(30);
+			.take(50);
 
-		const generatedWithUrls = await Promise.all(
-			generatedImages.map(async (img) => ({
+		return Promise.all(
+			images.map(async (img) => ({
 				id: img._id,
 				prompt: img.prompt,
 				url: await ctx.storage.getUrl(img.imageId),
 				createdAt: img.createdAt,
-				source: 'image' as const
+				source: img.messageId ? ('chat' as const) : ('image' as const),
+				messageId: img.messageId
 			}))
 		);
-
-		// Fetch images from messages table (chat-generated)
-		const messagesWithImages = await ctx.db
-			.query('messages')
-			.withIndex('by_user', (q) => q.eq('userId', userId))
-			.order('desc')
-			.take(100);
-
-		const chatImages: {
-			id: string;
-			prompt: string;
-			url: string | null;
-			createdAt: number;
-			source: 'chat';
-		}[] = [];
-		for (const msg of messagesWithImages) {
-			if (msg.images && msg.images.length > 0) {
-				for (const imageId of msg.images) {
-					chatImages.push({
-						id: `${msg._id}-${imageId}`,
-						prompt: msg.body?.slice(0, 100) || 'Chat image',
-						url: await ctx.storage.getUrl(imageId),
-						createdAt: msg.createdAt,
-						source: 'chat' as const
-					});
-				}
-			}
-		}
-
-		// Combine and sort by createdAt
-		const allImages = [...generatedWithUrls, ...chatImages]
-			.sort((a, b) => b.createdAt - a.createdAt)
-			.slice(0, 50);
-
-		return allImages;
 	}
 });

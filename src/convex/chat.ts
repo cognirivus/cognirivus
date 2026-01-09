@@ -215,6 +215,19 @@ export const generate = action({
 							const blob = new Blob([bytes], { type: contentType });
 							const storageId = await ctx.storage.store(blob);
 							savedImageIds.push(storageId);
+
+							// Save to generated_images table for unified image gallery
+							await ctx.runMutation(internal.image.saveGeneration, {
+								userId,
+								prompt: fullContent || 'Chat generated image',
+								provider: 'openrouter',
+								model: modelToUse,
+								aspectRatio: imageAspectRatio || '1:1',
+								width: 1024,
+								height: 1024,
+								imageId: storageId as any,
+								messageId
+							});
 						}
 					} catch (imgError) {
 						console.error('Failed to store image:', imgError);

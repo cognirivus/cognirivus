@@ -54,10 +54,12 @@ const schema = defineSchema({
 		width: v.number(),
 		height: v.number(),
 		imageId: v.id('_storage'),
+		messageId: v.optional(v.id('messages')),
 		createdAt: v.number()
 	})
 		.index('by_user', ['userId'])
-		.index('by_created_at', ['createdAt']),
+		.index('by_created_at', ['createdAt'])
+		.index('by_message', ['messageId']),
 	cancellations: defineTable({
 		messageId: v.id('messages')
 	}).index('by_message', ['messageId'])
