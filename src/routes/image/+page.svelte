@@ -122,12 +122,6 @@
 <div class="flex h-dvh bg-background">
 	<!-- Left Sidebar -->
 	<div class="flex w-80 shrink-0 flex-col border-r border-border bg-sidebar">
-		<!-- Header -->
-		<div class="flex items-center gap-3 border-b border-border px-4 py-3">
-			<Image class="size-5 text-sidebar-foreground" />
-			<h1 class="text-sm font-bold text-sidebar-foreground">Image Generator</h1>
-		</div>
-
 		<!-- Scrollable Settings -->
 		<div class="flex-1 space-y-4 overflow-y-auto p-4">
 			<!-- Prompt Input -->
@@ -332,7 +326,9 @@
 		<div class="flex flex-1 items-center justify-center overflow-y-auto p-6">
 			<div class="w-full max-w-3xl">
 				{#if generatedUrl}
-					<div class="relative overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+					<div
+						class="relative flex max-h-[85dvh] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+					>
 						<!-- Overlay Buttons -->
 						<div class="absolute top-3 right-3 z-10 flex gap-2">
 							<button
@@ -362,7 +358,7 @@
 								<X class="size-4" />
 							</button>
 						</div>
-						<img src={generatedUrl} alt="Generated" class="w-full" />
+						<img src={generatedUrl} alt="Generated" class="min-h-0 flex-1 object-contain" />
 						{#if !selectedHistoryImage}
 							<div class="flex items-center justify-between border-t border-border p-4">
 								<span class="text-xs text-muted-foreground">
