@@ -6,6 +6,7 @@
 	import type { Id } from '../../../convex/_generated/dataModel';
 	import { page } from '$app/state';
 	import { useChatContext } from '$lib/chat-state.svelte';
+	import { onMount } from 'svelte';
 
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -19,6 +20,11 @@
 	const chatState = useChatContext();
 	let viewingContextId = $state<string | null>(null);
 	let viewport = $state<HTMLElement>();
+	let mounted = $state(false);
+
+	onMount(() => {
+		mounted = true;
+	});
 
 	const scrollToBottom = async () => {
 		await tick();
@@ -51,7 +57,7 @@
 
 	// Redirect if thread is not found or unauthorized
 	$effect(() => {
-		if (browser && threadDetails?.data === null && !threadDetails.isLoading) {
+		if (mounted && threadDetails?.data === null && !threadDetails.isLoading) {
 			goto('/chat');
 		}
 	});
@@ -157,42 +163,38 @@
 	});
 </script>
 
-{#if browser}
-	<!-- Scrollable Message Area -->
-	<div bind:this={viewport} class="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-		{#if messagesQuery?.isLoading && messages.length === 0}
-			<div class="flex h-full items-center justify-center">
-				<Loader variant="circular" size="lg" />
-			</div>
-		{:else}
-			<div class="mx-auto flex max-w-3xl flex-col space-y-8 px-4 pt-8 pb-48 md:px-0 md:pt-20">
-				{#each messages as message, messageIndex (message._id)}
-					<MessageItem
-						{message}
-						isLast={messageIndex === lastMessageIndex}
-						isStreaming={chatState.status === 'streaming'}
-						onViewContext={(id) => (viewingContextId = id)}
-					/>
-				{/each}
+<!-- Scrollable Message Area -->
+<div bind:this={viewport} class="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+	{#if messagesQuery?.isLoading && messages.length === 0}
+		<div class="flex h-full items-center justify-center">
+			<Loader variant="circular" size="lg" />
+		</div>
+	{:else}
+		<div class="mx-auto flex max-w-3xl flex-col space-y-8 px-4 pt-8 pb-48 md:px-0 md:pt-20">
+			{#each messages as message, messageIndex (message._id)}
+				<MessageItem
+					{message}
+					isLast={messageIndex === lastMessageIndex}
+					isStreaming={chatState.status === 'streaming'}
+					onViewContext={(id) => (viewingContextId = id)}
+				/>
+			{/each}
 
-				{#if chatState.status === 'streaming'}
-					{@const latestMessage = messages[lastMessageIndex]}
-					{@const showLoader =
-						latestMessage?.role === 'user' ||
-						(latestMessage?.role === 'assistant' &&
-							!latestMessage.body &&
-							!latestMessage.reasoning)}
+			{#if chatState.status === 'streaming'}
+				{@const latestMessage = messages[lastMessageIndex]}
+				{@const showLoader =
+					latestMessage?.role === 'user' ||
+					(latestMessage?.role === 'assistant' && !latestMessage.body && !latestMessage.reasoning)}
 
-					{#if showLoader}
-						<div class="flex w-full justify-start px-2 py-4">
-							<Loader variant="typing" />
-						</div>
-					{/if}
+				{#if showLoader}
+					<div class="flex w-full justify-start px-2 py-4">
+						<Loader variant="typing" />
+					</div>
 				{/if}
-			</div>
-		{/if}
-	</div>
-{/if}
+			{/if}
+		</div>
+	{/if}
+</div>
 
 {#if viewingContextId}
 	<div

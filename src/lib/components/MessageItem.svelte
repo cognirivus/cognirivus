@@ -29,6 +29,12 @@
 	function getAspectSizeClass(ratio: string): string {
 		return ASPECT_SIZE_MAP[ratio] || 'h-64 w-64';
 	}
+
+	import { onMount } from 'svelte';
+	let mounted = $state(false);
+	onMount(() => {
+		mounted = true;
+	});
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -114,7 +120,7 @@
 						{message.model?.split('/').pop() || 'Unknown Model'}
 					</span>
 					<span class="text-border">•</span>
-					<span>{new Date(message.createdAt).toLocaleString()}</span>
+					<span>{mounted ? new Date(message.createdAt).toLocaleString() : ''}</span>
 				</div>
 				<div class="flex items-center gap-2">
 					<span>Prompt: {message.usage.promptTokens}</span>
@@ -144,7 +150,7 @@
 				: 'opacity-0 group-hover:opacity-100'}"
 		>
 			<span class="text-[10px] text-muted-foreground">
-				{new Date(message.createdAt).toLocaleString()}
+				{mounted ? new Date(message.createdAt).toLocaleString() : ''}
 			</span>
 			<button
 				onclick={(e) => {

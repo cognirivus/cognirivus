@@ -22,9 +22,7 @@
 	});
 </script>
 
-<div
-	class="flex h-dvh w-full overflow-hidden bg-background font-sans text-foreground"
->
+<div class="flex h-dvh w-full overflow-hidden bg-background font-sans text-foreground">
 	<!-- Mobile Header -->
 	<header
 		class="fixed inset-x-0 top-0 z-30 flex h-14 items-center border-b border-border bg-background/80 px-4 backdrop-blur-md md:hidden"
@@ -52,7 +50,7 @@
 
 	<div class="relative flex flex-1 flex-col overflow-hidden pt-14 md:pt-0">
 		<!-- Desktop Toggle Button -->
-		<div class="absolute left-4 top-4 z-50 hidden md:block">
+		<div class="absolute top-4 left-4 z-50 hidden md:block">
 			<button
 				onclick={() => chatState.toggleSidebar()}
 				class="flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground shadow-sm transition-all hover:bg-accent hover:text-foreground"
@@ -66,7 +64,7 @@
 			{@render children()}
 		</div>
 
-		{#if browser && page.url.pathname !== '/chat/usage'}
+		{#if page.url.pathname !== '/chat/usage'}
 			<ChatInput
 				bind:input={chatState.input}
 				handleSubmit={(e: Event) => chatState.handleSubmit?.(e)}
