@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus, Trash2, BarChart3, X } from '@lucide/svelte';
+	import { Plus, Trash2, BarChart3, X, MessageSquare, ImageIcon } from '@lucide/svelte';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
 	import type { Id } from '../../convex/_generated/dataModel';
@@ -25,11 +25,11 @@
 </script>
 
 <aside
-	class="fixed inset-y-0 left-0 z-50 flex h-full w-64 flex-col border-r border-zinc-200 bg-zinc-50 transition-all duration-300 dark:border-zinc-800 dark:bg-zinc-950
+	class="fixed inset-y-0 left-0 z-50 flex h-full w-80 flex-col border-r border-zinc-200 bg-zinc-50 transition-all duration-300 dark:border-zinc-800 dark:bg-zinc-950
     {chatState.isSidebarOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0'}
     md:relative md:translate-x-0 md:opacity-100
     {chatState.isSidebarOpen
-		? 'md:w-64'
+		? 'md:w-80'
 		: 'md:pointer-events-none md:w-0 md:overflow-hidden md:border-none'}"
 >
 	<div class="flex items-center gap-2 p-4">
@@ -79,10 +79,10 @@
 		</div>
 	</div>
 
-	<div class="mt-auto border-t border-zinc-200 p-4 dark:border-zinc-800">
+	<div class="mt-auto border-t border-zinc-200 p-2 dark:border-zinc-800">
 		<a
 			href="/chat/usage"
-			class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50 {page
+			class="mb-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-50 {page
 				.url.pathname === '/chat/usage'
 				? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50'
 				: ''}"
@@ -90,5 +90,29 @@
 			<BarChart3 class="h-4 w-4" />
 			Usage
 		</a>
+
+		<!-- Mode Switcher -->
+		<div class="flex rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+			<a
+				href="/chat"
+				class="flex flex-1 items-center justify-center gap-2 rounded-md py-2 text-xs font-medium transition-colors {page
+					.url.pathname.startsWith('/chat')
+					? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100'
+					: 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'}"
+			>
+				<MessageSquare class="h-4 w-4" />
+				Chat
+			</a>
+			<a
+				href="/image"
+				class="flex flex-1 items-center justify-center gap-2 rounded-md py-2 text-xs font-medium transition-colors {page
+					.url.pathname.startsWith('/image')
+					? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100'
+					: 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'}"
+			>
+				<ImageIcon class="h-4 w-4" />
+				Image
+			</a>
+		</div>
 	</div>
 </aside>

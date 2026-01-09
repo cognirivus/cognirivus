@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronDown, Download, Image, Loader2, Sparkles, Settings, Trash2, X } from '@lucide/svelte';
+	import { ChevronDown, Download, Image, Loader2, Sparkles, Settings, Trash2, X, MessageSquare } from '@lucide/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
 	import { onMount } from 'svelte';
@@ -112,7 +112,7 @@
 <div class="flex h-screen bg-zinc-50 dark:bg-zinc-950">
 	<!-- Left Sidebar -->
 	<div
-		class="flex w-80 flex-shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+		class="flex w-80 shrink-0 flex-col border-r border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950"
 	>
 		<!-- Header -->
 		<div class="flex items-center gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
@@ -279,14 +279,24 @@
 			{/if}
 		</div>
 
-		<!-- Back to Chat -->
-		<div class="border-t border-zinc-200 p-3 dark:border-zinc-800">
-			<a
-				href="/chat"
-				class="block text-center text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-			>
-				← Back to Chat
-			</a>
+		<!-- Mode Switcher -->
+		<div class="border-t border-zinc-200 p-2 dark:border-zinc-800">
+			<div class="flex rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+				<a
+					href="/chat"
+					class="flex flex-1 items-center justify-center gap-2 rounded-md py-2 text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+				>
+					<MessageSquare class="h-4 w-4" />
+					Chat
+				</a>
+				<a
+					href="/image"
+					class="flex flex-1 items-center justify-center gap-2 rounded-md bg-white py-2 text-xs font-medium text-zinc-900 shadow-sm transition-colors dark:bg-zinc-700 dark:text-zinc-100"
+				>
+					<Image class="h-4 w-4" />
+					Image
+				</a>
+			</div>
 		</div>
 	</div>
 
@@ -367,7 +377,7 @@
 
 	<!-- Right Sidebar: History -->
 	<div
-		class="hidden w-64 shrink-0 flex-col border-l border-zinc-200 bg-white lg:flex dark:border-zinc-800 dark:bg-zinc-900"
+		class="hidden w-64 shrink-0 flex-col border-l border-zinc-200 bg-zinc-50 lg:flex dark:border-zinc-800 dark:bg-zinc-950"
 	>
 		<div class="flex-1 overflow-y-auto p-3">
 			<h3 class="mb-3 text-xs font-semibold tracking-wide text-zinc-500 uppercase">History</h3>
