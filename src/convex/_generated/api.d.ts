@@ -12,6 +12,7 @@ import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as chat from "../chat.js";
 import type * as http from "../http.js";
+import type * as image from "../image.js";
 import type * as messages from "../messages.js";
 import type * as threads from "../threads.js";
 import type * as usage from "../usage.js";
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   chat: typeof chat;
   http: typeof http;
+  image: typeof image;
   messages: typeof messages;
   threads: typeof threads;
   usage: typeof usage;

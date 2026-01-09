@@ -44,6 +44,20 @@ const schema = defineSchema({
 	})
 		.index('by_user', ['userId'])
 		.index('by_created_at', ['createdAt']),
+	generated_images: defineTable({
+		userId: v.id('users'),
+		prompt: v.string(),
+		negativePrompt: v.optional(v.string()),
+		provider: v.string(),
+		model: v.optional(v.string()),
+		aspectRatio: v.string(),
+		width: v.number(),
+		height: v.number(),
+		imageId: v.id('_storage'),
+		createdAt: v.number()
+	})
+		.index('by_user', ['userId'])
+		.index('by_created_at', ['createdAt']),
 	cancellations: defineTable({
 		messageId: v.id('messages')
 	}).index('by_message', ['messageId'])
