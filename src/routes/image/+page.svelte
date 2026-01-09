@@ -8,7 +8,8 @@
 		Settings,
 		Trash2,
 		X,
-		MessageSquare
+		MessageSquare,
+		History
 	} from '@lucide/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
@@ -54,6 +55,8 @@
 	let guidance = $state(7.5);
 	let seed = $state<number | undefined>(undefined);
 	let showModelDropdown = $state(false);
+	let showSettings = $state(false);
+	let showHistory = $state(false);
 
 	let isGenerating = $state(false);
 	let generatedUrl = $state<string | null>(null);
@@ -76,6 +79,7 @@
 		isGenerating = true;
 		error = null;
 		generatedUrl = null;
+		showSettings = false;
 
 		try {
 			const result = await client.action(api.image.generate, {
@@ -119,9 +123,44 @@
 	}
 </script>
 
-<div class="flex h-dvh bg-background">
-	<!-- Left Sidebar -->
-	<div class="flex w-80 shrink-0 flex-col border-r border-border bg-sidebar">
+<div class="flex h-dvh flex-col bg-background lg:flex-row">
+	<!-- Mobile Header -->
+	<div
+		class="flex items-center justify-between border-b border-border bg-sidebar px-2 py-2.5 lg:hidden"
+	>
+		<div class="flex items-center gap-1">
+			<button
+				onclick={() => {
+					showSettings = !showSettings;
+					showHistory = false;
+				}}
+				class="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+				aria-label="Toggle Settings"
+			>
+				<Settings class="size-5" />
+			</button>
+			<div class="flex items-center gap-2 px-1">
+				<div class="rounded-lg bg-primary/10 p-1.5 text-primary">
+					<Image class="size-4" />
+				</div>
+				<span class="text-sm font-semibold">Image Studio</span>
+			</div>
+		</div>
+	</div>
+
+	<!-- Left Sidebar (Settings) -->
+	<div
+		class="fixed inset-y-0 left-0 z-50 flex w-80 shrink-0 flex-col border-r border-border bg-sidebar transition-transform duration-300 lg:static lg:translate-x-0 {showSettings
+			? 'translate-x-0'
+			: '-translate-x-full'}"
+	>
+		<!-- Mobile Header for Sidebar -->
+		<div class="flex items-center justify-between border-b border-border p-4 lg:hidden">
+			<span class="text-sm font-semibold">Settings</span>
+			<button onclick={() => (showSettings = false)} class="rounded-lg p-1 hover:bg-accent">
+				<X class="size-5" />
+			</button>
+		</div>
 		<!-- Scrollable Settings -->
 		<div class="flex-1 space-y-4 overflow-y-auto p-4">
 			<!-- Prompt Input -->
@@ -204,7 +243,7 @@
 					{#each ASPECT_RATIOS as ratio}
 						<button
 							onclick={() => (aspectRatio = ratio)}
-							class="flex-1 rounded-md px-1.5 py-1.5 text-[10px] font-medium transition-all {aspectRatio ===
+							class="flex-1 rounded-md px-1.5 py-2 text-[10px] font-medium transition-all {aspectRatio ===
 							ratio
 								? 'bg-primary text-primary-foreground'
 								: 'bg-secondary text-secondary-foreground hover:bg-accent'}"
@@ -321,9 +360,36 @@
 		</div>
 	</div>
 
+	<!-- Overlay for Mobile -->
+	{#if showSettings || showHistory}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm transition-opacity lg:hidden"
+			onclick={() => {
+				showSettings = false;
+				showHistory = false;
+			}}
+		></div>
+	{/if}
+
 	<!-- Main Content: Result Display -->
-	<div class="flex flex-1 flex-col overflow-hidden">
-		<div class="flex flex-1 items-center justify-center overflow-y-auto p-6">
+	<div class="relative flex flex-1 flex-col overflow-hidden">
+		<!-- History FAB for Mobile -->
+		<button
+			onclick={() => {
+				showHistory = !showHistory;
+				showSettings = false;
+			}}
+			class="fixed right-6 bottom-6 z-40 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:scale-105 active:scale-95 lg:hidden {showHistory
+				? 'scale-0 opacity-0'
+				: 'scale-100 opacity-100'}"
+			aria-label="View History"
+		>
+			<History class="size-6" />
+		</button>
+
+		<div class="flex flex-1 items-center justify-center overflow-y-auto p-4 lg:p-6">
 			<div class="w-full max-w-3xl">
 				{#if generatedUrl}
 					<div
@@ -333,18 +399,18 @@
 						<div class="absolute top-3 right-3 z-10 flex gap-2">
 							<button
 								onclick={downloadImage}
-								class="flex size-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
+								class="flex size-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70 lg:size-9"
 								title="Download"
 							>
-								<Download class="size-4" />
+								<Download class="size-5 lg:size-4" />
 							</button>
 							{#if selectedHistoryImage}
 								<button
 									onclick={deleteImage}
-									class="flex size-9 items-center justify-center rounded-full bg-destructive/80 text-white backdrop-blur-sm transition-colors hover:bg-destructive"
+									class="flex size-10 items-center justify-center rounded-full bg-destructive/80 text-white backdrop-blur-sm transition-colors hover:bg-destructive lg:size-9"
 									title="Delete"
 								>
-									<Trash2 class="size-4" />
+									<Trash2 class="size-5 lg:size-4" />
 								</button>
 							{/if}
 							<button
@@ -352,10 +418,10 @@
 									generatedUrl = null;
 									selectedHistoryImage = null;
 								}}
-								class="flex size-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
+								class="flex size-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70 lg:size-9"
 								title="Close"
 							>
-								<X class="size-4" />
+								<X class="size-5 lg:size-4" />
 							</button>
 						</div>
 						<img src={generatedUrl} alt="Generated" class="min-h-0 flex-1 object-contain" />
@@ -393,17 +459,32 @@
 	</div>
 
 	<!-- Right Sidebar: History -->
-	<div class="hidden w-64 shrink-0 flex-col border-l border-border bg-sidebar/50 lg:flex">
+	<div
+		class="fixed inset-y-0 right-0 z-[60] flex w-80 shrink-0 flex-col border-l border-border bg-sidebar transition-transform duration-300 lg:static lg:w-64 lg:translate-x-0 lg:bg-sidebar/50 {showHistory
+			? 'translate-x-0'
+			: 'translate-x-full'}"
+	>
 		<div class="flex-1 overflow-y-auto p-3">
-			<h3 class="mb-3 text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
-				History
-			</h3>
+			<div class="mb-4 flex items-center justify-between pr-12 lg:block lg:pr-0">
+				<h3 class="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+					History
+				</h3>
+				<button
+					onclick={() => (showHistory = false)}
+					class="rounded-lg p-1 hover:bg-accent lg:hidden"
+				>
+					<X class="size-4" />
+				</button>
+			</div>
 			<div class="grid grid-cols-2 gap-2">
 				{#each history as img}
 					<button
 						onclick={() => {
 							generatedUrl = img.url;
 							selectedHistoryImage = img;
+							if (window.innerWidth < 1024) {
+								showHistory = false;
+							}
 							// Update left sidebar parameters from selected image
 							prompt = img.prompt;
 							aspectRatio = img.aspectRatio;

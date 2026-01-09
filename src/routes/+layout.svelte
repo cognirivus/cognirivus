@@ -28,7 +28,7 @@
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 <ModeWatcher />
 
-<div class="fixed top-2 right-6 z-50">
+<div class="fixed top-2 right-2 z-50">
 	<ThemeToggle />
 </div>
 
