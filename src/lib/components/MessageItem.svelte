@@ -15,6 +15,20 @@
 	}>();
 
 	let revealedMetadata = $state(false);
+
+	const ASPECT_SIZE_MAP: Record<string, string> = {
+		'1:1': 'h-64 w-64',
+		'16:9': 'h-36 w-64',
+		'9:16': 'h-64 w-36',
+		'4:3': 'h-48 w-64',
+		'3:4': 'h-64 w-48',
+		'3:2': 'h-42 w-64',
+		'2:3': 'h-64 w-42'
+	};
+
+	function getAspectSizeClass(ratio: string): string {
+		return ASPECT_SIZE_MAP[ratio] || 'h-64 w-64';
+	}
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -55,9 +69,11 @@
 				</div>
 			{:else if message.metadata?.isGeneratingImage}
 				<div
-					class="mt-2 flex h-64 w-64 animate-pulse items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
+					class="mt-2 flex animate-pulse items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 {getAspectSizeClass(
+						message.metadata?.imageAspectRatio || '1:1'
+					)}"
 				>
-					<Image class="h-32 w-32 text-zinc-300 dark:text-zinc-700" />
+					<Image class="h-8 w-8 text-zinc-300 dark:text-zinc-700" />
 				</div>
 			{/if}
 		{:else}

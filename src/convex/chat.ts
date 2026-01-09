@@ -8,9 +8,10 @@ export const generate = action({
 		threadId: v.id('threads'),
 		model: v.optional(v.string()),
 		includeReasoning: v.optional(v.boolean()),
-		generateImage: v.optional(v.boolean())
+		generateImage: v.optional(v.boolean()),
+		imageAspectRatio: v.optional(v.string())
 	},
-	handler: async (ctx, { threadId, model, includeReasoning, generateImage }) => {
+	handler: async (ctx, { threadId, model, includeReasoning, generateImage, imageAspectRatio }) => {
 		const userId = await getAuthUserId(ctx);
 		if (!userId) throw new Error('Unauthorized');
 
@@ -37,6 +38,9 @@ export const generate = action({
 
 		if (generateImage) {
 			requestBody.modalities = ['image', 'text'];
+			if (imageAspectRatio) {
+				requestBody.image_config = { aspect_ratio: imageAspectRatio };
+			}
 		}
 
 		const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -66,7 +70,7 @@ export const generate = action({
 			threadId,
 			role: 'assistant',
 			model: modelToUse,
-			metadata: generateImage ? { isGeneratingImage: true } : undefined
+			metadata: generateImage ? { isGeneratingImage: true, imageAspectRatio } : undefined
 		});
 
 		// 5. Stream and update

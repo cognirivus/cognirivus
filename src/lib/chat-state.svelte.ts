@@ -5,6 +5,7 @@ export class ChatContext {
 	selectedModel = $state('openai/gpt-oss-20b');
 	includeReasoning = $state(false);
 	generateImage = $state(false);
+	imageAspectRatio = $state<string>('1:1');
 	input = $state('');
 
 	// Local streaming status

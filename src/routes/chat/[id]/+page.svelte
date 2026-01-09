@@ -81,7 +81,8 @@
 				threadId,
 				model: chatState.selectedModel,
 				includeReasoning: chatState.includeReasoning,
-				generateImage: chatState.generateImage
+				generateImage: chatState.generateImage,
+				imageAspectRatio: chatState.generateImage ? chatState.imageAspectRatio : undefined
 			});
 		} catch (e: any) {
 			if ((chatState.status as string) === 'ready') {

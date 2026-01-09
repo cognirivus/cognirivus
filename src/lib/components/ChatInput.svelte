@@ -107,6 +107,22 @@
 						<Image class="h-4 w-4" />
 					</button>
 
+					{#if chatState.generateImage}
+						<select
+							bind:value={chatState.imageAspectRatio}
+							class="h-8 rounded-lg border-0 bg-zinc-100 px-2 py-1 text-[10px] font-medium text-zinc-600 outline-none focus:ring-1 focus:ring-zinc-400 dark:bg-zinc-800 dark:text-zinc-400"
+							title="Image Aspect Ratio"
+						>
+							<option value="1:1">1:1</option>
+							<option value="16:9">16:9</option>
+							<option value="9:16">9:16</option>
+							<option value="4:3">4:3</option>
+							<option value="3:4">3:4</option>
+							<option value="3:2">3:2</option>
+							<option value="2:3">2:3</option>
+						</select>
+					{/if}
+
 					<div class="h-4 w-[1px] bg-zinc-200 dark:bg-zinc-800"></div>
 
 					<div class="relative flex items-center" bind:this={container}>
