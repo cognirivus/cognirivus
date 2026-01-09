@@ -4,7 +4,7 @@
 	import { setChatContext } from '$lib/chat-state.svelte';
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
-	import { Menu, PanelLeft } from '@lucide/svelte';
+	import SidebarToggle from '$lib/components/SidebarToggle.svelte';
 
 	let { children } = $props();
 	const chatState = setChatContext();
@@ -23,19 +23,6 @@
 </script>
 
 <div class="flex h-dvh w-full overflow-hidden bg-background font-sans text-foreground">
-	<!-- Mobile Header -->
-	<header
-		class="fixed inset-x-0 top-0 z-30 flex h-14 items-center border-b border-border bg-background/80 px-4 backdrop-blur-md md:hidden"
-	>
-		<button
-			onclick={() => chatState.toggleSidebar()}
-			class="flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent"
-		>
-			<Menu class="size-6" />
-		</button>
-		<div class="ml-3 text-sm font-bold tracking-tight">Cognirivus</div>
-	</header>
-
 	<Sidebar />
 
 	{#if chatState.isSidebarOpen && chatState.isMobile}
@@ -48,17 +35,12 @@
 		></div>
 	{/if}
 
-	<div class="relative flex flex-1 flex-col overflow-hidden pt-14 md:pt-0">
-		<!-- Desktop Toggle Button -->
-		<div class="absolute top-4 left-4 z-50 hidden md:block">
-			<button
-				onclick={() => chatState.toggleSidebar()}
-				class="flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground shadow-sm transition-all hover:bg-accent hover:text-foreground"
-				title={chatState.isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
-			>
-				<PanelLeft class="size-5" />
-			</button>
-		</div>
+	<div class="relative flex flex-1 flex-col overflow-hidden">
+		<SidebarToggle
+			onclick={() => chatState.toggleSidebar()}
+			isOpen={chatState.isSidebarOpen}
+			title="Open sidebar"
+		/>
 
 		<div class="flex flex-1 flex-col overflow-hidden">
 			{@render children()}

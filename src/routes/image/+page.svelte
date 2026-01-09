@@ -4,13 +4,16 @@
 		Download,
 		Image,
 		Loader2,
-		Sparkles,
 		Settings,
 		Trash2,
 		X,
 		MessageSquare,
-		History
+		History,
+		Sparkles
 	} from '@lucide/svelte';
+	import Logo from '$lib/components/Logo.svelte';
+	import SidebarToggle from '$lib/components/SidebarToggle.svelte';
+	import SidebarHeader from '$lib/components/SidebarHeader.svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
 	import { onMount } from 'svelte';
@@ -55,8 +58,31 @@
 	let guidance = $state(7.5);
 	let seed = $state<number | undefined>(undefined);
 	let showModelDropdown = $state(false);
+	let isMobile = $state(true);
 	let showSettings = $state(false);
 	let showHistory = $state(false);
+
+	// Track responsiveness like in chat page
+	$effect(() => {
+		const checkMobile = () => {
+			const wasMobile = isMobile;
+			isMobile = window.innerWidth < 1024;
+
+			// Initial desktop state or when switching to desktop
+			if (!isMobile && wasMobile) {
+				showSettings = true;
+				showHistory = true;
+			}
+			// When switching to mobile, close sidebars to prevent overlap
+			if (isMobile && !wasMobile) {
+				showSettings = false;
+				showHistory = false;
+			}
+		};
+		checkMobile();
+		window.addEventListener('resize', checkMobile);
+		return () => window.removeEventListener('resize', checkMobile);
+	});
 
 	let isGenerating = $state(false);
 	let generatedUrl = $state<string | null>(null);
@@ -124,43 +150,18 @@
 </script>
 
 <div class="flex h-dvh flex-col bg-background lg:flex-row">
-	<!-- Mobile Header -->
-	<div
-		class="flex items-center justify-between border-b border-border bg-sidebar px-2 py-2.5 lg:hidden"
-	>
-		<div class="flex items-center gap-1">
-			<button
-				onclick={() => {
-					showSettings = !showSettings;
-					showHistory = false;
-				}}
-				class="rounded-lg p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
-				aria-label="Toggle Settings"
-			>
-				<Settings class="size-5" />
-			</button>
-			<div class="flex items-center gap-2 px-1">
-				<div class="rounded-lg bg-primary/10 p-1.5 text-primary">
-					<Image class="size-4" />
-				</div>
-				<span class="text-sm font-semibold">Image Studio</span>
-			</div>
-		</div>
-	</div>
+	<SidebarToggle onclick={() => (showSettings = true)} isOpen={showSettings} side="left" />
 
 	<!-- Left Sidebar (Settings) -->
 	<div
-		class="fixed inset-y-0 left-0 z-50 flex w-80 shrink-0 flex-col border-r border-border bg-sidebar transition-transform duration-300 lg:static lg:translate-x-0 {showSettings
-			? 'translate-x-0'
-			: '-translate-x-full'}"
+		class="fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col border-r border-border bg-sidebar transition-[transform,width,opacity] duration-300 ease-in-out
+        lg:relative lg:translate-x-0
+        {showSettings
+			? 'w-80 translate-x-0 opacity-100'
+			: 'w-0 -translate-x-full overflow-hidden opacity-0 lg:border-transparent'}"
 	>
-		<!-- Mobile Header for Sidebar -->
-		<div class="flex items-center justify-between border-b border-border p-4 lg:hidden">
-			<span class="text-sm font-semibold">Settings</span>
-			<button onclick={() => (showSettings = false)} class="rounded-lg p-1 hover:bg-accent">
-				<X class="size-5" />
-			</button>
-		</div>
+		<SidebarHeader onClose={() => (showSettings = false)} title="Close settings" />
+
 		<!-- Scrollable Settings -->
 		<div class="flex-1 space-y-4 overflow-y-auto p-4">
 			<!-- Prompt Input -->
@@ -377,12 +378,9 @@
 	<div class="relative flex flex-1 flex-col overflow-hidden">
 		<!-- History FAB for Mobile -->
 		<button
-			onclick={() => {
-				showHistory = !showHistory;
-				showSettings = false;
-			}}
+			onclick={() => (showHistory = true)}
 			class="fixed right-6 bottom-6 z-40 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:scale-105 active:scale-95 lg:hidden {showHistory
-				? 'scale-0 opacity-0'
+				? 'pointer-events-none scale-0 opacity-0'
 				: 'scale-100 opacity-100'}"
 			aria-label="View History"
 		>
@@ -460,21 +458,29 @@
 
 	<!-- Right Sidebar: History -->
 	<div
-		class="fixed inset-y-0 right-0 z-[60] flex w-80 shrink-0 flex-col border-l border-border bg-sidebar transition-transform duration-300 lg:static lg:w-64 lg:translate-x-0 lg:bg-sidebar/50 {showHistory
-			? 'translate-x-0'
-			: 'translate-x-full'}"
+		class="fixed inset-y-0 right-0 z-[60] flex shrink-0 flex-col border-l border-border bg-sidebar transition-[transform,opacity,width] duration-300 ease-in-out
+        lg:static lg:w-64 lg:translate-x-0 lg:bg-sidebar/50 lg:opacity-100
+        {showHistory
+			? 'w-80 translate-x-0 opacity-100'
+			: 'w-0 translate-x-full overflow-hidden opacity-0 lg:w-64'}"
 	>
+		<div class="lg:hidden">
+			<SidebarHeader
+				onClose={() => (showHistory = false)}
+				title="Close history"
+				side="right"
+				showLogo={false}
+				icon={X}
+			/>
+		</div>
+		<div class="hidden border-b border-border p-5 lg:block">
+			<h3 class="text-xs font-semibold tracking-wide text-muted-foreground uppercase">History</h3>
+		</div>
 		<div class="flex-1 overflow-y-auto p-3">
-			<div class="mb-4 flex items-center justify-between pr-12 lg:block lg:pr-0">
+			<div class="mb-4">
 				<h3 class="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
 					History
 				</h3>
-				<button
-					onclick={() => (showHistory = false)}
-					class="rounded-lg p-1 hover:bg-accent lg:hidden"
-				>
-					<X class="size-4" />
-				</button>
 			</div>
 			<div class="grid grid-cols-2 gap-2">
 				{#each history as img}

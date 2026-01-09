@@ -70,7 +70,7 @@
 </script>
 
 <div
-	class="pointer-events-none fixed right-0 bottom-0 left-0 z-20 px-2 pt-4 pb-2 transition-all duration-300 md:px-4 md:pt-8 md:pr-[calc(1rem+var(--scrollbar-width))] md:pb-4 md:pl-4 {chatState.isSidebarOpen
+	class="pointer-events-none fixed right-0 bottom-0 left-0 z-20 px-2 pt-4 pb-2 md:px-4 md:pt-8 md:pr-[calc(1rem+var(--scrollbar-width))] md:pb-4 md:pl-4 {chatState.isSidebarOpen
 		? 'md:left-80'
 		: 'md:left-0'}"
 >
@@ -79,7 +79,7 @@
 	></div>
 	<form onsubmit={handleSubmit} class="pointer-events-auto relative mx-auto max-w-3xl">
 		<div
-			class="flex flex-col rounded-2xl border border-border bg-card/70 shadow-sm backdrop-blur-md transition-all"
+			class="flex flex-col rounded-2xl border border-border bg-card/70 shadow-sm backdrop-blur-md"
 		>
 			<textarea
 				class="min-h-[60px] w-full resize-none border-0 bg-transparent px-3 pt-3 pb-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:ring-0 focus:outline-none disabled:opacity-50 sm:min-h-[80px] sm:px-4 sm:pt-4 sm:pb-2"

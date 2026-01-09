@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Plus, Trash2, BarChart3, X, MessageSquare, ImageIcon } from '@lucide/svelte';
+	import SidebarHeader from './SidebarHeader.svelte';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
 	import type { Id } from '../../convex/_generated/dataModel';
@@ -25,27 +26,21 @@
 </script>
 
 <aside
-	class="fixed inset-y-0 left-0 z-50 flex h-full w-80 flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300
+	class="fixed inset-y-0 left-0 z-50 flex h-full flex-col border-r border-sidebar-border bg-sidebar transition-[transform,opacity,width] duration-300 ease-in-out
     {chatState.isSidebarOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0'}
     md:relative md:translate-x-0 md:opacity-100
-    {chatState.isSidebarOpen
-		? 'md:w-80'
-		: 'md:pointer-events-none md:w-0 md:overflow-hidden md:border-none'}"
+    {chatState.isSidebarOpen ? 'w-80' : 'md:w-0 md:overflow-hidden md:border-transparent'}"
 >
-	<div class="flex items-center gap-2 p-4">
+	<SidebarHeader onClose={() => chatState.setSidebar(false)} />
+
+	<div class="px-4 pb-4">
 		<a
 			href="/chat"
-			class="flex flex-1 items-center justify-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/50 px-4 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+			class="flex w-full items-center justify-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/50 px-4 py-2 text-sm font-medium text-sidebar-foreground transition-all hover:bg-sidebar-accent"
 		>
 			<Plus class="h-4 w-4" />
 			New Chat
 		</a>
-		<button
-			onclick={() => chatState.setSidebar(false)}
-			class="flex h-9 w-9 items-center justify-center rounded-lg border border-sidebar-border bg-sidebar-accent text-sidebar-foreground/70 md:hidden"
-		>
-			<X class="h-5 w-5" />
-		</button>
 	</div>
 
 	<div class="flex-1 overflow-y-auto px-2 py-2">
@@ -84,7 +79,7 @@
 			href="/chat/usage"
 			class="mb-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground {page
 				.url.pathname === '/chat/usage'
-				? 'bg-sidebar-accent text-sidebar-foreground font-semibold shadow-sm'
+				? 'bg-sidebar-accent font-semibold text-sidebar-foreground shadow-sm'
 				: ''}"
 		>
 			<BarChart3 class="h-4 w-4" />
@@ -95,8 +90,9 @@
 		<div class="flex rounded-lg bg-sidebar-accent/50 p-1">
 			<a
 				href="/chat"
-				class="flex flex-1 items-center justify-center gap-2 rounded-md py-2 text-xs font-medium transition-colors {page
-					.url.pathname.startsWith('/chat')
+				class="flex flex-1 items-center justify-center gap-2 rounded-md py-2 text-xs font-medium transition-colors {page.url.pathname.startsWith(
+					'/chat'
+				)
 					? 'bg-sidebar-accent text-sidebar-foreground shadow-sm ring-1 ring-sidebar-border'
 					: 'text-sidebar-foreground/60 hover:text-sidebar-foreground'}"
 			>
@@ -105,8 +101,9 @@
 			</a>
 			<a
 				href="/image"
-				class="flex flex-1 items-center justify-center gap-2 rounded-md py-2 text-xs font-medium transition-colors {page
-					.url.pathname.startsWith('/image')
+				class="flex flex-1 items-center justify-center gap-2 rounded-md py-2 text-xs font-medium transition-colors {page.url.pathname.startsWith(
+					'/image'
+				)
 					? 'bg-sidebar-accent text-sidebar-foreground shadow-sm ring-1 ring-sidebar-border'
 					: 'text-sidebar-foreground/60 hover:text-sidebar-foreground'}"
 			>
