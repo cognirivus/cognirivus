@@ -159,7 +159,7 @@
 
 {#if browser}
 	<!-- Scrollable Message Area -->
-	<div bind:this={viewport} class="flex-1 overflow-y-auto px-4 [scrollbar-gutter:stable]">
+	<div bind:this={viewport} class="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
 		{#if messagesQuery?.isLoading && messages.length === 0}
 			<div class="flex h-full items-center justify-center">
 				<Loader variant="circular" size="lg" />
@@ -196,25 +196,22 @@
 
 {#if viewingContextId}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/20 p-4 backdrop-blur-sm dark:bg-zinc-950/50"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
 	>
 		<div
-			class="flex h-[80vh] w-full max-w-4xl animate-in flex-col rounded-2xl border border-zinc-200 bg-white shadow-2xl duration-200 zoom-in-95 fade-in dark:border-zinc-800 dark:bg-zinc-900"
+			class="flex h-[80vh] w-full max-w-4xl animate-in flex-col rounded-2xl border border-border bg-card shadow-2xl duration-200 zoom-in-95 fade-in"
 		>
-			<div
-				class="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800"
-			>
-				<h3 class="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Context Sent to AI</h3>
+			<div class="flex items-center justify-between border-b border-border px-6 py-4">
+				<h3 class="text-sm font-semibold text-foreground">Context Sent to AI</h3>
 				<button
 					onclick={() => (viewingContextId = null)}
-					class="rounded-full p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+					class="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 				>
 					<X class="h-4 w-4" />
 				</button>
 			</div>
 			<div class="flex-1 overflow-auto p-6 font-mono text-xs">
-				<pre
-					class="rounded-xl bg-zinc-50 p-4 break-words whitespace-pre-wrap text-zinc-800 dark:bg-zinc-950/50 dark:text-zinc-300">
+				<pre class="rounded-xl bg-muted p-4 break-words whitespace-pre-wrap text-foreground">
 {JSON.stringify(
 						messages
 							.slice(0, messages.findIndex((m) => m._id === viewingContextId) + 1)

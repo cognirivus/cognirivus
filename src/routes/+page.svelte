@@ -4,30 +4,32 @@
 	const { signOut, isAuthenticated } = useAuth();
 </script>
 
-<main class="p-8">
+<main class="container mx-auto max-w-4xl p-8 py-20">
 	{#if isAuthenticated}
-		<h1 class="mb-4 text-3xl font-bold">Welcome back!</h1>
-		<p class="mb-6">You are securely logged in.</p>
+		<h1 class="mb-4 text-4xl font-extrabold tracking-tight lg:text-5xl">Welcome back!</h1>
+		<p class="mb-8 text-xl text-muted-foreground">You are securely logged in.</p>
 		<div class="flex gap-4">
 			<a
 				href="/chat"
-				class="rounded bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
+				class="inline-flex h-11 items-center justify-center rounded-md bg-primary px-8 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
 			>
 				Go to Chat
 			</a>
 			<button
 				onclick={() => signOut()}
-				class="rounded bg-red-600 px-4 py-2 text-white transition hover:bg-red-700"
+				class="inline-flex h-11 items-center justify-center rounded-md bg-destructive px-8 text-sm font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
 			>
 				Sign Out
 			</button>
 		</div>
 	{:else}
-		<h1 class="mb-4 text-3xl font-bold">Welcome to Cognirivus Chat!</h1>
-		<p class="mb-6">Please sign in to start chatting with AI.</p>
+		<h1 class="mb-4 text-4xl font-extrabold tracking-tight lg:text-5xl">
+			Welcome to <span class="text-primary">Cognirivus</span> Chat!
+		</h1>
+		<p class="mb-8 text-xl text-muted-foreground">Please sign in to start chatting with AI.</p>
 		<a
 			href="/signin"
-			class="rounded bg-indigo-600 px-4 py-2 text-white transition hover:bg-indigo-700"
+			class="inline-flex h-11 items-center justify-center rounded-md bg-primary px-8 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
 		>
 			Sign In
 		</a>

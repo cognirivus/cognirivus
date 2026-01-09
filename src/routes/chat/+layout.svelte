@@ -23,17 +23,17 @@
 </script>
 
 <div
-	class="flex h-screen w-full overflow-hidden bg-zinc-50 font-sans text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50"
+	class="flex h-dvh w-full overflow-hidden bg-background font-sans text-foreground"
 >
 	<!-- Mobile Header -->
 	<header
-		class="fixed top-0 right-0 left-0 z-30 flex h-14 items-center border-b border-zinc-200 bg-white/80 px-4 backdrop-blur-md md:hidden dark:border-zinc-800 dark:bg-zinc-900/80"
+		class="fixed inset-x-0 top-0 z-30 flex h-14 items-center border-b border-border bg-background/80 px-4 backdrop-blur-md md:hidden"
 	>
 		<button
 			onclick={() => chatState.toggleSidebar()}
-			class="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
+			class="flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent"
 		>
-			<Menu class="h-6 w-6" />
+			<Menu class="size-6" />
 		</button>
 		<div class="ml-3 text-sm font-bold tracking-tight">Cognirivus</div>
 	</header>
@@ -46,19 +46,19 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			onclick={() => chatState.setSidebar(false)}
-			class="fixed inset-0 z-30 bg-zinc-950/20 backdrop-blur-sm transition-opacity duration-300 md:hidden"
+			class="fixed inset-0 z-30 bg-foreground/20 backdrop-blur-sm transition-opacity duration-300 md:hidden"
 		></div>
 	{/if}
 
 	<div class="relative flex flex-1 flex-col overflow-hidden pt-14 md:pt-0">
 		<!-- Desktop Toggle Button -->
-		<div class="absolute top-4 left-4 z-50 hidden md:block">
+		<div class="absolute left-4 top-4 z-50 hidden md:block">
 			<button
 				onclick={() => chatState.toggleSidebar()}
-				class="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm transition-all hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+				class="flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground shadow-sm transition-all hover:bg-accent hover:text-foreground"
 				title={chatState.isSidebarOpen ? 'Close sidebar' : 'Open sidebar'}
 			>
-				<PanelLeft class="h-5 w-5" />
+				<PanelLeft class="size-5" />
 			</button>
 		</div>
 
