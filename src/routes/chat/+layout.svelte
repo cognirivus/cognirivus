@@ -74,7 +74,6 @@
 				stopChat={() => chatState.stopChat?.()}
 				models={chatState.models}
 				bind:selectedModel={chatState.selectedModel}
-				bind:includeReasoning={chatState.includeReasoning}
 				viewContext={chatState.viewContext ? () => chatState.viewContext?.() : null}
 				totalTokens={chatState.totalTokens}
 				totalPromptTokens={chatState.totalPromptTokens}

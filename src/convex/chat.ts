@@ -7,9 +7,10 @@ export const generate = action({
 	args: {
 		threadId: v.id('threads'),
 		model: v.optional(v.string()),
-		includeReasoning: v.optional(v.boolean())
+		includeReasoning: v.optional(v.boolean()),
+		generateImage: v.optional(v.boolean())
 	},
-	handler: async (ctx, { threadId, model, includeReasoning }) => {
+	handler: async (ctx, { threadId, model, includeReasoning, generateImage }) => {
 		const userId = await getAuthUserId(ctx);
 		if (!userId) throw new Error('Unauthorized');
 
@@ -26,6 +27,18 @@ export const generate = action({
 		const modelToUse = model || 'google/gemini-2.0-flash-exp:free';
 		const controller = new AbortController();
 
+		const requestBody: any = {
+			model: modelToUse,
+			messages: openRouterMessages,
+			stream: true,
+			stream_options: { include_usage: true },
+			include_reasoning: includeReasoning ?? false
+		};
+
+		if (generateImage) {
+			requestBody.modalities = ['image', 'text'];
+		}
+
 		const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
 			method: 'POST',
 			headers: {
@@ -35,13 +48,7 @@ export const generate = action({
 				'Content-Type': 'application/json'
 			},
 			signal: controller.signal,
-			body: JSON.stringify({
-				model: modelToUse,
-				messages: openRouterMessages,
-				stream: true,
-				stream_options: { include_usage: true },
-				include_reasoning: includeReasoning ?? false
-			})
+			body: JSON.stringify(requestBody)
 		});
 
 		if (!response.ok) {
@@ -58,7 +65,8 @@ export const generate = action({
 			userId,
 			threadId,
 			role: 'assistant',
-			model: modelToUse
+			model: modelToUse,
+			metadata: generateImage ? { isGeneratingImage: true } : undefined
 		});
 
 		// 5. Stream and update
@@ -66,6 +74,7 @@ export const generate = action({
 		const decoder = new TextDecoder();
 		let fullContent = '';
 		let fullReasoning = '';
+		let generatedImages: { url: string; contentType: string }[] = [];
 		let buffer = '';
 		let chunkCount = 0;
 		let lastWriteTime = 0;
@@ -107,6 +116,8 @@ export const generate = action({
 										completionTokens: json.usage.completion_tokens,
 										totalTokens: json.usage.total_tokens
 									}
+									// If we captured images during streaming (less likely for images, but possible)
+									// We usually handle images after they arrive
 								});
 								continue;
 							}
@@ -114,6 +125,23 @@ export const generate = action({
 							const delta = json.choices[0]?.delta;
 							const content = delta?.content || '';
 							const reasoning = delta?.reasoning || delta?.reasoning_content || '';
+							const images = delta?.images; // Check for images in delta
+
+							if (images) {
+								for (const img of images) {
+									if (img.image_url?.url) {
+										// Format: data:image/png;base64,...
+										const url = img.image_url.url;
+										const match = url.match(/^data:(image\/[a-z]+);base64,(.*)$/);
+										if (match) {
+											generatedImages.push({
+												url: url,
+												contentType: match[1]
+											});
+										}
+									}
+								}
+							}
 
 							if (content || reasoning) {
 								if (content) fullContent += content;
@@ -136,12 +164,12 @@ export const generate = action({
 					}
 				}
 
-				// Check for cancellation AFTER processing chunks (so generationId is captured)
+				// Check for cancellation AFTER processing chunks
 				if (chunkCount % 10 === 0) {
 					const isCancelled = await ctx.runQuery(api.messages.checkCancelled, { messageId });
 					if (isCancelled) {
 						isStopped = true;
-						controller.abort(); // Signal OpenRouter to stop billing/generation
+						controller.abort();
 						await ctx.runMutation(internal.messages.internalCleanupCancellation, { messageId });
 						await ctx.runMutation(internal.messages.internalUpdate, {
 							messageId,
@@ -163,18 +191,44 @@ export const generate = action({
 			try {
 				reader.releaseLock();
 			} catch (e) {
-				// Ignore errors if reader is already closed/unlocked
+				// Ignore
 			}
+
+			// Process images if any
+			const savedImageIds: string[] = [];
+			if (generatedImages.length > 0) {
+				for (const img of generatedImages) {
+					try {
+						const match = img.url.match(/^data:(image\/[a-z]+);base64,(.*)$/);
+						if (match) {
+							const contentType = match[1];
+							const base64Data = match[2];
+							const binaryString = atob(base64Data);
+							const bytes = new Uint8Array(binaryString.length);
+							for (let i = 0; i < binaryString.length; i++) {
+								bytes[i] = binaryString.charCodeAt(i);
+							}
+							const blob = new Blob([bytes], { type: contentType });
+							const storageId = await ctx.storage.store(blob);
+							savedImageIds.push(storageId);
+						}
+					} catch (imgError) {
+						console.error('Failed to store image:', imgError);
+					}
+				}
+			}
+
 			if (!isStopped) {
 				await ctx.runMutation(internal.messages.internalUpdate, {
 					messageId,
 					body: fullContent,
-					reasoning: fullReasoning || undefined
+					reasoning: fullReasoning || undefined,
+					images: savedImageIds.length > 0 ? (savedImageIds as any) : undefined
 				});
 			}
 		}
 
-		// 6. Fetch Full Metadata (Cost, etc.) - ALWAYS run this for both completed and cancelled
+		// 6. Fetch Full Metadata - run for both completed and cancelled
 		if (generationId) {
 			try {
 				// Small delay to ensure OpenRouter has processed the stats
@@ -191,7 +245,7 @@ export const generate = action({
 
 				if (genResponse.ok) {
 					const genData = await genResponse.json();
-					const data = genData.data; // OpenRouter returns { data: { ... } }
+					const data = genData.data;
 
 					if (data) {
 						await ctx.runMutation(internal.messages.internalUpdate, {
@@ -205,10 +259,11 @@ export const generate = action({
 								completionTokens: data.native_tokens_completion,
 								totalTokens: data.native_tokens_prompt + data.native_tokens_completion
 							},
-							metadata: data // Store everything
+							metadata: data
+							// images shouldn't change from metadata fetch, assuming they came in stream or we'd handle them here if not
 						});
 
-						// 7. Permanently log usage
+						// 7. Log usage
 						await ctx.runMutation(internal.usage.logUsage, {
 							userId,
 							messageId,
@@ -225,5 +280,25 @@ export const generate = action({
 				console.error('Failed to fetch generation metadata', e);
 			}
 		}
+	}
+});
+
+export const listModels = action({
+	args: {},
+	handler: async () => {
+		const response = await fetch('https://openrouter.ai/api/v1/models', {
+			headers: {
+				Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+				'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+				'X-Title': 'Cognirivus Chat'
+			}
+		});
+
+		if (!response.ok) {
+			throw new Error(`OpenRouter error: ${response.statusText}`);
+		}
+
+		const data = await response.json();
+		return data.data;
 	}
 });

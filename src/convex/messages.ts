@@ -12,10 +12,19 @@ export const list = query({
 		const thread = await ctx.db.get(threadId);
 		if (!thread || thread.userId !== userId) return [];
 
-		return await ctx.db
+		const messages = await ctx.db
 			.query('messages')
 			.withIndex('by_thread', (q) => q.eq('threadId', threadId))
 			.collect();
+
+		return Promise.all(
+			messages.map(async (msg) => {
+				const imageUrls = await Promise.all(
+					(msg.images || []).map((storageId) => ctx.storage.getUrl(storageId))
+				);
+				return { ...msg, imageUrls: imageUrls.filter((url) => url !== null) as string[] };
+			})
+		);
 	}
 });
 
@@ -60,7 +69,8 @@ export const internalCreate = internalMutation({
 		userId: v.id('users'),
 		threadId: v.id('threads'),
 		role: v.union(v.literal('user'), v.literal('assistant')),
-		model: v.optional(v.string())
+		model: v.optional(v.string()),
+		metadata: v.optional(v.any())
 	},
 	handler: async (ctx, args) => {
 		const id = await ctx.db.insert('messages', {
@@ -86,15 +96,20 @@ export const internalUpdate = internalMutation({
 		cost: v.optional(v.number()),
 		metadata: v.optional(v.any()),
 		reasoning: v.optional(v.string()),
-		isCancelled: v.optional(v.boolean())
+		isCancelled: v.optional(v.boolean()),
+		images: v.optional(v.array(v.id('_storage')))
 	},
-	handler: async (ctx, { messageId, body, usage, cost, metadata, reasoning, isCancelled }) => {
+	handler: async (
+		ctx,
+		{ messageId, body, usage, cost, metadata, reasoning, isCancelled, images }
+	) => {
 		const updates: any = { body };
 		if (usage) updates.usage = usage;
 		if (cost !== undefined) updates.cost = cost;
 		if (metadata) updates.metadata = metadata;
 		if (reasoning !== undefined) updates.reasoning = reasoning;
 		if (isCancelled !== undefined) updates.isCancelled = isCancelled;
+		if (images !== undefined) updates.images = images;
 		await ctx.db.patch(messageId, updates);
 	}
 });

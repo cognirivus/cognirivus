@@ -21,7 +21,8 @@ const schema = defineSchema({
 		),
 		isCancelled: v.optional(v.boolean()),
 		cost: v.optional(v.number()),
-		metadata: v.optional(v.any())
+		metadata: v.optional(v.any()),
+		images: v.optional(v.array(v.id('_storage')))
 	})
 		.index('by_thread', ['threadId'])
 		.index('by_user', ['userId']),

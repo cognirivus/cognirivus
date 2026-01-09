@@ -52,7 +52,6 @@
 	// Redirect if thread is not found or unauthorized
 	$effect(() => {
 		if (browser && threadDetails?.data === null && !threadDetails.isLoading) {
-			console.warn('Cognirivus: Thread not found or unauthorized, redirecting...');
 			goto('/chat');
 		}
 	});
@@ -81,7 +80,8 @@
 			await client.action(api.chat.generate, {
 				threadId,
 				model: chatState.selectedModel,
-				includeReasoning: chatState.includeReasoning
+				includeReasoning: chatState.includeReasoning,
+				generateImage: chatState.generateImage
 			});
 		} catch (e: any) {
 			if ((chatState.status as string) === 'ready') {

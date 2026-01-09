@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Terminal, Square } from '@lucide/svelte';
+	import { Terminal, Square, Image } from '@lucide/svelte';
 	import { Message, MessageContent } from '$lib/components/prompt-kit/message/index.js';
 	import {
 		Reasoning,
@@ -47,6 +47,19 @@
 				content={message.body}
 				class="w-full max-w-none bg-transparent p-0"
 			/>
+			{#if message.imageUrls?.length > 0}
+				<div class="mt-2 flex flex-wrap gap-2">
+					{#each message.imageUrls as url}
+						<img src={url} alt="Generated content" class="max-w-md rounded-lg shadow-md" />
+					{/each}
+				</div>
+			{:else if message.metadata?.isGeneratingImage}
+				<div
+					class="mt-2 flex h-64 w-64 animate-pulse items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900"
+				>
+					<Image class="h-32 w-32 text-zinc-300 dark:text-zinc-700" />
+				</div>
+			{/if}
 		{:else}
 			<MessageContent
 				class="max-w-[90%] rounded-2xl rounded-tr-sm bg-zinc-900 px-5 py-3 text-[0.95rem] leading-relaxed whitespace-pre-wrap text-zinc-50 shadow-md md:max-w-[85%] dark:bg-zinc-100 dark:text-zinc-900"
