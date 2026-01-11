@@ -2,6 +2,7 @@ import { action } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { getAuthUserId } from '@convex-dev/auth/server';
+import { formulateStandaloneQuery } from './lib/openrouter';
 
 export const generate = action({
 	args: {
@@ -9,24 +10,87 @@ export const generate = action({
 		model: v.optional(v.string()),
 		includeReasoning: v.optional(v.boolean()),
 		generateImage: v.optional(v.boolean()),
-		imageAspectRatio: v.optional(v.string())
+		imageAspectRatio: v.optional(v.string()),
+		useMemory: v.optional(v.boolean())
 	},
-	handler: async (ctx, { threadId, model, includeReasoning, generateImage, imageAspectRatio }) => {
+	handler: async (
+		ctx,
+		{ threadId, model, includeReasoning, generateImage, imageAspectRatio, useMemory }
+	) => {
 		const userId = await getAuthUserId(ctx);
 		if (!userId) throw new Error('Unauthorized');
 
 		// 1. Get previous messages
 		const messages = await ctx.runQuery(api.messages.list, { threadId });
 
-		// Get the last user message for image prompt
+		// Get the last user message for image prompt and memory storage
 		const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
 		const userPrompt = lastUserMessage?.body || 'Chat generated image';
 
+		// Trigger memory storage for the user's new message (fire-and-forget)
+		// Always store memories regardless of useMemory flag
+		console.log(
+			'Cognirivus: Checking last user message for memory storage:',
+			lastUserMessage?.body
+		);
+		if (lastUserMessage && lastUserMessage.body) {
+			console.log('Cognirivus: Triggering addMemory action for message');
+			ctx
+				.runAction(api.memories.addMemory, {
+					userId,
+					messageId: lastUserMessage._id,
+					messageText: lastUserMessage.body
+				})
+				.catch((e) => console.error('Failed to store memory', e));
+		}
+
+		// Retrieve relevant memories (only if useMemory is enabled)
+		let relevantMemories: any[] = [];
+		let searchOutputText = userPrompt; // Track what was actually used for search
+		let rewriterInput: any[] = [];
+
+		if (useMemory !== false && userPrompt) {
+			try {
+				const enriched = await ctx.runAction(api.memories.getEnrichedContext, {
+					userId,
+					history: messages.slice(-5).map((m: any) => ({
+						role: m.role,
+						content: m.body
+					})),
+					limit: 5
+				});
+
+				relevantMemories = enriched.relevantMemories;
+				searchOutputText = enriched.formulatedQuery;
+				rewriterInput = enriched.rewriterInput;
+			} catch (e) {
+				console.error('Failed to search memories', e);
+			}
+		}
+
+		// Format memories for context
+		const memoryContext =
+			relevantMemories.length > 0
+				? `\n\nRelevant memories about the user:\n${relevantMemories.map((m: any) => `- ${m.text}`).join('\n')}\n`
+				: '';
+
 		// 2. Prepare OpenRouter payload
-		const openRouterMessages = messages.map((m) => ({
+		const openRouterMessages = messages.map((m: any) => ({
 			role: m.role,
 			content: m.isCancelled || m.metadata?.cancelled ? `[CANCELLED BY USER] ${m.body}` : m.body
 		}));
+
+		// Inject memories into the system instructions or as a system message at the start
+		if (memoryContext) {
+			// Check if there is already a system message, if not add one.
+			// If existing messages don't have 'system', we can prepend one.
+			// However, usually previous messages are just user/assistant.
+			// We will prepend a system message with memories.
+			openRouterMessages.unshift({
+				role: 'system',
+				content: `You are a helpful AI assistant. Use the following memories to personalize your response if relevant:${memoryContext}`
+			});
+		}
 
 		// 3. Call OpenRouter
 		const modelToUse = model || 'google/gemini-2.0-flash-exp:free';
@@ -67,14 +131,32 @@ export const generate = action({
 
 		if (!response.body) throw new Error('No response body');
 
-		// 4. Create empty assistant message
+		// 4. Create empty assistant message with request context in metadata
+		const usedMemoriesForMeta = relevantMemories.map((m: any) => ({
+			_id: m._id,
+			text: m.text,
+			_score: m._score
+		}));
+		// Store the full request payload for context display
+		const contextPayload = {
+			...requestBody,
+			memorySearchQuery: useMemory !== false ? searchOutputText : undefined,
+			memoryFormulationPayload: useMemory !== false ? rewriterInput : undefined,
+			embeddingModel: useMemory !== false ? 'qwen/qwen3-embedding-8b' : undefined,
+			retrievedMemories: useMemory !== false ? relevantMemories : undefined
+		};
+		const initialMetadata = {
+			...(generateImage ? { isGeneratingImage: true, imageAspectRatio } : {}),
+			...(usedMemoriesForMeta.length > 0 ? { usedMemories: usedMemoriesForMeta } : {}),
+			requestPayload: contextPayload
+		};
 		const messageId = await ctx.runMutation(internal.messages.internalCreate, {
 			body: '',
 			userId,
 			threadId,
 			role: 'assistant',
 			model: modelToUse,
-			metadata: generateImage ? { isGeneratingImage: true, imageAspectRatio } : undefined
+			metadata: initialMetadata
 		});
 
 		// 5. Stream and update
@@ -280,8 +362,11 @@ export const generate = action({
 								completionTokens: data.native_tokens_completion,
 								totalTokens: data.native_tokens_prompt + data.native_tokens_completion
 							},
-							metadata: data
-							// images shouldn't change from metadata fetch, assuming they came in stream or we'd handle them here if not
+							// Merge OpenRouter data with existing metadata to preserve requestPayload and memory context
+							metadata: {
+								...initialMetadata,
+								...data
+							}
 						});
 
 						// 7. Log usage

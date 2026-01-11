@@ -76,14 +76,14 @@
 
 	<div class="mt-auto border-t border-sidebar-border p-2">
 		<a
-			href="/chat/usage"
+			href="/dashboard"
 			class="mb-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground {page
-				.url.pathname === '/chat/usage'
+				.url.pathname === '/dashboard'
 				? 'bg-sidebar-accent font-semibold text-sidebar-foreground shadow-sm'
 				: ''}"
 		>
 			<BarChart3 class="h-4 w-4" />
-			Usage
+			Dashboard
 		</a>
 
 		<!-- Mode Switcher -->

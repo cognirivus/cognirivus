@@ -46,22 +46,20 @@
 			{@render children()}
 		</div>
 
-		{#if page.url.pathname !== '/chat/usage'}
-			<ChatInput
-				bind:input={chatState.input}
-				handleSubmit={(e: Event) => chatState.handleSubmit?.(e)}
-				chatStatus={chatState.status}
-				stopChat={() => chatState.stopChat?.()}
-				models={chatState.models}
-				bind:selectedModel={chatState.selectedModel}
-				viewContext={chatState.viewContext ? () => chatState.viewContext?.() : null}
-				totalTokens={chatState.totalTokens}
-				totalPromptTokens={chatState.totalPromptTokens}
-				totalCompletionTokens={chatState.totalCompletionTokens}
-				totalCost={chatState.totalCost}
-				isActuallyStreaming={chatState.isActuallyStreaming}
-				isLoadingModels={chatState.isLoadingModels}
-			/>
-		{/if}
+		<ChatInput
+			bind:input={chatState.input}
+			handleSubmit={(e: Event) => chatState.handleSubmit?.(e)}
+			chatStatus={chatState.status}
+			stopChat={() => chatState.stopChat?.()}
+			models={chatState.models}
+			bind:selectedModel={chatState.selectedModel}
+			viewContext={chatState.viewContext ? () => chatState.viewContext?.() : null}
+			totalTokens={chatState.totalTokens}
+			totalPromptTokens={chatState.totalPromptTokens}
+			totalCompletionTokens={chatState.totalCompletionTokens}
+			totalCost={chatState.totalCost}
+			isActuallyStreaming={chatState.isActuallyStreaming}
+			isLoadingModels={chatState.isLoadingModels}
+		/>
 	</div>
 </div>

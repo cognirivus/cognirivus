@@ -63,7 +63,21 @@ const schema = defineSchema({
 		.index('by_message', ['messageId']),
 	cancellations: defineTable({
 		messageId: v.id('messages')
-	}).index('by_message', ['messageId'])
+	}).index('by_message', ['messageId']),
+	user_memories: defineTable({
+		userId: v.id('users'),
+		text: v.string(),
+		category: v.optional(v.string()),
+		embedding: v.array(v.number()),
+		messageId: v.optional(v.id('messages')),
+		createdAt: v.number()
+	})
+		.vectorIndex('by_embedding', {
+			vectorField: 'embedding',
+			dimensions: 4096,
+			filterFields: ['userId']
+		})
+		.index('by_user', ['userId'])
 });
 
 export default schema;

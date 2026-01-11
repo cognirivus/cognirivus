@@ -118,6 +118,25 @@ export const internalUpdate = internalMutation({
 	}
 });
 
+export const internalAppendMemories = internalMutation({
+	args: {
+		messageId: v.id('messages'),
+		memories: v.array(v.object({ text: v.string(), category: v.string() }))
+	},
+	handler: async (ctx, { messageId, memories }) => {
+		const message = await ctx.db.get(messageId);
+		if (!message) return;
+
+		const metadata = message.metadata || {};
+		await ctx.db.patch(messageId, {
+			metadata: {
+				...metadata,
+				memoriesAdded: memories
+			}
+		});
+	}
+});
+
 export const cancel = mutation({
 	args: { messageId: v.id('messages') },
 	handler: async (ctx, { messageId }) => {

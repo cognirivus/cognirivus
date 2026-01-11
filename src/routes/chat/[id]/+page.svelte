@@ -88,7 +88,8 @@
 				model: chatState.selectedModel,
 				includeReasoning: chatState.includeReasoning,
 				generateImage: chatState.generateImage,
-				imageAspectRatio: chatState.generateImage ? chatState.imageAspectRatio : undefined
+				imageAspectRatio: chatState.generateImage ? chatState.imageAspectRatio : undefined,
+				useMemory: chatState.useMemory
 			});
 		} catch (e: any) {
 			if ((chatState.status as string) === 'ready') {
@@ -212,20 +213,162 @@
 					<X class="h-4 w-4" />
 				</button>
 			</div>
-			<div class="flex-1 overflow-auto p-6 font-mono text-xs">
-				<pre class="rounded-xl bg-muted p-4 break-words whitespace-pre-wrap text-foreground">
-{JSON.stringify(
-						messages
-							.slice(0, messages.findIndex((m) => m._id === viewingContextId) + 1)
-							.map((m) => ({
-								role: m.role,
-								content: m.body
-							})),
-						null,
-						2
-					)}
-				</pre>
+			<div class="flex-1 space-y-8 overflow-auto p-6 font-mono text-xs">
+				{#if messages.find((m) => m._id === viewingContextId)?.metadata?.requestPayload}
+					{@const payload = messages.find((m) => m._id === viewingContextId)?.metadata
+						?.requestPayload}
+
+					<!-- PIEPLINE START -->
+					<div class="space-y-6">
+						<!-- Step 1: Query Formulation -->
+						<div class="relative border-l-2 border-primary/20 pb-2 pl-8">
+							<div
+								class="absolute top-0 -left-[9px] flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm"
+							>
+								1
+							</div>
+							<div class="mb-3">
+								<h3 class="text-[10px] font-bold tracking-wider text-primary uppercase">
+									Step 1: Standalone Query Formulation
+								</h3>
+								<p class="mb-3 text-[10px] text-muted-foreground italic">
+									Rewriting follow-up query based on conversation history.
+								</p>
+
+								{#if payload?.memoryFormulationPayload}
+									<div class="mb-3 rounded-lg border border-border/50 bg-black/5 p-3">
+										<div
+											class="mb-2 text-[9px] font-bold text-muted-foreground uppercase opacity-70"
+										>
+											Rewriter Input (LLM Prompt)
+										</div>
+										<div class="custom-scrollbar max-h-40 space-y-1 overflow-auto pr-2">
+											{#each payload.memoryFormulationPayload as msg}
+												<div class="flex gap-2 text-[9px]">
+													<span class="min-w-[50px] font-bold text-primary uppercase"
+														>{msg.role}:</span
+													>
+													<span class="break-words text-foreground/80">{msg.content}</span>
+												</div>
+											{/each}
+										</div>
+									</div>
+								{/if}
+
+								<div class="rounded-lg border border-primary/20 bg-primary/5 p-3">
+									<div class="mb-1 text-[9px] font-bold text-primary uppercase opacity-70">
+										Output: Interpreted Query
+									</div>
+									<div class="font-semibold text-foreground italic">
+										"{payload?.memorySearchQuery || 'Original query used'}"
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<!-- Step 2: Memory Retrieval -->
+						<div class="relative border-l-2 border-primary/20 pb-2 pl-8">
+							<div
+								class="absolute top-0 -left-[9px] flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm"
+							>
+								2
+							</div>
+							<div>
+								<h3 class="text-[10px] font-bold tracking-wider text-primary uppercase">
+									Step 2: Contextual Memory Retrieval
+								</h3>
+								<p class="mb-3 text-[10px] text-muted-foreground italic">
+									Vector search using {payload?.embeddingModel || 'qwen/qwen3-embedding-8b'}.
+								</p>
+
+								{#if payload?.retrievedMemories?.length > 0}
+									<div class="space-y-2">
+										<div
+											class="mb-1 text-[9px] font-bold text-muted-foreground uppercase opacity-70"
+										>
+											Top Matches Found:
+										</div>
+										{#each payload.retrievedMemories as mem}
+											<div
+												class="flex items-start gap-2 rounded-lg border border-primary/10 bg-primary/5 p-2 text-[10px]"
+											>
+												<div class="flex-1 text-foreground/90">{mem.text}</div>
+												<div
+													class="shrink-0 rounded bg-primary/20 px-1.5 py-0.5 text-[8px] font-bold text-primary"
+												>
+													{(mem._score * 100).toFixed(0)}%
+												</div>
+											</div>
+										{/each}
+									</div>
+								{:else}
+									<div class="rounded-lg bg-muted p-3 text-[10px] text-muted-foreground italic">
+										No relevant memories found for this query.
+									</div>
+								{/if}
+							</div>
+						</div>
+
+						<!-- Step 3: Final Generation -->
+						<div class="relative border-l-0 pb-2 pl-8">
+							<div
+								class="absolute top-0 -left-[9px] flex h-4 w-4 animate-pulse items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm"
+							>
+								3
+							</div>
+							<div>
+								<h3 class="text-[10px] font-bold tracking-wider text-primary uppercase">
+									Step 3: Final Response Generation
+								</h3>
+								<p class="mb-3 text-[10px] text-muted-foreground italic">
+									Injecting memories into the system prompt for {payload?.model}.
+								</p>
+
+								{#if payload?.messages?.length > 0 && payload?.messages[0].role === 'system'}
+									<div class="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+										<div class="mb-1 text-[9px] font-bold text-amber-500 uppercase opacity-70">
+											Step 3a: Final System Prompt (Injected)
+										</div>
+										<div class="leading-relaxed whitespace-pre-wrap text-foreground">
+											{payload?.messages[0].content}
+										</div>
+									</div>
+								{/if}
+
+								{#if payload?.messages?.length > 2}
+									<div class="mb-3 rounded-lg border border-muted bg-muted/30 p-3">
+										<div
+											class="mb-2 text-[9px] font-bold text-muted-foreground uppercase opacity-70"
+										>
+											Step 3b: Conversation Context (History)
+										</div>
+										<div class="custom-scrollbar max-h-40 space-y-2 overflow-auto pr-2">
+											{#each payload.messages.slice(1, -1) as msg}
+												<div class="rounded bg-black/5 p-2 text-[9px]">
+													<span class="font-bold text-muted-foreground uppercase">{msg.role}:</span>
+													<span class="text-foreground/70">{msg.content}</span>
+												</div>
+											{/each}
+										</div>
+									</div>
+								{/if}
+
+								{#if payload?.messages?.length > 1}
+									<div class="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
+										<div class="mb-1 text-[9px] font-bold text-blue-500 uppercase opacity-70">
+											Step 3c: Final User Query
+										</div>
+										<div class="leading-relaxed whitespace-pre-wrap text-foreground">
+											{payload?.messages[payload?.messages.length - 1].content}
+										</div>
+									</div>
+								{/if}
+							</div>
+						</div>
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>
 {/if}
+```

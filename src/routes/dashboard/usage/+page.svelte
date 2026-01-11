@@ -19,16 +19,14 @@
 	}
 </script>
 
-<div class="flex h-full flex-col overflow-y-auto p-6 pt-16">
+<div class="p-6">
 	<div class="mx-auto flex w-full max-w-6xl flex-col gap-8">
 		<!-- Header -->
-		<div class="flex items-center justify-between">
-			<div>
-				<h1 class="text-2xl font-bold tracking-tight text-foreground">Usage Dashboard</h1>
-				<p class="text-sm text-muted-foreground">
-					Monitor your API consumption and costs in real-time.
-				</p>
-			</div>
+		<div>
+			<h1 class="text-2xl font-bold tracking-tight text-foreground">Usage Statistics</h1>
+			<p class="text-sm text-muted-foreground">
+				Monitor your AI consumption and costs in real-time.
+			</p>
 		</div>
 
 		{#if statsQuery.isLoading}

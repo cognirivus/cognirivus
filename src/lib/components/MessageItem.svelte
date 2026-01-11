@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Terminal, Square, Image, ImageOff } from '@lucide/svelte';
+	import { Terminal, Square, Image, ImageOff, Brain } from '@lucide/svelte';
 	import { Message, MessageContent } from '$lib/components/prompt-kit/message/index.js';
 	import {
 		Reasoning,
@@ -108,6 +108,36 @@
 		{/if}
 	</Message>
 
+	{#if message.role === 'user' && message.metadata?.memoriesAdded?.length > 0}
+		<div
+			class="mt-1 flex animate-in items-center gap-1.5 px-1 duration-500 fade-in slide-in-from-right-2"
+		>
+			<div
+				class="group/learned relative flex cursor-help items-center gap-1 rounded-full border border-emerald-200/50 bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-950/30 dark:text-emerald-400"
+			>
+				<Brain class="h-2.5 w-2.5" />
+				<span>Learned {message.metadata.memoriesAdded.length} Facts</span>
+
+				<!-- Tooltip with the actual facts -->
+				<div
+					class="pointer-events-none absolute right-0 bottom-full z-10 mb-2 hidden w-64 rounded-xl border border-border bg-popover p-3 text-left text-popover-foreground shadow-xl group-hover/learned:block"
+				>
+					<p class="mb-2 text-[10px] font-bold text-foreground">New Memories Learned:</p>
+					<div class="space-y-2">
+						{#each message.metadata.memoriesAdded as mem}
+							<div class="flex flex-col gap-0.5 border-l-2 border-emerald-500/30 pl-2">
+								<span class="text-[10px] leading-relaxed text-foreground/90">{mem.text}</span>
+								<span class="text-[8px] font-bold tracking-wider text-emerald-600/80 uppercase"
+									>{mem.category}</span
+								>
+							</div>
+						{/each}
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
+
 	{#if message.role === 'assistant' && message.usage}
 		<div
 			class="mt-1 px-1 transition-opacity duration-200 {revealedMetadata
@@ -122,7 +152,7 @@
 					<span class="text-border">•</span>
 					<span>{mounted ? new Date(message.createdAt).toLocaleString() : ''}</span>
 				</div>
-				<div class="flex items-center gap-2">
+				<div class="flex flex-wrap items-center gap-2">
 					<span>Prompt: {message.usage.promptTokens}</span>
 					<span>Completions: {message.usage.completionTokens}</span>
 					{#if message.cost !== undefined}
@@ -138,6 +168,49 @@
 							<span>Cancelled</span>
 						</div>
 					{/if}
+					{#if message.metadata?.usedMemories?.length > 0}
+						<button
+							class="group/mem relative flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary transition-colors hover:bg-primary/20"
+							title="Memories used for this response"
+							onclick={(e) => {
+								e.stopPropagation();
+							}}
+						>
+							<Brain class="h-3 w-3" />
+							<span>{message.metadata.usedMemories.length} memories</span>
+							<div
+								class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-64 rounded-lg border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg group-hover/mem:block"
+							>
+								<p class="mb-1 text-[10px] font-semibold">Memories used:</p>
+								<ul class="list-inside list-disc space-y-0.5 text-[10px]">
+									{#each message.metadata.usedMemories as mem}
+										<li class="flex items-center gap-1">
+											<span class="flex-1 truncate">{mem.text}</span>
+											{#if mem._score !== undefined}
+												<span
+													class="shrink-0 rounded bg-primary/20 px-1 text-[8px] font-medium text-primary"
+												>
+													{(mem._score * 100).toFixed(0)}%
+												</span>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							</div>
+						</button>
+					{/if}
+
+					<button
+						class="flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+						title="View technical context (JSON)"
+						onclick={(e) => {
+							e.stopPropagation();
+							onViewContext(message._id);
+						}}
+					>
+						<Terminal class="h-3 w-3" />
+						<span>Context</span>
+					</button>
 				</div>
 			</div>
 		</div>

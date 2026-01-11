@@ -4,6 +4,7 @@ export class ChatContext {
 	// Settings and drafts (local to tab)
 	selectedModel = $state('openai/gpt-oss-20b');
 	includeReasoning = $state(false);
+	useMemory = $state(false); // Memory-based personalization (off by default)
 	generateImage = $state(false);
 	imageAspectRatio = $state<string>('1:1');
 	input = $state('');

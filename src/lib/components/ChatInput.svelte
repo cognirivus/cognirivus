@@ -7,7 +7,8 @@
 		Code,
 		Image,
 		Plus,
-		Activity
+		Activity,
+		Database
 	} from '@lucide/svelte';
 	import { useChatContext } from '$lib/chat-state.svelte';
 	import { onMount } from 'svelte';
@@ -111,6 +112,20 @@
 						title="Toggle Reasoning"
 					>
 						<Brain class="h-3.5 w-3.5" />
+					</button>
+
+					<div class="h-4 w-[1px] bg-border/50"></div>
+
+					<button
+						type="button"
+						onclick={() => (chatState.useMemory = !chatState.useMemory)}
+						disabled={chatStatus === 'streaming'}
+						class="flex h-8 w-9 flex-shrink-0 items-center justify-center transition-all {chatState.useMemory
+							? 'bg-primary text-primary-foreground shadow-sm'
+							: 'text-muted-foreground hover:bg-muted/80'}"
+						title="Use Memory"
+					>
+						<Database class="h-3.5 w-3.5" />
 					</button>
 
 					<div class="h-4 w-[1px] bg-border/50"></div>
@@ -291,6 +306,18 @@
 						title="Toggle Reasoning"
 					>
 						<Brain class="h-4 w-4 {chatState.includeReasoning ? 'fill-current' : ''}" />
+					</button>
+
+					<button
+						type="button"
+						onclick={() => (chatState.useMemory = !chatState.useMemory)}
+						disabled={chatStatus === 'streaming'}
+						class="flex h-8 w-8 items-center justify-center rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50 {chatState.useMemory
+							? 'bg-primary text-primary-foreground shadow-sm'
+							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+						title="Use Memory"
+					>
+						<Database class="h-4 w-4" />
 					</button>
 
 					<button
