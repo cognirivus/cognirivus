@@ -2,7 +2,7 @@ import { action } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { getAuthUserId } from '@convex-dev/auth/server';
-import { formulateStandaloneQuery } from './lib/openrouter';
+import { formulateStandaloneQuery, getGenerationStats } from './lib/openrouter';
 
 export const generate = action({
 	args: {
@@ -34,14 +34,12 @@ export const generate = action({
 			lastUserMessage?.body
 		);
 		if (lastUserMessage && lastUserMessage.body) {
-			console.log('Cognirivus: Triggering addMemory action for message');
-			ctx
-				.runAction(api.memories.addMemory, {
-					userId,
-					messageId: lastUserMessage._id,
-					messageText: lastUserMessage.body
-				})
-				.catch((e) => console.error('Failed to store memory', e));
+			console.log('Cognirivus: Scheduling addMemory action for message');
+			await ctx.scheduler.runAfter(0, api.memories.addMemory, {
+				userId,
+				messageId: lastUserMessage._id,
+				messageText: lastUserMessage.body
+			});
 		}
 
 		// Retrieve relevant memories (only if useMemory is enabled)
@@ -190,9 +188,18 @@ export const generate = action({
 						try {
 							const json = JSON.parse(trimmed.replace('data: ', ''));
 
+							// Check for mid-stream errors from OpenRouter/Provider
+							if (json.error) {
+								console.error('Cognirivus: OpenRouter stream error:', json.error);
+								throw new Error(
+									`OpenRouter Error: ${json.error.message || JSON.stringify(json.error)}`
+								);
+							}
+
 							// Capture ID on first chunk - MUST happen before we might break
 							if (json.id && !generationId) {
 								generationId = json.id;
+								console.log(`Cognirivus: Generation ID captured: ${generationId}`);
 							}
 
 							if (json.usage) {
@@ -237,6 +244,12 @@ export const generate = action({
 								if (content) fullContent += content;
 								if (reasoning) fullReasoning += reasoning;
 
+								if (chunkCount % 50 === 0) {
+									console.log(
+										`Cognirivus: Stream progress - chunks: ${chunkCount}, content length: ${fullContent.length}`
+									);
+								}
+
 								// Throttle DB updates to every 200ms
 								const now = Date.now();
 								if (now - lastWriteTime > 200) {
@@ -271,6 +284,10 @@ export const generate = action({
 					}
 				}
 			}
+
+			console.log(
+				`Cognirivus: Stream finished - chunks: ${chunkCount}, final length: ${fullContent.length}`
+			);
 		} catch (e: any) {
 			if (e.name === 'AbortError') {
 				console.log('Cognirivus: Stream aborted by user (AbortController).');
@@ -322,6 +339,12 @@ export const generate = action({
 			}
 
 			if (!isStopped) {
+				// Prevent empty responses if we expect content
+				if (!fullContent && !fullReasoning && generatedImages.length === 0) {
+					console.warn('Cognirivus: Stream ended with no content/images. Adding fallback message.');
+					fullContent = '_[No response received from AI]_';
+				}
+
 				await ctx.runMutation(internal.messages.internalUpdate, {
 					messageId,
 					body: fullContent,
@@ -334,53 +357,45 @@ export const generate = action({
 		// 6. Fetch Full Metadata - run for both completed and cancelled
 		if (generationId) {
 			try {
-				// Small delay to ensure OpenRouter has processed the stats
-				await new Promise((resolve) => setTimeout(resolve, 1000));
+				const data = await getGenerationStats(generationId);
 
-				const genResponse = await fetch(
-					`https://openrouter.ai/api/v1/generation?id=${generationId}`,
-					{
-						headers: {
-							Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`
-						}
-					}
-				);
+				if (data) {
+					await ctx.runMutation(internal.messages.internalUpdate, {
+						messageId,
+						body: fullContent, // Keep existing body
+						reasoning: fullReasoning || undefined,
+						isCancelled: isStopped ? true : undefined,
+						cost: data.usage ?? data.total_cost ?? 0,
+						usage: {
+							promptTokens: data.native_tokens_prompt ?? 0,
+							completionTokens: data.native_tokens_completion ?? 0,
+							totalTokens: (data.native_tokens_prompt ?? 0) + (data.native_tokens_completion ?? 0)
+						},
+						// Store request payload for debugging, not generation data
+						metadata: initialMetadata
+					});
 
-				if (genResponse.ok) {
-					const genData = await genResponse.json();
-					const data = genData.data;
+					// 7. Log usage
+					const finalStats = data || {
+						model: modelToUse,
+						native_tokens_prompt: 0,
+						native_tokens_completion: 0,
+						usage: 0,
+						_is_fallback: !data
+					};
 
-					if (data) {
-						await ctx.runMutation(internal.messages.internalUpdate, {
-							messageId,
-							body: fullContent, // Keep existing body
-							reasoning: fullReasoning || undefined,
-							isCancelled: isStopped ? true : undefined,
-							cost: data.total_cost,
-							usage: {
-								promptTokens: data.native_tokens_prompt,
-								completionTokens: data.native_tokens_completion,
-								totalTokens: data.native_tokens_prompt + data.native_tokens_completion
-							},
-							// Merge OpenRouter data with existing metadata to preserve requestPayload and memory context
-							metadata: {
-								...initialMetadata,
-								...data
-							}
-						});
-
-						// 7. Log usage
-						await ctx.runMutation(internal.usage.logUsage, {
-							userId,
-							messageId,
-							model: modelToUse,
-							promptTokens: data.native_tokens_prompt,
-							completionTokens: data.native_tokens_completion,
-							totalTokens: data.native_tokens_prompt + data.native_tokens_completion,
-							cost: data.total_cost,
-							metadata: data
-						});
-					}
+					await ctx.runMutation(internal.usage.logUsage, {
+						userId,
+						messageId,
+						purpose: 'chat',
+						model: finalStats.model,
+						promptTokens: finalStats.native_tokens_prompt ?? 0,
+						completionTokens: finalStats.native_tokens_completion ?? 0,
+						totalTokens:
+							(finalStats.native_tokens_prompt ?? 0) + (finalStats.native_tokens_completion ?? 0),
+						cost: finalStats.usage ?? finalStats.total_cost ?? 0,
+						raw_response: data || { generationId }
+					});
 				}
 			} catch (e) {
 				console.error('Failed to fetch generation metadata', e);

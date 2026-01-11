@@ -4,16 +4,11 @@ export async function createEmbedding(text: string) {
 		headers: {
 			Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 			'Content-Type': 'application/json',
-			'HTTP-Referer': 'https://cognirivus-chat.vercel.app', // Optional
-			'X-Title': 'Cognirivus Chat' // Optional
+			'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+			'X-Title': 'Cognirivus Chat'
 		},
 		body: JSON.stringify({
-			// model: 'qwen/qwen-2.5-coder-32b-instruct', // Using this for extraction, but wait, this function is for embeddings.
-			// The plan said createEmbedding and extractMemories.
-			// Let me fix this to be generic or specific.
-			// START OF CORRECT IMPLEMENTATION
-
-			model: 'qwen/qwen3-embedding-8b', // User requested this model
+			model: 'qwen/qwen3-embedding-8b',
 			input: text
 		})
 	});
@@ -23,12 +18,18 @@ export async function createEmbedding(text: string) {
 	}
 
 	const data = await response.json();
-	return data.data[0].embedding;
+	// Header for streaming, body.id for non-streaming
+	const generationId = response.headers.get('x-openrouter-id') || data.id || null;
+	return {
+		embedding: data.data[0].embedding,
+		generationId
+	};
 }
 
-export async function extractMemories(text: string): Promise<{ text: string; category: string }[]> {
-	const model = 'google/gemini-2.5-flash-lite';
-	console.log(`Cognirivus: Calling OpenRouter for extraction with model ${model}`);
+export async function extractMemories(text: string): Promise<{
+	memories: { text: string; category: string }[];
+	generationId: string | null;
+}> {
 	const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
 		method: 'POST',
 		headers: {
@@ -38,7 +39,7 @@ export async function extractMemories(text: string): Promise<{ text: string; cat
 			'X-Title': 'Cognirivus Chat'
 		},
 		body: JSON.stringify({
-			model: model,
+			model: 'google/gemini-2.5-flash-lite',
 			messages: [
 				{
 					role: 'system',
@@ -54,33 +55,30 @@ export async function extractMemories(text: string): Promise<{ text: string; cat
 		})
 	});
 
+	const data = await response.json();
+	// Header for streaming, body.id for non-streaming
+	const generationId = response.headers.get('x-openrouter-id') || data.id || null;
+
 	if (!response.ok) {
 		console.error(`Failed to extract memories: ${response.statusText}`);
-		const errorText = await response.text();
-		console.error('OpenRouter Error details:', errorText);
-		return [];
+		return { memories: [], generationId };
 	}
 
-	const data = await response.json();
-	console.log('Cognirivus: Received extraction response');
 	const content = data.choices[0]?.message?.content || '[]';
-	console.log('Cognirivus: Extraction content:', content);
 
+	let memories = [];
 	try {
 		const parsed = JSON.parse(content);
-		// If the model returns { "memories": [...] }
-		if (Array.isArray(parsed)) return parsed;
-		if (parsed.memories && Array.isArray(parsed.memories)) return parsed.memories;
-		return [];
+		if (Array.isArray(parsed)) memories = parsed;
+		else if (parsed.memories && Array.isArray(parsed.memories)) memories = parsed.memories;
 	} catch (e) {
 		console.error('Failed to parse memories JSON:', content);
-		return [];
 	}
+
+	return { memories, generationId };
 }
 
 export async function formulateStandaloneQuery(history: { role: string; content: string }[]) {
-	const model = 'openai/gpt-oss-120b';
-
 	const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
 		method: 'POST',
 		headers: {
@@ -90,7 +88,7 @@ export async function formulateStandaloneQuery(history: { role: string; content:
 			'X-Title': 'Cognirivus Chat'
 		},
 		body: JSON.stringify({
-			model: model,
+			model: 'openai/gpt-oss-120b',
 			messages: [
 				{
 					role: 'system',
@@ -103,21 +101,31 @@ Return ONLY the rephrased query text. If the message is already standalone, retu
 		})
 	});
 
+	const data = await response.json();
+	// Header for streaming, body.id for non-streaming
+	const generationId = response.headers.get('x-openrouter-id') || data.id || null;
+
 	if (!response.ok) {
 		console.error(`Failed to formulate standalone query: ${response.statusText}`);
-		return history[history.length - 1].content;
+		return {
+			result: history[history.length - 1].content,
+			generationId
+		};
 	}
 
-	const data = await response.json();
-	return data.choices[0]?.message?.content || history[history.length - 1].content;
+	return {
+		result: data.choices[0]?.message?.content || history[history.length - 1].content,
+		generationId
+	};
 }
 
 export async function judgeMemoryDuplicate(
 	newFact: string,
 	existingFact: string
-): Promise<'duplicate' | 'update' | 'new'> {
-	const model = 'google/gemini-2.5-flash-lite';
-
+): Promise<{
+	decision: 'duplicate' | 'update' | 'new';
+	generationId: string | null;
+}> {
 	const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
 		method: 'POST',
 		headers: {
@@ -127,7 +135,7 @@ export async function judgeMemoryDuplicate(
 			'X-Title': 'Cognirivus Chat'
 		},
 		body: JSON.stringify({
-			model: model,
+			model: 'google/gemini-2.5-flash-lite',
 			messages: [
 				{
 					role: 'system',
@@ -148,12 +156,47 @@ Return ONLY one word: "duplicate", "update", or "new".`
 		})
 	});
 
-	if (!response.ok) return 'new';
-
 	const data = await response.json();
+	// Header for streaming, body.id for non-streaming
+	const generationId = response.headers.get('x-openrouter-id') || data.id || null;
+
+	if (!response.ok) return { decision: 'new', generationId };
+
 	const choice = data.choices[0]?.message?.content?.toLowerCase().trim();
 
-	if (choice?.includes('duplicate')) return 'duplicate';
-	if (choice?.includes('update')) return 'update';
-	return 'new';
+	let decision: 'duplicate' | 'update' | 'new' = 'new';
+	if (choice?.includes('duplicate')) decision = 'duplicate';
+	else if (choice?.includes('update')) decision = 'update';
+
+	return { decision, generationId };
+}
+
+export async function getGenerationStats(generationId: string | null, retries = 3) {
+	if (!generationId) return null;
+
+	for (let i = 0; i < retries; i++) {
+		try {
+			// exponential backoff starting at 1s
+			const waitTime = 1000 * Math.pow(2, i);
+			await new Promise((resolve) => setTimeout(resolve, waitTime));
+
+			const response = await fetch(`https://openrouter.ai/api/v1/generation?id=${generationId}`, {
+				headers: {
+					Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`
+				}
+			});
+
+			if (response.ok) {
+				const genData = await response.json();
+				if (genData.data) return genData.data;
+			}
+		} catch (e) {
+			console.error(
+				`getGenerationStats: Attempt ${i + 1} to fetch stats for ${generationId} failed:`,
+				e
+			);
+		}
+	}
+
+	return null;
 }

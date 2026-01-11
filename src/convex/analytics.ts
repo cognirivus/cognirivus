@@ -19,6 +19,7 @@ export const getDashboardStats = query({
 		let totalGenerations = usageLogs.length;
 
 		const modelStats: Record<string, { tokens: number; cost: number; count: number }> = {};
+		const purposeStats: Record<string, { tokens: number; cost: number; count: number }> = {};
 		const dailyStats: Record<string, { tokens: number; cost: number }> = {};
 
 		for (const log of usageLogs) {
@@ -26,7 +27,7 @@ export const getDashboardStats = query({
 			totalPromptTokens += log.promptTokens;
 			totalCompletionTokens += log.completionTokens;
 			if (log.cost) totalCost += log.cost;
-			if (log.metadata?.cancelled || log.metadata?.finish_reason === 'cancelled') {
+			if (log.raw_response?.cancelled || log.raw_response?.finish_reason === 'cancelled') {
 				cancelledCount++;
 			}
 
@@ -36,6 +37,13 @@ export const getDashboardStats = query({
 			modelStats[model].tokens += log.totalTokens;
 			modelStats[model].cost += log.cost || 0;
 			modelStats[model].count++;
+
+			// Purpose Stats
+			const purpose = log.purpose || 'chat'; // Default to chat if missing (legacy)
+			if (!purposeStats[purpose]) purposeStats[purpose] = { tokens: 0, cost: 0, count: 0 };
+			purposeStats[purpose].tokens += log.totalTokens;
+			purposeStats[purpose].cost += log.cost || 0;
+			purposeStats[purpose].count++;
 
 			// Daily Stats
 			const date = new Date(log.createdAt).toISOString().split('T')[0];
@@ -56,6 +64,10 @@ export const getDashboardStats = query({
 				cancellationRate: totalGenerations > 0 ? cancelledCount / totalGenerations : 0
 			},
 			modelBreakdown: Object.entries(modelStats).map(([name, stats]) => ({
+				name,
+				...stats
+			})),
+			purposeBreakdown: Object.entries(purposeStats).map(([name, stats]) => ({
 				name,
 				...stats
 			})),

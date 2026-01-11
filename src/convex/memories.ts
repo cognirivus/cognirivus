@@ -5,7 +5,8 @@ import {
 	createEmbedding,
 	extractMemories,
 	formulateStandaloneQuery,
-	judgeMemoryDuplicate
+	judgeMemoryDuplicate,
+	getGenerationStats
 } from './lib/openrouter';
 
 // Internal mutation to store a single memory
@@ -46,70 +47,119 @@ export const addMemory = action({
 	},
 	handler: async (ctx, args) => {
 		// 1. Extract potential memories
-		const extracted = await extractMemories(args.messageText);
+		const { memories: extracted, generationId } = await extractMemories(args.messageText);
+
+		// Log extraction usage
+		const stats = await getGenerationStats(generationId);
+		if (stats) {
+			await ctx.runMutation(internal.usage.logUsage, {
+				userId: args.userId,
+				messageId: args.messageId,
+				purpose: 'memory_extraction',
+				model: stats.model,
+				promptTokens: stats.native_tokens_prompt ?? 0,
+				completionTokens: stats.native_tokens_completion ?? 0,
+				totalTokens: (stats.native_tokens_prompt ?? 0) + (stats.native_tokens_completion ?? 0),
+				cost: stats.usage ?? stats.total_cost ?? 0,
+				raw_response: stats
+			});
+		}
 
 		if (extracted.length === 0) return;
 
-		const newlyLearned = [];
+		const newlyLearned: { text: string; category: string }[] = [];
 
-		for (const memory of extracted) {
-			try {
-				const embedding = await createEmbedding(memory.text);
+		// Process memories in parallel to avoid long sequential waits for stats
+		await Promise.all(
+			extracted.map(async (memory) => {
+				try {
+					const { embedding, generationId: embedGenId } = await createEmbedding(memory.text);
 
-				// Stage 1: Fast Vector Search
-				const matches = await ctx.vectorSearch('user_memories', 'by_embedding', {
-					vector: embedding,
-					limit: 1,
-					filter: (q) => q.eq('userId', args.userId)
-				});
-
-				const topMatch = matches[0];
-				let decision: 'duplicate' | 'update' | 'new' = 'new';
-				let existingIdToReplace = null;
-
-				if (topMatch) {
-					// Hard thresholds
-					if (topMatch._score >= 0.98) {
-						decision = 'duplicate';
-					} else if (topMatch._score < 0.6) {
-						decision = 'new';
-					} else {
-						// Stage 2: AI Judge for the "Gray Zone" (0.6 - 0.95)
-						const [existingDoc] = await ctx.runQuery(internal.memories.internalGetMemories, {
-							ids: [topMatch._id]
+					// Log embedding usage
+					const embedStats = await getGenerationStats(embedGenId);
+					if (embedStats) {
+						await ctx.runMutation(internal.usage.logUsage, {
+							userId: args.userId,
+							messageId: args.messageId,
+							purpose: 'embedding',
+							model: embedStats.model,
+							promptTokens: embedStats.native_tokens_prompt ?? 0,
+							completionTokens: embedStats.native_tokens_completion ?? 0,
+							totalTokens:
+								(embedStats.native_tokens_prompt ?? 0) + (embedStats.native_tokens_completion ?? 0),
+							cost: embedStats.usage ?? embedStats.total_cost ?? 0,
+							raw_response: embedStats
 						});
+					}
 
-						if (existingDoc) {
-							decision = await judgeMemoryDuplicate(memory.text, existingDoc.text);
-							if (decision === 'update') existingIdToReplace = topMatch._id;
+					// Stage 1: Fast Vector Search
+					const matches = await ctx.vectorSearch('user_memories', 'by_embedding', {
+						vector: embedding,
+						limit: 1,
+						filter: (q) => q.eq('userId', args.userId)
+					});
+
+					const topMatch = matches[0];
+					let decision: 'duplicate' | 'update' | 'new' = 'new';
+					let existingIdToReplace = null;
+
+					if (topMatch) {
+						if (topMatch._score >= 0.98) {
+							decision = 'duplicate';
+						} else if (topMatch._score < 0.6) {
+							decision = 'new';
+						} else {
+							// Stage 2: AI Judge
+							const [existingDoc] = await ctx.runQuery(internal.memories.internalGetMemories, {
+								ids: [topMatch._id]
+							});
+
+							if (existingDoc) {
+								const judgeResult = await judgeMemoryDuplicate(memory.text, existingDoc.text);
+								decision = judgeResult.decision;
+
+								// Log judge usage
+								const judgeStats = await getGenerationStats(judgeResult.generationId);
+								if (judgeStats) {
+									await ctx.runMutation(internal.usage.logUsage, {
+										userId: args.userId,
+										messageId: args.messageId,
+										purpose: 'dedupe_judge',
+										model: judgeStats.model,
+										promptTokens: judgeStats.native_tokens_prompt ?? 0,
+										completionTokens: judgeStats.native_tokens_completion ?? 0,
+										totalTokens:
+											(judgeStats.native_tokens_prompt ?? 0) +
+											(judgeStats.native_tokens_completion ?? 0),
+										cost: judgeStats.usage ?? judgeStats.total_cost ?? 0,
+										raw_response: judgeStats
+									});
+								}
+
+								if (decision === 'update') existingIdToReplace = topMatch._id;
+							}
 						}
 					}
-				}
 
-				console.log(
-					`Cognirivus: Hybrid Dedupe for "${memory.text.slice(0, 30)}..." -> Score: ${topMatch?._score.toFixed(4) || 'None'}, Decision: ${decision}`
-				);
+					if (decision === 'new' || decision === 'update') {
+						await ctx.runMutation(internal.memories.internalAddMemory, {
+							userId: args.userId,
+							text: memory.text,
+							category: memory.category,
+							embedding,
+							messageId: args.messageId
+						});
+						newlyLearned.push(memory);
 
-				if (decision === 'new' || decision === 'update') {
-					// Store new/updated memory
-					await ctx.runMutation(internal.memories.internalAddMemory, {
-						userId: args.userId,
-						text: memory.text,
-						category: memory.category,
-						embedding,
-						messageId: args.messageId
-					});
-					newlyLearned.push(memory);
-
-					// If it was an update, remove the old one
-					if (decision === 'update' && existingIdToReplace) {
-						await ctx.runMutation(internal.memories.internalRemove, { id: existingIdToReplace });
+						if (decision === 'update' && existingIdToReplace) {
+							await ctx.runMutation(internal.memories.internalRemove, { id: existingIdToReplace });
+						}
 					}
+				} catch (e) {
+					console.error(`Failed to process memory: "${memory.text}"`, e);
 				}
-			} catch (e) {
-				console.error(`Failed to process memory: "${memory.text}"`, e);
-			}
-		}
+			})
+		);
 
 		// 3. Update message metadata to notify UI
 		if (args.messageId && newlyLearned.length > 0) {
@@ -161,7 +211,22 @@ export const searchMemories = action({
 		limit: v.optional(v.number())
 	},
 	handler: async (ctx, args): Promise<any[]> => {
-		const embedding = await createEmbedding(args.queryText);
+		const { embedding, generationId } = await createEmbedding(args.queryText);
+
+		// Log embedding usage for search
+		const stats = await getGenerationStats(generationId);
+		if (stats) {
+			await ctx.runMutation(internal.usage.logUsage, {
+				userId: args.userId,
+				purpose: 'embedding',
+				model: stats.model,
+				promptTokens: stats.native_tokens_prompt ?? 0,
+				completionTokens: stats.native_tokens_completion ?? 0,
+				totalTokens: (stats.native_tokens_prompt ?? 0) + (stats.native_tokens_completion ?? 0),
+				cost: stats.usage ?? stats.total_cost ?? 0,
+				raw_response: stats
+			});
+		}
 
 		const results = await ctx.vectorSearch('user_memories', 'by_embedding', {
 			vector: embedding,
@@ -245,6 +310,7 @@ export const remove = mutation({
 // Step 1: Formulate a standalone query
 export const formulateQuery = action({
 	args: {
+		userId: v.id('users'),
 		messages: v.array(
 			v.object({
 				role: v.string(),
@@ -252,8 +318,25 @@ export const formulateQuery = action({
 			})
 		)
 	},
-	handler: async (ctx, { messages }): Promise<string> => {
-		return await formulateStandaloneQuery(messages);
+	handler: async (ctx, { userId, messages }): Promise<string> => {
+		const { result, generationId } = await formulateStandaloneQuery(messages);
+
+		// Log standalone query usage
+		const stats = await getGenerationStats(generationId);
+		if (stats) {
+			await ctx.runMutation(internal.usage.logUsage, {
+				userId,
+				purpose: 'standalone_query',
+				model: stats.model,
+				promptTokens: stats.native_tokens_prompt ?? 0,
+				completionTokens: stats.native_tokens_completion ?? 0,
+				totalTokens: (stats.native_tokens_prompt ?? 0) + (stats.native_tokens_completion ?? 0),
+				cost: stats.usage ?? stats.total_cost ?? 0,
+				raw_response: stats
+			});
+		}
+
+		return result;
 	}
 });
 
@@ -287,7 +370,22 @@ Return ONLY the rephrased query text. If the message is already standalone, retu
 		const rewriterInput = [systemMessage, ...history];
 
 		// 2. Formulate standalone query
-		const formulatedQuery = await formulateStandaloneQuery(history);
+		const { result: formulatedQuery, generationId } = await formulateStandaloneQuery(history);
+
+		// Log standalone query usage
+		const stats = await getGenerationStats(generationId);
+		if (stats) {
+			await ctx.runMutation(internal.usage.logUsage, {
+				userId,
+				purpose: 'standalone_query',
+				model: stats.model,
+				promptTokens: stats.native_tokens_prompt ?? 0,
+				completionTokens: stats.native_tokens_completion ?? 0,
+				totalTokens: (stats.native_tokens_prompt ?? 0) + (stats.native_tokens_completion ?? 0),
+				cost: stats.usage ?? stats.total_cost ?? 0,
+				raw_response: stats
+			});
+		}
 
 		// 3. Search memories
 		const relevantMemories = await ctx.runAction(api.memories.searchMemories, {

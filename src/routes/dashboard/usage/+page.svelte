@@ -118,7 +118,39 @@
 			</div>
 
 			<!-- Charts & Tables -->
-			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+			<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+				<!-- Purpose Breakdown -->
+				<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+					<div class="mb-6 flex items-center justify-between">
+						<h3 class="flex items-center gap-2 font-bold text-foreground">
+							<BarChart3 class="h-4 w-4" />
+							Purpose Breakdown
+						</h3>
+					</div>
+					<div class="space-y-4">
+						{#each stats.purposeBreakdown.sort((a, b) => b.cost - a.cost) as purpose}
+							<div class="flex flex-col gap-1.5">
+								<div class="flex items-center justify-between text-sm">
+									<span class="font-medium text-foreground/80 capitalize">
+										{purpose.name.replace('_', ' ')}
+									</span>
+									<span class="text-muted-foreground">{formatCost(purpose.cost)}</span>
+								</div>
+								<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
+									<div
+										class="h-full bg-primary transition-all"
+										style="width: {(purpose.cost / (stats.summary.totalCost || 1)) * 100}%"
+									></div>
+								</div>
+								<div class="flex justify-between text-[10px] text-muted-foreground">
+									<span>{formatNumber(purpose.count)} calls</span>
+									<span>{formatNumber(purpose.tokens)} tokens</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+
 				<!-- Model Breakdown -->
 				<div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
 					<div class="mb-6 flex items-center justify-between">
@@ -128,7 +160,7 @@
 						</h3>
 					</div>
 					<div class="space-y-4">
-						{#each stats.modelBreakdown as model}
+						{#each stats.modelBreakdown.sort((a, b) => b.cost - a.cost) as model}
 							<div class="flex flex-col gap-1.5">
 								<div class="flex items-center justify-between text-sm">
 									<span class="font-medium text-foreground/80">
@@ -139,7 +171,7 @@
 								<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
 									<div
 										class="h-full bg-primary transition-all"
-										style="width: {(model.cost / stats.summary.totalCost) * 100}%"
+										style="width: {(model.cost / (stats.summary.totalCost || 1)) * 100}%"
 									></div>
 								</div>
 								<div class="flex justify-between text-[10px] text-muted-foreground">

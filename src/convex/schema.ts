@@ -34,14 +34,15 @@ const schema = defineSchema({
 	}).index('by_user', ['userId']),
 	usage_logs: defineTable({
 		userId: v.id('users'),
-		messageId: v.id('messages'),
+		messageId: v.optional(v.id('messages')),
+		purpose: v.optional(v.string()), // 'chat', 'memory_extraction', 'embedding', 'dedupe_judge', 'standalone_query'
 		model: v.string(),
 		promptTokens: v.number(),
 		completionTokens: v.number(),
 		totalTokens: v.number(),
 		cost: v.optional(v.number()),
 		createdAt: v.number(),
-		metadata: v.optional(v.any())
+		raw_response: v.optional(v.any())
 	})
 		.index('by_user', ['userId'])
 		.index('by_created_at', ['createdAt']),
