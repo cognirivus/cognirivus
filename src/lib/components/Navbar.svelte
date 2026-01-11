@@ -29,7 +29,7 @@
 	);
 </script>
 
-<nav class="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
+<nav class="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-md">
 	<div
 		class="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8"
 	>
@@ -50,8 +50,7 @@
 				</a>
 			{/each}
 
-			<div class="ml-4 flex items-center gap-3 border-l border-border pl-4">
-				<ThemeToggle />
+			<div class="ml-4 flex items-center gap-3">
 				{#if auth.isAuthenticated}
 					<Button
 						variant="ghost"
@@ -68,6 +67,7 @@
 						<span>Sign In</span>
 					</Button>
 				{/if}
+				<ThemeToggle />
 			</div>
 		</div>
 
@@ -91,7 +91,7 @@
 
 	<!-- Mobile Navigation -->
 	{#if isMobileMenuOpen}
-		<div class="border-t border-border bg-background/95 backdrop-blur-md md:hidden">
+		<div class="border-b border-border bg-background/95 backdrop-blur-md md:hidden">
 			<div class="space-y-1 px-4 py-4">
 				{#each filteredNavItems as item}
 					<a
@@ -106,7 +106,7 @@
 						{item.name}
 					</a>
 				{/each}
-				<div class="mt-4 border-t border-border pt-4">
+				<div>
 					{#if auth.isAuthenticated}
 						<button
 							onclick={() => {
