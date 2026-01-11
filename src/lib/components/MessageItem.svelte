@@ -15,6 +15,8 @@
 	}>();
 
 	let revealedMetadata = $state(false);
+	let showLearnedFacts = $state(false);
+	let showUsedMemories = $state(false);
 
 	const ASPECT_SIZE_MAP: Record<string, string> = {
 		'1:1': 'h-64 w-64',
@@ -112,15 +114,24 @@
 		<div
 			class="mt-1 flex animate-in items-center gap-1.5 px-1 duration-500 fade-in slide-in-from-right-2"
 		>
-			<div
-				class="group/learned relative flex cursor-help items-center gap-1 rounded-full border border-emerald-200/50 bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-950/30 dark:text-emerald-400"
+			<button
+				onclick={(e) => {
+					e.stopPropagation();
+					showLearnedFacts = !showLearnedFacts;
+				}}
+				class="group/learned relative flex cursor-pointer items-center gap-1 rounded-full border border-emerald-200/50 bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-950/30 dark:text-emerald-400"
 			>
 				<Brain class="h-2.5 w-2.5" />
-				<span>Learned {message.metadata.memoriesAdded.length} Facts</span>
+				<span
+					>Learned {message.metadata.memoriesAdded.length}
+					{message.metadata.memoriesAdded.length === 1 ? 'Fact' : 'Facts'}</span
+				>
 
 				<!-- Tooltip with the actual facts -->
 				<div
-					class="pointer-events-none absolute right-0 bottom-full z-10 mb-2 hidden w-64 rounded-xl border border-border bg-popover p-3 text-left text-popover-foreground shadow-xl group-hover/learned:block"
+					class="pointer-events-none absolute right-0 bottom-full z-10 mb-2 w-64 rounded-xl border border-border bg-popover p-3 text-left text-popover-foreground shadow-xl transition-all duration-200 {showLearnedFacts
+						? 'block translate-y-0 opacity-100'
+						: 'hidden group-hover/learned:block'}"
 				>
 					<p class="mb-2 text-[10px] font-bold text-foreground">New Memories Learned:</p>
 					<div class="space-y-2">
@@ -134,7 +145,7 @@
 						{/each}
 					</div>
 				</div>
-			</div>
+			</button>
 		</div>
 	{/if}
 
@@ -174,12 +185,15 @@
 							title="Memories used for this response"
 							onclick={(e) => {
 								e.stopPropagation();
+								showUsedMemories = !showUsedMemories;
 							}}
 						>
 							<Brain class="h-3 w-3" />
 							<span>{message.metadata.usedMemories.length} memories</span>
 							<div
-								class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-64 rounded-lg border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg group-hover/mem:block"
+								class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-64 rounded-lg border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg transition-all duration-200 {showUsedMemories
+									? 'block translate-y-0 opacity-100'
+									: 'hidden group-hover/mem:block'}"
 							>
 								<p class="mb-1 text-[10px] font-semibold">Memories used:</p>
 								<ul class="list-inside list-disc space-y-0.5 text-[10px]">

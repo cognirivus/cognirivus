@@ -20,27 +20,30 @@
 	const activePath = $derived(page.url.pathname);
 </script>
 
-<div class="flex h-screen w-full flex-col bg-background">
+<div class="flex h-[calc(100vh-4rem)] w-full flex-col bg-background">
 	<!-- Sub-navigation Navbar -->
-	<header class="border-b border-border bg-card/50 backdrop-blur-md">
-		<div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-			<div class="flex items-center gap-8">
-				<h2 class="text-xl font-bold tracking-tight text-foreground">Dashboard</h2>
-				<nav class="flex items-center gap-1">
-					{#each navItems as item}
-						{@const isActive = activePath === item.href}
-						<a
-							href={item.href}
-							class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors {isActive
-								? 'bg-primary/10 text-primary'
-								: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-						>
-							<item.icon class="h-4 w-4" />
-							{item.name}
-						</a>
-					{/each}
-				</nav>
+	<header class="border-b border-border bg-background/80 backdrop-blur-md">
+		<div
+			class="mx-auto flex h-auto min-h-[4rem] max-w-6xl flex-col items-start justify-center gap-2 px-6 py-3 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:py-0"
+		>
+			<div class="flex w-full items-center justify-between gap-8 sm:w-auto sm:justify-start">
+				<h2 class="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard</h2>
+				<!-- Hidden on desktop, shown on mobile for compact menu -->
 			</div>
+			<nav class="flex w-full items-center gap-1 overflow-x-auto pb-1 sm:w-auto sm:pb-0">
+				{#each navItems as item}
+					{@const isActive = activePath === item.href}
+					<a
+						href={item.href}
+						class="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors {isActive
+							? 'bg-primary/10 text-primary'
+							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
+					>
+						<item.icon class="h-4 w-4" />
+						{item.name}
+					</a>
+				{/each}
+			</nav>
 		</div>
 	</header>
 

@@ -171,7 +171,7 @@
 			<Loader variant="circular" size="lg" />
 		</div>
 	{:else}
-		<div class="mx-auto flex max-w-3xl flex-col space-y-8 px-4 pt-8 pb-48 md:px-0 md:pt-20">
+		<div class="mx-auto flex max-w-3xl flex-col space-y-8 px-4 pt-16 pb-48 md:px-0 md:pt-20">
 			{#each messages as message, messageIndex (message._id)}
 				<MessageItem
 					{message}
