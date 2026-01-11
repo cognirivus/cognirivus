@@ -3,7 +3,7 @@
 	import { MessageSquare, Sparkles, Shield, Image as ImageIcon, ArrowRight } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 
-	const { isAuthenticated } = useAuth();
+	const auth = useAuth();
 </script>
 
 <main class="min-h-screen bg-background">
@@ -32,7 +32,7 @@
 					and managing your digital intelligence.
 				</p>
 				<div class="mt-10 flex items-center justify-center gap-x-6">
-					{#if isAuthenticated}
+					{#if auth.isAuthenticated}
 						<Button size="lg" href="/chat" class="gap-2 px-8 py-6 text-base shadow-sm">
 							Start Chatting
 							<ArrowRight class="h-5 w-5" />

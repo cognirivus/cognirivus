@@ -14,7 +14,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import Logo from './Logo.svelte';
 
-	const { signOut, isAuthenticated } = useAuth();
+	const auth = useAuth();
 
 	let isMobileMenuOpen = $state(false);
 
@@ -25,7 +25,7 @@
 	];
 
 	const filteredNavItems = $derived(
-		navItems.filter((item) => !item.authRequired || isAuthenticated)
+		navItems.filter((item) => !item.authRequired || auth.isAuthenticated)
 	);
 </script>
 
@@ -52,11 +52,11 @@
 
 			<div class="ml-4 flex items-center gap-3 border-l border-border pl-4">
 				<ThemeToggle />
-				{#if isAuthenticated}
+				{#if auth.isAuthenticated}
 					<Button
 						variant="ghost"
 						size="sm"
-						onclick={() => signOut()}
+						onclick={() => auth.signOut()}
 						class="gap-2 text-muted-foreground hover:text-destructive"
 					>
 						<LogOut class="h-4 w-4" />
@@ -107,10 +107,10 @@
 					</a>
 				{/each}
 				<div class="mt-4 border-t border-border pt-4">
-					{#if isAuthenticated}
+					{#if auth.isAuthenticated}
 						<button
 							onclick={() => {
-								signOut();
+								auth.signOut();
 								isMobileMenuOpen = false;
 							}}
 							class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-base font-medium text-destructive transition-colors hover:bg-destructive/10"
