@@ -111,3 +111,49 @@ Return ONLY the rephrased query text. If the message is already standalone, retu
 	const data = await response.json();
 	return data.choices[0]?.message?.content || history[history.length - 1].content;
 }
+
+export async function judgeMemoryDuplicate(
+	newFact: string,
+	existingFact: string
+): Promise<'duplicate' | 'update' | 'new'> {
+	const model = 'google/gemini-2.5-flash-lite';
+
+	const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+		method: 'POST',
+		headers: {
+			Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+			'Content-Type': 'application/json',
+			'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+			'X-Title': 'Cognirivus Chat'
+		},
+		body: JSON.stringify({
+			model: model,
+			messages: [
+				{
+					role: 'system',
+					content: `You are a memory deduplication judge. Compare a NEW fact with an EXISTING memory and decide how they relate.
+					
+Categories:
+- "duplicate": The facts convey essentially the same information.
+- "update": The NEW fact provides more recent, more specific, or corrected information than the EXISTING memory.
+- "new": The facts are unrelated or address different topics.
+
+Return ONLY one word: "duplicate", "update", or "new".`
+				},
+				{
+					role: 'user',
+					content: `EXISTING: "${existingFact}"\nNEW: "${newFact}"`
+				}
+			]
+		})
+	});
+
+	if (!response.ok) return 'new';
+
+	const data = await response.json();
+	const choice = data.choices[0]?.message?.content?.toLowerCase().trim();
+
+	if (choice?.includes('duplicate')) return 'duplicate';
+	if (choice?.includes('update')) return 'update';
+	return 'new';
+}

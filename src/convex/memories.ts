@@ -1,7 +1,12 @@
 import { v } from 'convex/values';
 import { internalMutation, action, mutation, internalQuery } from './_generated/server';
 import { internal, api } from './_generated/api';
-import { createEmbedding, extractMemories, formulateStandaloneQuery } from './lib/openrouter';
+import {
+	createEmbedding,
+	extractMemories,
+	formulateStandaloneQuery,
+	judgeMemoryDuplicate
+} from './lib/openrouter';
 
 // Internal mutation to store a single memory
 export const internalAddMemory = internalMutation({
@@ -25,6 +30,13 @@ export const internalAddMemory = internalMutation({
 });
 
 // Action to process a message, extract memories, and store them
+export const internalRemove = internalMutation({
+	args: { id: v.id('user_memories') },
+	handler: async (ctx, args) => {
+		await ctx.db.delete(args.id);
+	}
+});
+
 // This is designed to be "fire and forget" from the chat flow
 export const addMemory = action({
 	args: {
@@ -33,36 +45,77 @@ export const addMemory = action({
 		messageText: v.string()
 	},
 	handler: async (ctx, args) => {
-		console.log('Cognirivus: addMemory action started for message:', args.messageId);
 		// 1. Extract potential memories
-		const memories = await extractMemories(args.messageText);
-		console.log(`Cognirivus: Extracted ${memories.length} memories`);
+		const extracted = await extractMemories(args.messageText);
 
-		if (memories.length === 0) {
-			return;
-		}
+		if (extracted.length === 0) return;
 
-		// 2. For each memory, generate embedding and store
-		for (const memory of memories) {
+		const newlyLearned = [];
+
+		for (const memory of extracted) {
 			try {
 				const embedding = await createEmbedding(memory.text);
 
-				await ctx.runMutation(internal.memories.internalAddMemory, {
-					userId: args.userId,
-					text: memory.text,
-					category: memory.category,
-					embedding,
-					messageId: args.messageId
+				// Stage 1: Fast Vector Search
+				const matches = await ctx.vectorSearch('user_memories', 'by_embedding', {
+					vector: embedding,
+					limit: 1,
+					filter: (q) => q.eq('userId', args.userId)
 				});
+
+				const topMatch = matches[0];
+				let decision: 'duplicate' | 'update' | 'new' = 'new';
+				let existingIdToReplace = null;
+
+				if (topMatch) {
+					// Hard thresholds
+					if (topMatch._score >= 0.98) {
+						decision = 'duplicate';
+					} else if (topMatch._score < 0.6) {
+						decision = 'new';
+					} else {
+						// Stage 2: AI Judge for the "Gray Zone" (0.6 - 0.95)
+						const [existingDoc] = await ctx.runQuery(internal.memories.internalGetMemories, {
+							ids: [topMatch._id]
+						});
+
+						if (existingDoc) {
+							decision = await judgeMemoryDuplicate(memory.text, existingDoc.text);
+							if (decision === 'update') existingIdToReplace = topMatch._id;
+						}
+					}
+				}
+
+				console.log(
+					`Cognirivus: Hybrid Dedupe for "${memory.text.slice(0, 30)}..." -> Score: ${topMatch?._score.toFixed(4) || 'None'}, Decision: ${decision}`
+				);
+
+				if (decision === 'new' || decision === 'update') {
+					// Store new/updated memory
+					await ctx.runMutation(internal.memories.internalAddMemory, {
+						userId: args.userId,
+						text: memory.text,
+						category: memory.category,
+						embedding,
+						messageId: args.messageId
+					});
+					newlyLearned.push(memory);
+
+					// If it was an update, remove the old one
+					if (decision === 'update' && existingIdToReplace) {
+						await ctx.runMutation(internal.memories.internalRemove, { id: existingIdToReplace });
+					}
+				}
 			} catch (e) {
-				console.error(`Failed to store memory: "${memory.text}"`, e);
+				console.error(`Failed to process memory: "${memory.text}"`, e);
 			}
 		}
+
 		// 3. Update message metadata to notify UI
-		if (args.messageId) {
+		if (args.messageId && newlyLearned.length > 0) {
 			await ctx.runMutation(internal.messages.internalAppendMemories, {
 				messageId: args.messageId,
-				memories: memories.map((m) => ({ text: m.text, category: m.category }))
+				memories: newlyLearned.map((m) => ({ text: m.text, category: m.category }))
 			});
 		}
 	}
