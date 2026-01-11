@@ -64,11 +64,14 @@ export class ChatContext {
 		}[]
 	>([]);
 
+	isLoadingModels = $state(true);
+
 	constructor(private client: any) {
 		this.loadModels();
 	}
 
 	async loadModels() {
+		this.isLoadingModels = true;
 		try {
 			const models = await this.client.action(api.chat.listModels);
 			// Process and sort models if needed, or just take them raw
@@ -88,40 +91,8 @@ export class ChatContext {
 		} catch (error) {
 			console.error('Failed to load models:', error);
 			// Fallback or empty state
-		}
-	}
-
-	// This method is not part of the original code, but is included in the provided diff.
-	// To make the `generateImage` flag usable, a `sendMessage` method is needed.
-	// I will add a simplified `sendMessage` method based on the provided diff's structure
-	// to demonstrate the `generateImage` flag being passed.
-	// Note: The full `sendMessage` method from the diff is quite extensive and depends on
-	// other states/methods not present in the original code (e.g., `activeThreadId`, `createThread`).
-	// For the purpose of this specific instruction, I'll create a minimal version that
-	// shows the `api.chat.generate` call with the new flag.
-	async sendMessage(content: string) {
-		if (!content.trim()) return;
-
-		try {
-			// Placeholder for thread management, as it's not fully defined in the original context
-			const threadId = 'dummy-thread-id'; // Replace with actual thread ID logic if available
-
-			// Add user message (simplified)
-			// await this.client.mutation(api.messages.send, {
-			// 	threadId: threadId,
-			// 	body: content,
-			// 	role: 'user'
-			// });
-
-			// Trigger AI generation
-			await this.client.action(api.chat.generate, {
-				threadId: threadId,
-				model: this.selectedModel,
-				includeReasoning: this.includeReasoning,
-				generateImage: this.generateImage // Pass the flag
-			});
-		} catch (error) {
-			console.error('Failed to send message:', error);
+		} finally {
+			this.isLoadingModels = false;
 		}
 	}
 }

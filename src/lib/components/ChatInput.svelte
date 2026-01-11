@@ -26,7 +26,8 @@
 		totalPromptTokens = 0,
 		totalCompletionTokens = 0,
 		totalCost = 0,
-		isActuallyStreaming = false
+		isActuallyStreaming = false,
+		isLoadingModels = false
 	} = $props();
 
 	let showModelSelector = $state(false);
@@ -151,15 +152,24 @@
 								showModelSelector = !showModelSelector;
 								if (showModelSelector) showTokenDetail = false;
 							}}
-							disabled={chatStatus === 'streaming'}
-							class="flex w-full items-center justify-between gap-1 px-2 py-1.5 text-[10px] font-bold text-muted-foreground transition-all hover:bg-muted/80"
+							disabled={chatStatus === 'streaming' || isLoadingModels}
+							class="flex w-full items-center justify-between gap-1 px-2 py-1.5 text-[10px] font-bold text-muted-foreground transition-all hover:bg-muted/80 disabled:opacity-50"
 						>
-							<span class="truncate"
-								>{models
-									.find((m) => m.id === selectedModel)
-									?.name.split('/')
-									.pop()}</span
-							>
+							<span class="truncate">
+								{#if isLoadingModels}
+									<div class="flex items-center gap-1.5">
+										<div
+											class="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-muted-foreground"
+										></div>
+										<span>Loading...</span>
+									</div>
+								{:else}
+									{models
+										.find((m) => m.id === selectedModel)
+										?.name.split('/')
+										.pop()}
+								{/if}
+							</span>
 							<ChevronDown class="h-3 w-3 flex-shrink-0" />
 						</button>
 
@@ -324,15 +334,24 @@
 									showTokenDetail = false;
 								}
 							}}
-							disabled={chatStatus === 'streaming'}
+							disabled={chatStatus === 'streaming' || isLoadingModels}
 							class="flex w-full items-center justify-between gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-bold text-muted-foreground transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
 						>
-							<span class="truncate"
-								>{models
-									.find((m) => m.id === selectedModel)
-									?.name.split('/')
-									.pop()}</span
-							>
+							<span class="truncate">
+								{#if isLoadingModels}
+									<div class="flex items-center gap-1.5">
+										<div
+											class="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-muted-foreground"
+										></div>
+										<span>Loading...</span>
+									</div>
+								{:else}
+									{models
+										.find((m) => m.id === selectedModel)
+										?.name.split('/')
+										.pop()}
+								{/if}
+							</span>
 							<ChevronDown class="h-3 w-3 flex-shrink-0" />
 						</button>
 

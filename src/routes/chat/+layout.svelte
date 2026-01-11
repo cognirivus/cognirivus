@@ -60,6 +60,7 @@
 				totalCompletionTokens={chatState.totalCompletionTokens}
 				totalCost={chatState.totalCost}
 				isActuallyStreaming={chatState.isActuallyStreaming}
+				isLoadingModels={chatState.isLoadingModels}
 			/>
 		{/if}
 	</div>
