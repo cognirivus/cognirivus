@@ -21,7 +21,7 @@
 	const navItems = [
 		{ name: 'Chat', href: '/chat', icon: MessageSquare, authRequired: true },
 		{ name: 'Images', href: '/image', icon: ImageIcon, authRequired: true },
-		{ name: 'Usage', href: '/chat/usage', icon: LayoutDashboard, authRequired: true }
+		{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, authRequired: true }
 	];
 
 	const filteredNavItems = $derived(
