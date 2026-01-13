@@ -35,6 +35,9 @@ importers:
       runed:
         specifier: ^0.31.1
         version: 0.31.1(svelte@5.46.1)
+      svelte-image-viewer:
+        specifier: ^6.0.0
+        version: 6.0.0(svelte@5.46.1)
       svelte-streamdown:
         specifier: ^2.6.1
         version: 2.6.1(svelte@5.46.1)
@@ -2505,6 +2508,11 @@ packages:
     peerDependenciesMeta:
       svelte:
         optional: true
+
+  svelte-image-viewer@6.0.0:
+    resolution: {integrity: sha512-YN9/bacfpRkbnyWtZIoH3y02Pt5D1VHtaPhViEeEMWHGGujTJMaOamTooIuNXveIG9s++SkeWOE9NeBCcv8m4Q==}
+    peerDependencies:
+      svelte: ^5.0.0
 
   svelte-streamdown@2.6.1:
     resolution: {integrity: sha512-0mt8sEKRIrO1ZDI04CXxkqqiOAkzjUzMLrXeJoyhnEv605hYC9yASFb2sECDnD+CEI2toUfXRu4YAx32tD5rOQ==}
@@ -4998,6 +5006,10 @@ snapshots:
       postcss-scss: 4.0.9(postcss@8.5.6)
       postcss-selector-parser: 7.1.1
     optionalDependencies:
+      svelte: 5.46.1
+
+  svelte-image-viewer@6.0.0(svelte@5.46.1):
+    dependencies:
       svelte: 5.46.1
 
   svelte-streamdown@2.6.1(svelte@5.46.1):

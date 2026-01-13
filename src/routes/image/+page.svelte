@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { ImageViewer } from 'svelte-image-viewer';
 	import {
 		ChevronDown,
 		Download,
@@ -9,6 +10,7 @@
 		X,
 		MessageSquare,
 		History,
+		RefreshCcw,
 		Sparkles
 	} from '@lucide/svelte';
 	import Logo from '$lib/components/Logo.svelte';
@@ -146,6 +148,11 @@
 		} catch (e: any) {
 			alert('Failed to delete image: ' + e.message);
 		}
+	}
+	let resetKey = $state(0);
+
+	function resetView() {
+		resetKey++;
 	}
 </script>
 
@@ -387,14 +394,21 @@
 			<History class="size-6" />
 		</button>
 
-		<div class="flex flex-1 items-center justify-center overflow-y-auto p-4 lg:p-6">
-			<div class="w-full max-w-3xl">
+		<div class="flex flex-1 flex-col overflow-hidden bg-muted/5">
+			<div class="h-full w-full">
 				{#if generatedUrl}
-					<div
-						class="relative flex max-h-[85dvh] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm"
-					>
+					<div class="relative flex h-full w-full flex-col overflow-hidden">
 						<!-- Overlay Buttons -->
-						<div class="absolute top-3 right-3 z-10 flex gap-2">
+						<div
+							class="absolute top-3 left-1/2 z-10 flex -translate-x-1/2 gap-2 lg:right-3 lg:left-auto lg:translate-x-0"
+						>
+							<button
+								onclick={resetView}
+								class="flex size-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70 lg:size-9"
+								title="Reset View"
+							>
+								<RefreshCcw class="size-5 lg:size-4" />
+							</button>
 							<button
 								onclick={downloadImage}
 								class="flex size-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70 lg:size-9"
@@ -422,29 +436,19 @@
 								<X class="size-5 lg:size-4" />
 							</button>
 						</div>
-						<img src={generatedUrl} alt="Generated" class="min-h-0 flex-1 object-contain" />
-						{#if !selectedHistoryImage}
-							<div class="flex items-center justify-between border-t border-border p-4">
-								<span class="text-xs text-muted-foreground">
-									{selectedModel.name} • {aspectRatio}
-								</span>
-								<button
-									onclick={downloadImage}
-									class="flex items-center gap-1.5 rounded-lg bg-secondary px-4 py-2 text-xs font-medium text-secondary-foreground transition-colors hover:bg-accent"
-								>
-									<Download class="size-3.5" />
-									Download
-								</button>
-							</div>
-						{/if}
+						<div class="relative w-full flex-1 overflow-hidden bg-black/5 select-none">
+							{#key resetKey}
+								<ImageViewer src={generatedUrl} />
+							{/key}
+						</div>
 					</div>
 				{:else if isGenerating}
-					<div class="flex flex-col items-center justify-center py-32">
+					<div class="flex h-full flex-col items-center justify-center">
 						<Loader2 class="size-10 animate-spin text-muted-foreground" />
 						<p class="mt-4 text-sm text-muted-foreground">Creating your image...</p>
 					</div>
 				{:else}
-					<div class="flex flex-col items-center justify-center py-32 text-center">
+					<div class="flex h-full flex-col items-center justify-center text-center">
 						<div class="rounded-full bg-muted p-5">
 							<Image class="size-10 text-muted-foreground" />
 						</div>
