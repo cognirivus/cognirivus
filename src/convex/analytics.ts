@@ -1,6 +1,17 @@
 import { query } from './_generated/server';
 import { getAuthUserId } from '@convex-dev/auth/server';
 
+/**
+ * Retrieves usage statistics for the authenticated user's dashboard.
+ *
+ * Aggregates information from `usage_logs`, including:
+ * - Summary stats (total tokens, cost, cancellation rate).
+ * - Breakdown by AI model.
+ * - Breakdown by purpose (chat, memory, etc.).
+ * - Daily usage trends.
+ *
+ * @returns A structured object containing aggregated stats or null if not authenticated.
+ */
 export const getDashboardStats = query({
 	handler: async (ctx) => {
 		const userId = await getAuthUserId(ctx);

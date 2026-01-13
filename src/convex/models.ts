@@ -3,6 +3,13 @@ import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { getAuthUserId } from '@convex-dev/auth/server';
 
+/**
+ * Lists all enabled AI models.
+ *
+ * models are synced from OpenRouter and stored in the database.
+ *
+ * @returns A list of enabled models.
+ */
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
@@ -16,6 +23,14 @@ export const list = query({
 	}
 });
 
+/**
+ * Action to sync available models from the OpenRouter API.
+ *
+ * Fetches the latest model list and updates the database via an internal mutation.
+ *
+ * @returns An object containing the number of synced models.
+ * @throws {Error} if the user is not authenticated or the OpenRouter API call fails.
+ */
 export const syncFromOpenRouter = action({
 	args: {},
 	handler: async (ctx) => {
@@ -42,6 +57,11 @@ export const syncFromOpenRouter = action({
 	}
 });
 
+/**
+ * Internal mutation to update or insert models in the database.
+ *
+ * @param models - An array of raw model objects from OpenRouter.
+ */
 export const updateModels = internalMutation({
 	args: {
 		models: v.array(v.any())

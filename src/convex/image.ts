@@ -14,7 +14,14 @@ const ASPECT_DIMENSIONS: Record<string, { width: number; height: number }> = {
 	'2:3': { width: 832, height: 1248 }
 };
 
-// Fetch image-capable models from OpenRouter
+/**
+ * Fetches a list of AI models capable of generating images from OpenRouter.
+ *
+ * Filters OpenRouter's model list for architectures that support 'image' output modalities.
+ *
+ * @returns A list of image-capable models with their IDs and names.
+ * @throws {Error} if the user is not authenticated or the OpenRouter API call fails.
+ */
 export const listImageModels = action({
 	args: {},
 	handler: async (ctx) => {
@@ -44,6 +51,27 @@ export const listImageModels = action({
 	}
 });
 
+/**
+ * Generates an image based on a text prompt.
+ *
+ * Supports multiple providers (OpenRouter, Modal).
+ * Performs the following:
+ * 1. Calls the selected provider's API with the prompt and parameters.
+ * 2. Stores the resulting image in Convex Storage.
+ * 3. Saves a record of the generation in the database.
+ * 4. Returns a signed URL for immediate display.
+ *
+ * @param provider - The image generation provider ('openrouter' or 'modal').
+ * @param prompt - The text description of the image to generate.
+ * @param aspectRatio - The desired aspect ratio (e.g., '1:1', '16:9').
+ * @param model - Optional. Specific model ID for OpenRouter.
+ * @param negativePrompt - Optional. What to exclude from the image.
+ * @param steps - Optional. Number of inference steps (default 30).
+ * @param guidance - Optional. Guidance scale (default 7.5).
+ * @param seed - Optional. Random seed for reproducibility.
+ * @returns An object containing the signed URL and the storage ID.
+ * @throws {Error} if the user is not authenticated or generation fails.
+ */
 export const generate = action({
 	args: {
 		provider: v.union(v.literal('openrouter'), v.literal('modal')),
@@ -163,6 +191,20 @@ export const generate = action({
 	}
 });
 
+/**
+ * Internal mutation to save a generated image record to the database.
+ *
+ * @param userId - ID of the user who generated the image.
+ * @param prompt - The generation prompt.
+ * @param negativePrompt - Optional. The negative prompt used.
+ * @param provider - The generation provider.
+ * @param model - Optional. The model used.
+ * @param aspectRatio - The aspect ratio.
+ * @param width - The image width in pixels.
+ * @param height - The image height in pixels.
+ * @param imageId - The Convex storage ID.
+ * @param messageId - Optional. The chat message ID if generated within a thread.
+ */
 export const saveGeneration = internalMutation({
 	args: {
 		userId: v.id('users'),
@@ -184,6 +226,13 @@ export const saveGeneration = internalMutation({
 	}
 });
 
+/**
+ * Lists the most recent generated images for the authenticated user.
+ *
+ * Returns both standalone images and those generated during chat sessions.
+ *
+ * @returns A list of generated images with signed URLs and metadata.
+ */
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
@@ -216,6 +265,15 @@ export const list = query({
 	}
 });
 
+/**
+ * Removes a generated image from the database and storage.
+ *
+ * If the image was part of a chat message, it updates the message's
+ * image lists accordingly.
+ *
+ * @param id - The ID of the `generated_images` record to remove.
+ * @throws {Error} if the user is not authenticated, image not found, or unauthorized.
+ */
 export const remove = mutation({
 	args: {
 		id: v.id('generated_images')

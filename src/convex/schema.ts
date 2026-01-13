@@ -1,3 +1,15 @@
+/**
+ * Defines the database schema for the Cognirivus Chat application.
+ *
+ * Includes tables for:
+ * - `messages`: Chat message history with metadata and image associations.
+ * - `threads`: Conversation threads.
+ * - `usage_logs`: Tracking AI token usage and estimated costs.
+ * - `generated_images`: Unified gallery for images generated standalone or in chat.
+ * - `cancellations`: Signals for stopping background AI actions.
+ * - `user_memories`: Semantic storage for long-term user personalization.
+ * - `models`: Available AI models synced from OpenRouter.
+ */
 import { defineSchema, defineTable } from 'convex/server';
 import { authTables } from '@convex-dev/auth/server';
 import { v } from 'convex/values';

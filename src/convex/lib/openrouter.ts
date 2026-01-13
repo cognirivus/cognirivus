@@ -1,3 +1,10 @@
+/**
+ * Generates a vector embedding for a given text using the OpenRouter API.
+ *
+ * @param text - The input text to embed.
+ * @returns An object containing the embedding vector and the OpenRouter generation ID.
+ * @throws {Error} if the embedding generation fails.
+ */
 export async function createEmbedding(text: string) {
 	const response = await fetch('https://openrouter.ai/api/v1/embeddings', {
 		method: 'POST',
@@ -26,6 +33,14 @@ export async function createEmbedding(text: string) {
 	};
 }
 
+/**
+ * Extracts factual information and preferences from a message.
+ *
+ * Calls OpenRouter with a system prompt optimized for memory extraction.
+ *
+ * @param text - The user message text.
+ * @returns An array of extracted memories (text and category) and the generation ID.
+ */
 export async function extractMemories(text: string): Promise<{
 	memories: { text: string; category: string }[];
 	generationId: string | null;
@@ -78,6 +93,12 @@ export async function extractMemories(text: string): Promise<{
 	return { memories, generationId };
 }
 
+/**
+ * Rephrases a follow-up message into a standalone search query based on history.
+ *
+ * @param history - The conversation history.
+ * @returns An object containing the standalone query string and the generation ID.
+ */
 export async function formulateStandaloneQuery(history: { role: string; content: string }[]) {
 	const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
 		method: 'POST',
@@ -119,6 +140,15 @@ Return ONLY the rephrased query text. If the message is already standalone, retu
 	};
 }
 
+/**
+ * Decides if a new fact is a duplicate, an update, or new relative to an existing memory.
+ *
+ * Uses an AI judge to compare the semantic content of the two facts.
+ *
+ * @param newFact - The newly extracted fact.
+ * @param existingFact - The stored memory fact.
+ * @returns An object containing the decision ('duplicate', 'update', 'new') and the generation ID.
+ */
 export async function judgeMemoryDuplicate(
 	newFact: string,
 	existingFact: string
@@ -171,6 +201,15 @@ Return ONLY one word: "duplicate", "update", or "new".`
 	return { decision, generationId };
 }
 
+/**
+ * Fetches generation statistics (tokens, cost) from OpenRouter for a given ID.
+ *
+ * Includes retry logic with exponential backoff to handle data availability delays.
+ *
+ * @param generationId - The ID of the generation to fetch stats for.
+ * @param retries - Number of times to retry the request (default 3).
+ * @returns The generation statistics object or null if not found.
+ */
 export async function getGenerationStats(generationId: string | null, retries = 3) {
 	if (!generationId) return null;
 

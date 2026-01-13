@@ -4,6 +4,27 @@ import { api, internal } from './_generated/api';
 import { getAuthUserId } from '@convex-dev/auth/server';
 import { formulateStandaloneQuery, getGenerationStats } from './lib/openrouter';
 
+/**
+ * Generates an AI response for a given chat thread.
+ *
+ * This action performs the following steps:
+ * 1. Retrieves message history for the thread.
+ * 2. Fetches relevant user memories (if enabled) to provide context.
+ * 3. Prepares a payload for the OpenRouter API.
+ * 4. Calls OpenRouter to stream a response (text and optionally images).
+ * 5. Creates an assistant message in the database and updates it in real-time as the stream progresses.
+ * 6. Handles user cancellation during streaming.
+ * 7. Saves any generated images and logs usage/cost metadata.
+ *
+ * @param threadId - The unique identifier of the chat thread.
+ * @param model - Optional. The AI model to use (defaults to google/gemini-2.0-flash-exp:free).
+ * @param includeReasoning - Optional. Whether to include the model's reasoning in the response.
+ * @param generateImage - Optional. Whether to attempt to generate an image based on the prompt.
+ * @param imageAspectRatio - Optional. The aspect ratio for any generated images (e.g., "1:1").
+ * @param useMemory - Optional. Whether to use stored user memories for personalization.
+ *
+ * @throws {Error} if the user is not authenticated or if the OpenRouter API call fails.
+ */
 export const generate = action({
 	args: {
 		threadId: v.id('threads'),

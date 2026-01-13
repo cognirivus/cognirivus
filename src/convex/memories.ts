@@ -15,7 +15,15 @@ import {
 	getGenerationStats
 } from './lib/openrouter';
 
-// Internal mutation to store a single memory
+/**
+ * Internal mutation to store a single user memory.
+ *
+ * @param userId - The ID of the user the memory belongs to.
+ * @param text - The text content of the memory.
+ * @param category - Optional. The category of the memory (e.g., 'preference', 'fact').
+ * @param embedding - The vector embedding of the memory text.
+ * @param messageId - Optional. The ID of the message this memory was extracted from.
+ */
 export const internalAddMemory = internalMutation({
 	args: {
 		userId: v.id('users'),
@@ -36,7 +44,11 @@ export const internalAddMemory = internalMutation({
 	}
 });
 
-// Action to process a message, extract memories, and store them
+/**
+ * Internal mutation to remove a memory by ID.
+ *
+ * @param id - The unique identifier of the memory to delete.
+ */
 export const internalRemove = internalMutation({
 	args: { id: v.id('user_memories') },
 	handler: async (ctx, args) => {
@@ -44,7 +56,17 @@ export const internalRemove = internalMutation({
 	}
 });
 
-// This is designed to be "fire and forget" from the chat flow
+/**
+ * Main action to process a message and extract/store memories.
+ *
+ * This is designed to be "fire and forget" from the main chat flow.
+ * It extracts potential memories, generates embeddings, performs vector search
+ * for deduplication, and stores new or updated memories.
+ *
+ * @param userId - The ID of the user.
+ * @param messageId - The ID of the message to process.
+ * @param messageText - The text of the message.
+ */
 export const addMemory = internalAction({
 	args: {
 		userId: v.id('users'),
@@ -177,7 +199,14 @@ export const addMemory = internalAction({
 	}
 });
 
-// Internal search helper to keep the action clean
+/**
+ * Internal action to perform a vector search for memories.
+ *
+ * @param userId - The ID of the user.
+ * @param queryEmbedding - The vector embedding of the search query.
+ * @param limit - Optional. The maximum number of results to return (default 5).
+ * @returns A list of vector search results (IDs and scores).
+ */
 export const internalSearch = action({
 	args: {
 		userId: v.id('users'),
@@ -208,8 +237,17 @@ export const internalSearch = action({
 	}
 });
 
-// Since we can't access DB in action to get the text, we'll split this.
-// `searchMemories` action will return the TEXT of relevant memories.
+/**
+ * Internal action to search memories based on text.
+ *
+ * Generates an embedding for the text and performs a vector search.
+ * Returns the full documents with their similarity scores.
+ *
+ * @param userId - The ID of the user.
+ * @param queryText - The text to search for.
+ * @param limit - Optional. The maximum number of results to return.
+ * @returns A list of memories with their similarity scores.
+ */
 export const searchMemories = internalAction({
 	args: {
 		userId: v.id('users'),
@@ -257,6 +295,12 @@ export const searchMemories = internalAction({
 	}
 });
 
+/**
+ * Internal query to fetch multiple memory documents by their IDs.
+ *
+ * @param ids - An array of memory IDs to fetch.
+ * @returns A list of memory documents.
+ */
 export const internalGetMemories = internalQuery({
 	args: { ids: v.array(v.id('user_memories')) },
 	handler: async (ctx, args) => {
@@ -271,7 +315,14 @@ export const internalGetMemories = internalQuery({
 
 import { query } from './_generated/server';
 
-// List all memories for a user (for the Memory Manager UI)
+/**
+ * Lists all memories for the authenticated user.
+ *
+ * Used for the Memory Manager UI. Returns memories sorted by creation date (newest first)
+ * and omits the heavy embedding vector.
+ *
+ * @returns A list of user memories.
+ */
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
@@ -297,7 +348,14 @@ export const list = query({
 
 import { getAuthUserId } from '@convex-dev/auth/server';
 
-// Remove a memory by ID
+/**
+ * Removes a memory by ID for the authenticated user.
+ *
+ * Verifies that the user owns the memory before deletion.
+ *
+ * @param id - The ID of the memory to remove.
+ * @throws {Error} if the user is not authenticated or the memory belongs to another user.
+ */
 export const remove = mutation({
 	args: { id: v.id('user_memories') },
 	handler: async (ctx, args) => {
@@ -313,7 +371,15 @@ export const remove = mutation({
 	}
 });
 
-// Step 1: Formulate a standalone query
+/**
+ * Formulates a standalone search query from a conversation history.
+ *
+ * Used to resolve references like "it" or "that" using previous context.
+ *
+ * @param userId - The ID of the user.
+ * @param messages - The conversation history.
+ * @returns A standalone query string.
+ */
 export const formulateQuery = internalAction({
 	args: {
 		userId: v.id('users'),
@@ -346,7 +412,18 @@ export const formulateQuery = internalAction({
 	}
 });
 
-// Step 3 (Orchestrator): Get formulated query + retrieved memories + rewriter metadata
+/**
+ * Orchestrator action to get enriched context for AI generation.
+ *
+ * 1. Formulates a standalone search query from history.
+ * 2. Searches for relevant user memories using that query.
+ * 3. Returns the formulated query, memories, and rewriter input metadata.
+ *
+ * @param userId - The ID of the user.
+ * @param history - Recent conversation history.
+ * @param limit - Optional. Maximum number of memories to retrieve.
+ * @returns Enriched context including memories and the formulated query.
+ */
 export const getEnrichedContext = internalAction({
 	args: {
 		userId: v.id('users'),

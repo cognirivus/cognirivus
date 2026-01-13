@@ -2,6 +2,13 @@ import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import { getAuthUserId } from '@convex-dev/auth/server';
 
+/**
+ * Lists all chat threads for the authenticated user.
+ *
+ * Threads are returned in descending order of their last update.
+ *
+ * @returns A list of chat threads belonging to the user.
+ */
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
@@ -16,6 +23,14 @@ export const list = query({
 	}
 });
 
+/**
+ * Retrieves a specific chat thread by ID.
+ *
+ * Verifies that the authenticated user owns the thread.
+ *
+ * @param id - The unique identifier of the thread.
+ * @returns The thread object if found and authorized, otherwise null.
+ */
 export const get = query({
 	args: { id: v.id('threads') },
 	handler: async (ctx, { id }) => {
@@ -29,6 +44,13 @@ export const get = query({
 	}
 });
 
+/**
+ * Creates a new chat thread for the authenticated user.
+ *
+ * @param title - The initial title for the thread.
+ * @returns The ID of the newly created thread.
+ * @throws {Error} if the user is not authenticated.
+ */
 export const create = mutation({
 	args: { title: v.string() },
 	handler: async (ctx, { title }) => {
@@ -43,6 +65,14 @@ export const create = mutation({
 	}
 });
 
+/**
+ * Deletes a chat thread and all its associated messages.
+ *
+ * Verifies that the authenticated user owns the thread before deletion.
+ *
+ * @param id - The unique identifier of the thread to remove.
+ * @throws {Error} if the user is not authenticated or the thread is not found/unauthorized.
+ */
 export const remove = mutation({
 	args: { id: v.id('threads') },
 	handler: async (ctx, { id }) => {
@@ -68,6 +98,15 @@ export const remove = mutation({
 	}
 });
 
+/**
+ * Renames an existing chat thread.
+ *
+ * Verifies that the authenticated user owns the thread.
+ *
+ * @param id - The unique identifier of the thread.
+ * @param title - The new title for the thread.
+ * @throws {Error} if the user is not authenticated or the thread is not found/unauthorized.
+ */
 export const rename = mutation({
 	args: { id: v.id('threads'), title: v.string() },
 	handler: async (ctx, { id, title }) => {
