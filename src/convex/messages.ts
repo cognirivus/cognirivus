@@ -160,6 +160,11 @@ export const cancel = mutation({
 export const checkCancelled = query({
 	args: { messageId: v.id('messages') },
 	handler: async (ctx, { messageId }) => {
+		const userId = await getAuthUserId(ctx);
+		const message = await ctx.db.get(messageId);
+		if (!message || (userId && message.userId !== userId)) return false;
+
+		// Check if cancellation exists
 		const cancellation = await ctx.db
 			.query('cancellations')
 			.withIndex('by_message', (q) => q.eq('messageId', messageId))

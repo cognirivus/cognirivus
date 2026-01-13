@@ -17,7 +17,10 @@ const ASPECT_DIMENSIONS: Record<string, { width: number; height: number }> = {
 // Fetch image-capable models from OpenRouter
 export const listImageModels = action({
 	args: {},
-	handler: async () => {
+	handler: async (ctx) => {
+		const userId = await getAuthUserId(ctx);
+		if (!userId) throw new Error('Unauthorized');
+
 		const response = await fetch('https://openrouter.ai/api/v1/models', {
 			headers: {
 				Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,

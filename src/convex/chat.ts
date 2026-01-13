@@ -35,7 +35,7 @@ export const generate = action({
 		);
 		if (lastUserMessage && lastUserMessage.body) {
 			console.log('Cognirivus: Scheduling addMemory action for message');
-			await ctx.scheduler.runAfter(0, api.memories.addMemory, {
+			await ctx.scheduler.runAfter(0, internal.memories.addMemory, {
 				userId,
 				messageId: lastUserMessage._id,
 				messageText: lastUserMessage.body
@@ -49,7 +49,7 @@ export const generate = action({
 
 		if (useMemory !== false && userPrompt) {
 			try {
-				const enriched = await ctx.runAction(api.memories.getEnrichedContext, {
+				const enriched = await ctx.runAction(internal.memories.getEnrichedContext, {
 					userId,
 					history: messages.slice(-5).map((m: any) => ({
 						role: m.role,

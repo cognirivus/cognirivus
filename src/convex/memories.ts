@@ -1,5 +1,11 @@
 import { v } from 'convex/values';
-import { internalMutation, action, mutation, internalQuery } from './_generated/server';
+import {
+	internalMutation,
+	action,
+	mutation,
+	internalQuery,
+	internalAction
+} from './_generated/server';
 import { internal, api } from './_generated/api';
 import {
 	createEmbedding,
@@ -39,7 +45,7 @@ export const internalRemove = internalMutation({
 });
 
 // This is designed to be "fire and forget" from the chat flow
-export const addMemory = action({
+export const addMemory = internalAction({
 	args: {
 		userId: v.id('users'),
 		messageId: v.id('messages'),
@@ -204,7 +210,7 @@ export const internalSearch = action({
 
 // Since we can't access DB in action to get the text, we'll split this.
 // `searchMemories` action will return the TEXT of relevant memories.
-export const searchMemories = action({
+export const searchMemories = internalAction({
 	args: {
 		userId: v.id('users'),
 		queryText: v.string(),
@@ -308,7 +314,7 @@ export const remove = mutation({
 });
 
 // Step 1: Formulate a standalone query
-export const formulateQuery = action({
+export const formulateQuery = internalAction({
 	args: {
 		userId: v.id('users'),
 		messages: v.array(
@@ -341,7 +347,7 @@ export const formulateQuery = action({
 });
 
 // Step 3 (Orchestrator): Get formulated query + retrieved memories + rewriter metadata
-export const getEnrichedContext = action({
+export const getEnrichedContext = internalAction({
 	args: {
 		userId: v.id('users'),
 		history: v.array(
@@ -388,7 +394,7 @@ Return ONLY the rephrased query text. If the message is already standalone, retu
 		}
 
 		// 3. Search memories
-		const relevantMemories = await ctx.runAction(api.memories.searchMemories, {
+		const relevantMemories = await ctx.runAction(internal.memories.searchMemories, {
 			userId,
 			queryText: formulatedQuery,
 			limit: limit || 5
