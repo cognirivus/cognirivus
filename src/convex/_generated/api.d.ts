@@ -16,6 +16,7 @@ import type * as image from "../image.js";
 import type * as lib_openrouter from "../lib/openrouter.js";
 import type * as memories from "../memories.js";
 import type * as messages from "../messages.js";
+import type * as models from "../models.js";
 import type * as threads from "../threads.js";
 import type * as usage from "../usage.js";
 import type * as users from "../users.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   "lib/openrouter": typeof lib_openrouter;
   memories: typeof memories;
   messages: typeof messages;
+  models: typeof models;
   threads: typeof threads;
   usage: typeof usage;
   users: typeof users;

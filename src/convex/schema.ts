@@ -78,7 +78,16 @@ const schema = defineSchema({
 			dimensions: 4096,
 			filterFields: ['userId']
 		})
-		.index('by_user', ['userId'])
+		.index('by_user', ['userId']),
+	models: defineTable({
+		modelId: v.string(),
+		name: v.string(),
+		attributes: v.any(), // Raw JSON from OpenRouter
+		isEnabled: v.boolean(),
+		lastUpdated: v.number()
+	})
+		.index('by_model_id', ['modelId'])
+		.index('by_enabled', ['isEnabled'])
 });
 
 export default schema;

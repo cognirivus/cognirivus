@@ -65,6 +65,8 @@ export class ChatContext {
 		}[]
 	>([]);
 
+	private STORAGE_KEY = 'cognirivus_models_cache';
+
 	isLoadingModels = $state(true);
 
 	constructor(private client: any) {
@@ -72,26 +74,50 @@ export class ChatContext {
 	}
 
 	async loadModels() {
-		this.isLoadingModels = true;
+		// 1. Initial Load from LocalStorage (Instant UI)
+		if (typeof window !== 'undefined') {
+			try {
+				const cached = localStorage.getItem(this.STORAGE_KEY);
+				if (cached) {
+					this.models = JSON.parse(cached);
+					this.isLoadingModels = false;
+					// Ensure we have a valid selection from cache
+					if (this.models.length > 0 && !this.models.find((m) => m.id === this.selectedModel)) {
+						this.selectedModel = this.models[0].id;
+					}
+				}
+			} catch (e) {
+				console.warn('Failed to load models from localStorage', e);
+			}
+		}
+
+		// 2. Fetch from Convex (Background Sync)
 		try {
-			const models = await this.client.action(api.chat.listModels);
-			// Process and sort models if needed, or just take them raw
-			// Assuming the API returns objects with at least id and name
-			this.models = models.map((m: any) => ({
-				id: m.id,
+			const models = await this.client.query(api.models.list);
+			const mappedModels = models.map((m: any) => ({
+				id: m.modelId,
 				name: m.name,
-				context_length: m.context_length,
-				pricing: m.pricing,
-				output_modalities: m.architecture?.output_modalities || []
+				context_length: m.attributes.context_length,
+				pricing: m.attributes.pricing,
+				output_modalities: m.attributes.architecture?.output_modalities || []
 			}));
-			// If selectedModel is not in the list, default to first or keep current if valid
+
+			this.models = mappedModels;
+
+			// 3. Update LocalStorage
+			if (typeof window !== 'undefined') {
+				try {
+					localStorage.setItem(this.STORAGE_KEY, JSON.stringify(mappedModels));
+				} catch (e) {
+					console.warn('Failed to save models to localStorage', e);
+				}
+			}
+
 			if (this.models.length > 0 && !this.models.find((m) => m.id === this.selectedModel)) {
-				// Try to keep a reasonable default if available, otherwise first
 				this.selectedModel = this.models[0].id;
 			}
 		} catch (error) {
-			console.error('Failed to load models:', error);
-			// Fallback or empty state
+			console.error('Failed to load models from Convex:', error);
 		} finally {
 			this.isLoadingModels = false;
 		}

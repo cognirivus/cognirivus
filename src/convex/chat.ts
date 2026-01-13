@@ -403,23 +403,3 @@ export const generate = action({
 		}
 	}
 });
-
-export const listModels = action({
-	args: {},
-	handler: async () => {
-		const response = await fetch('https://openrouter.ai/api/v1/models', {
-			headers: {
-				Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-				'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
-				'X-Title': 'Cognirivus Chat'
-			}
-		});
-
-		if (!response.ok) {
-			throw new Error(`OpenRouter error: ${response.statusText}`);
-		}
-
-		const data = await response.json();
-		return data.data;
-	}
-});
