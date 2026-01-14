@@ -3,10 +3,11 @@ import {
 	internalMutation,
 	action,
 	mutation,
+	query,
 	internalQuery,
 	internalAction
 } from './_generated/server';
-import { internal, api } from './_generated/api';
+import { internal } from './_generated/api';
 import {
 	createEmbedding,
 	extractMemories,
@@ -26,7 +27,7 @@ import {
  */
 export const internalAddMemory = internalMutation({
 	args: {
-		userId: v.id('users'),
+		userId: v.string(),
 		text: v.string(),
 		category: v.optional(v.string()),
 		embedding: v.array(v.number()),
@@ -69,7 +70,7 @@ export const internalRemove = internalMutation({
  */
 export const addMemory = internalAction({
 	args: {
-		userId: v.id('users'),
+		userId: v.string(),
 		messageId: v.id('messages'),
 		messageText: v.string()
 	},
@@ -209,7 +210,7 @@ export const addMemory = internalAction({
  */
 export const internalSearch = action({
 	args: {
-		userId: v.id('users'),
+		userId: v.string(),
 		queryEmbedding: v.array(v.number()),
 		limit: v.optional(v.number())
 	},
@@ -221,18 +222,6 @@ export const internalSearch = action({
 			filter: (q) => q.eq('userId', args.userId)
 		});
 
-		// Fetch valid memories
-		const memories = [];
-		for (const result of results) {
-			// vectorSearch returns { _id, _score }, we need to fetch the doc?
-			// Wait, standard vectorSearch in Convex usually requires a cleanup step to get the actual docs
-			// if we are in an action we can't use db.get directly easily without another query.
-			// Actually, ctx.vectorSearch returns the list of matches. We can't accessing DB in action.
-			// We need a separate query/mutation to fetch the docs or pass IDs back.
-			// BUT, wait. `vectorSearch` is available in ACTION? Yes.
-			// But `db` is NOT available in ACTION.
-			// So we return the IDs and scores, and then fetch them in the main flow or a separate query.
-		}
 		return results;
 	}
 });
@@ -250,7 +239,7 @@ export const internalSearch = action({
  */
 export const searchMemories = internalAction({
 	args: {
-		userId: v.id('users'),
+		userId: v.string(),
 		queryText: v.string(),
 		limit: v.optional(v.number())
 	},
@@ -313,8 +302,6 @@ export const internalGetMemories = internalQuery({
 	}
 });
 
-import { query } from './_generated/server';
-
 /**
  * Lists all memories for the authenticated user.
  *
@@ -326,12 +313,12 @@ import { query } from './_generated/server';
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
-		const userId = await getAuthUserId(ctx);
-		if (!userId) return [];
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) return [];
 
 		const memories = await ctx.db
 			.query('user_memories')
-			.withIndex('by_user', (q) => q.eq('userId', userId))
+			.withIndex('by_user', (q) => q.eq('userId', identity.subject))
 			.collect();
 
 		// Sort by createdAt descending and omit embedding for frontend
@@ -346,8 +333,6 @@ export const list = query({
 	}
 });
 
-import { getAuthUserId } from '@convex-dev/auth/server';
-
 /**
  * Removes a memory by ID for the authenticated user.
  *
@@ -359,11 +344,11 @@ import { getAuthUserId } from '@convex-dev/auth/server';
 export const remove = mutation({
 	args: { id: v.id('user_memories') },
 	handler: async (ctx, args) => {
-		const userId = await getAuthUserId(ctx);
-		if (!userId) throw new Error('Unauthorized');
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) throw new Error('Unauthorized');
 
 		const memory = await ctx.db.get(args.id);
-		if (!memory || memory.userId !== userId) {
+		if (!memory || memory.userId !== identity.subject) {
 			throw new Error('Memory not found or access denied');
 		}
 
@@ -382,7 +367,7 @@ export const remove = mutation({
  */
 export const formulateQuery = internalAction({
 	args: {
-		userId: v.id('users'),
+		userId: v.string(),
 		messages: v.array(
 			v.object({
 				role: v.string(),
@@ -426,7 +411,7 @@ export const formulateQuery = internalAction({
  */
 export const getEnrichedContext = internalAction({
 	args: {
-		userId: v.id('users'),
+		userId: v.string(),
 		history: v.array(
 			v.object({
 				role: v.string(),

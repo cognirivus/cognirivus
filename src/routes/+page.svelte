@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { useAuth } from '@mmailaender/convex-auth-svelte/sveltekit';
+	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { MessageSquare, Sparkles, Shield, Image as ImageIcon, ArrowRight } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 

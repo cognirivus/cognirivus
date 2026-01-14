@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { useAuth } from '@mmailaender/convex-auth-svelte/sveltekit';
+	import { authClient } from '$lib/auth-client';
+	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 
@@ -12,6 +13,7 @@
 		}
 	});
 
+	let name = $state('');
 	let email = $state('');
 	let password = $state('');
 	let flow = $state<'signIn' | 'signUp'>('signIn');
@@ -21,8 +23,25 @@
 		event.preventDefault();
 		error = '';
 		try {
-			await auth.signIn('password', { email, password, flow });
-			await goto(redirectTo);
+			if (flow === 'signIn') {
+				await authClient.signIn.email(
+					{ email, password },
+					{
+						onError: (ctx) => {
+							error = ctx.error.message;
+						}
+					}
+				);
+			} else {
+				await authClient.signUp.email(
+					{ name, email, password },
+					{
+						onError: (ctx) => {
+							error = ctx.error.message;
+						}
+					}
+				);
+			}
 		} catch (e: any) {
 			error = e.message || 'An error occurred during sign in.';
 		}
@@ -39,6 +58,20 @@
 		</p>
 
 		<form onsubmit={handleSubmit} class="space-y-6">
+			{#if flow === 'signUp'}
+				<div class="space-y-2">
+					<label for="name" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Name</label>
+					<input
+						type="text"
+						id="name"
+						bind:value={name}
+						required
+						placeholder="Your name"
+						class="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+					/>
+				</div>
+			{/if}
+
 			<div class="space-y-2">
 				<label for="email" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Email</label>
 				<input

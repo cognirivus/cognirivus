@@ -1,10 +1,8 @@
-import { createConvexAuthHandlers } from '@mmailaender/convex-auth-svelte/sveltekit/server';
 import type { LayoutServerLoad } from './$types';
+import { createAuth } from '$convex/auth.js';
+import { getAuthState } from '@mmailaender/convex-better-auth-svelte/sveltekit';
 
-// Create auth handlers - convexUrl is automatically detected from environment
-const { getAuthState } = createConvexAuthHandlers();
-
-// Export load function to provide auth state to layout
-export const load: LayoutServerLoad = async (event) => {
-	return { authState: await getAuthState(event) };
+export const load: LayoutServerLoad = async ({ cookies }) => {
+	const authState = await getAuthState(createAuth, cookies);
+	return { authState };
 };

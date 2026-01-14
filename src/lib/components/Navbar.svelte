@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { useAuth } from '@mmailaender/convex-auth-svelte/sveltekit';
+	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { authClient } from '$lib/auth-client';
 	import { page } from '$app/state';
 	import ThemeToggle from './theme-toggle.svelte';
 	import {
@@ -27,6 +28,10 @@
 	const filteredNavItems = $derived(
 		navItems.filter((item) => !item.authRequired || auth.isAuthenticated)
 	);
+
+	async function signOut() {
+		await authClient.signOut();
+	}
 </script>
 
 <nav class="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-md">
@@ -55,7 +60,7 @@
 					<Button
 						variant="ghost"
 						size="sm"
-						onclick={() => auth.signOut()}
+						onclick={signOut}
 						class="gap-2 text-muted-foreground hover:text-destructive"
 					>
 						<LogOut class="h-4 w-4" />
@@ -110,7 +115,7 @@
 					{#if auth.isAuthenticated}
 						<button
 							onclick={() => {
-								auth.signOut();
+								signOut();
 								isMobileMenuOpen = false;
 							}}
 							class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-base font-medium text-destructive transition-colors hover:bg-destructive/10"

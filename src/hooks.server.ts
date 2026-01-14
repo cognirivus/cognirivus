@@ -1,42 +1,31 @@
 import { sequence } from '@sveltejs/kit/hooks';
 import { redirect, type Handle } from '@sveltejs/kit';
-import {
-	createConvexAuthHooks,
-	createRouteMatcher
-} from '@mmailaender/convex-auth-svelte/sveltekit/server';
+import { createAuth } from '$convex/auth.js';
+import { getToken } from '@mmailaender/convex-better-auth-svelte/sveltekit';
 
-const isPublicRoute = createRouteMatcher([
-	'/',
-	'/signin'
-	// Note: No need to add '/api/auth' here as the handleAuth middleware
-	// will process those requests before this middleware runs
-]);
+const isPublicRoute = (pathname: string) => {
+	const publicRoutes = ['/', '/signin', '/api/auth'];
+	return publicRoutes.some(route => pathname === route || pathname.startsWith('/api/auth'));
+};
 
-// Create auth hooks - convexUrl is automatically detected from environment
-const { handleAuth, isAuthenticated } = createConvexAuthHooks();
+const handleAuth: Handle = async ({ event, resolve }) => {
+	event.locals.token = await getToken(createAuth, event.cookies);
+	return resolve(event);
+};
 
-// Create custom auth handler
 const requireAuth: Handle = async ({ event, resolve }) => {
-	// Allow public routes
 	if (isPublicRoute(event.url.pathname)) {
 		return resolve(event);
 	}
 
-	// Check if user is authenticated
-	if (!(await isAuthenticated(event))) {
-		// Redirect to signin if not authenticated
+	if (!event.locals.token) {
 		throw redirect(
 			302,
 			`/signin?redirectTo=${encodeURIComponent(event.url.pathname + event.url.search)}`
 		);
 	}
 
-	// User is authenticated, proceed
 	return resolve(event);
 };
 
-// Apply hooks in sequence
-export const handle = sequence(
-	handleAuth, // This MUST come first to handle auth requests
-	requireAuth // Then enforce authentication
-);
+export const handle = sequence(handleAuth, requireAuth);

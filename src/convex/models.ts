@@ -1,7 +1,7 @@
 import { action, internalMutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
-import { getAuthUserId } from '@convex-dev/auth/server';
+import { authComponent } from './auth';
 
 /**
  * Lists all enabled AI models.
@@ -13,10 +13,10 @@ import { getAuthUserId } from '@convex-dev/auth/server';
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
-		const userId = await getAuthUserId(ctx);
-		if (!userId) return [];
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) return [];
 
-		return await ctx.db
+		return ctx.db
 			.query('models')
 			.withIndex('by_enabled', (q) => q.eq('isEnabled', true))
 			.collect();
@@ -34,8 +34,8 @@ export const list = query({
 export const syncFromOpenRouter = action({
 	args: {},
 	handler: async (ctx) => {
-		const userId = await getAuthUserId(ctx);
-		if (!userId) throw new Error('Unauthorized');
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) throw new Error('Unauthorized');
 
 		const response = await fetch('https://openrouter.ai/api/v1/models', {
 			headers: {

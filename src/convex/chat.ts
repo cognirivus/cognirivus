@@ -1,8 +1,7 @@
 import { action } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
-import { getAuthUserId } from '@convex-dev/auth/server';
-import { formulateStandaloneQuery, getGenerationStats } from './lib/openrouter';
+import { getGenerationStats } from './lib/openrouter';
 
 /**
  * Generates an AI response for a given chat thread.
@@ -38,8 +37,9 @@ export const generate = action({
 		ctx,
 		{ threadId, model, includeReasoning, generateImage, imageAspectRatio, useMemory }
 	) => {
-		const userId = await getAuthUserId(ctx);
-		if (!userId) throw new Error('Unauthorized');
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) throw new Error('Unauthorized');
+		const userId = identity.subject;
 
 		// 1. Get previous messages
 		const messages = await ctx.runQuery(api.messages.list, { threadId });

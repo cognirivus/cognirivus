@@ -11,15 +11,13 @@
  * - `models`: Available AI models synced from OpenRouter.
  */
 import { defineSchema, defineTable } from 'convex/server';
-import { authTables } from '@convex-dev/auth/server';
 import { v } from 'convex/values';
 
 const schema = defineSchema({
-	...authTables,
 	messages: defineTable({
 		body: v.string(),
 		reasoning: v.optional(v.string()),
-		userId: v.id('users'),
+		userId: v.string(),
 		threadId: v.id('threads'),
 		role: v.union(v.literal('user'), v.literal('assistant')),
 		createdAt: v.number(),
@@ -41,13 +39,13 @@ const schema = defineSchema({
 		.index('by_user', ['userId']),
 	threads: defineTable({
 		title: v.string(),
-		userId: v.id('users'),
+		userId: v.string(),
 		updatedAt: v.number()
 	}).index('by_user', ['userId']),
 	usage_logs: defineTable({
-		userId: v.id('users'),
+		userId: v.string(),
 		messageId: v.optional(v.id('messages')),
-		purpose: v.optional(v.string()), // 'chat', 'memory_extraction', 'embedding', 'dedupe_judge', 'standalone_query'
+		purpose: v.optional(v.string()),
 		model: v.string(),
 		promptTokens: v.number(),
 		completionTokens: v.number(),
@@ -59,7 +57,7 @@ const schema = defineSchema({
 		.index('by_user', ['userId'])
 		.index('by_created_at', ['createdAt']),
 	generated_images: defineTable({
-		userId: v.id('users'),
+		userId: v.string(),
 		prompt: v.string(),
 		negativePrompt: v.optional(v.string()),
 		provider: v.string(),
@@ -78,7 +76,7 @@ const schema = defineSchema({
 		messageId: v.id('messages')
 	}).index('by_message', ['messageId']),
 	user_memories: defineTable({
-		userId: v.id('users'),
+		userId: v.string(),
 		text: v.string(),
 		category: v.optional(v.string()),
 		embedding: v.array(v.number()),
@@ -94,7 +92,7 @@ const schema = defineSchema({
 	models: defineTable({
 		modelId: v.string(),
 		name: v.string(),
-		attributes: v.any(), // Raw JSON from OpenRouter
+		attributes: v.any(),
 		isEnabled: v.boolean(),
 		lastUpdated: v.number()
 	})

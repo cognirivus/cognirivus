@@ -18,7 +18,7 @@ import { v } from 'convex/values';
  */
 export const logUsage = internalMutation({
 	args: {
-		userId: v.id('users'),
+		userId: v.string(),
 		messageId: v.optional(v.id('messages')),
 		purpose: v.string(),
 		model: v.string(),

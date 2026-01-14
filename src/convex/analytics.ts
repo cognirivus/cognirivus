@@ -1,5 +1,4 @@
 import { query } from './_generated/server';
-import { getAuthUserId } from '@convex-dev/auth/server';
 
 /**
  * Retrieves usage statistics for the authenticated user's dashboard.
@@ -14,12 +13,12 @@ import { getAuthUserId } from '@convex-dev/auth/server';
  */
 export const getDashboardStats = query({
 	handler: async (ctx) => {
-		const userId = await getAuthUserId(ctx);
-		if (!userId) return null;
+		const identity = await ctx.auth.getUserIdentity();
+		if (!identity) return null;
 
 		const usageLogs = await ctx.db
 			.query('usage_logs')
-			.withIndex('by_user', (q) => q.eq('userId', userId))
+			.withIndex('by_user', (q) => q.eq('userId', identity.subject))
 			.collect();
 
 		let totalTokens = 0;
