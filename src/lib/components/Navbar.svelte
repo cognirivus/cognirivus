@@ -15,10 +15,13 @@
 		User,
 		Menu,
 		BookOpen,
-		X
+		X,
+		ChevronDown
 	} from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 	import Logo from './Logo.svelte';
+	import { invalidateAll } from '$app/navigation';
 
 	const auth = useAuth();
 	const currentUserQuery = useQuery(api.auth.getCurrentUser, {}, () => ({
@@ -26,6 +29,11 @@
 		keepPreviousData: true
 	}));
 	const user = $derived(currentUserQuery.data);
+
+	// Helper to check admin status
+	const isAdmin = $derived(
+		user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin')
+	);
 
 	let isMobileMenuOpen = $state(false);
 
@@ -40,15 +48,16 @@
 	const filteredNavItems = $derived(
 		navItems.filter((item) => {
 			if (item.adminOnly) {
-				const role = user?.role;
-				const isAdmin = Array.isArray(role) ? role.includes('admin') : role === 'admin';
 				return isAdmin;
 			}
 			return !item.authRequired || !!user;
 		})
 	);
 
-	import { invalidateAll } from '$app/navigation';
+	// For desktop: Hide Dashboard and Admin from the main bar (move to dropdown)
+	const desktopNavItems = $derived(
+		filteredNavItems.filter((item) => !['Dashboard', 'Admin'].includes(item.name))
+	);
 
 	async function signOut() {
 		await authClient.signOut();
@@ -72,7 +81,8 @@
 					<div class="h-8 w-20 animate-pulse rounded-md bg-muted/60"></div>
 				</div>
 			{:else}
-				{#each filteredNavItems as item}
+				<!-- Only show content links here, management links go to dropdown -->
+				{#each desktopNavItems as item}
 					<a
 						href={item.href}
 						class="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground {page
@@ -92,24 +102,56 @@
 						<div class="h-8 w-24 animate-pulse rounded-md bg-muted/60"></div>
 					</div>
 				{:else if user}
-					<Button
-						variant="ghost"
-						size="sm"
-						href="/profile"
-						class="gap-2 text-muted-foreground transition-colors hover:text-primary"
-					>
-						<User class="h-4 w-4" />
-						<span>Profile</span>
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						onclick={signOut}
-						class="gap-2 text-muted-foreground hover:text-destructive"
-					>
-						<LogOut class="h-4 w-4" />
-						<span>Sign Out</span>
-					</Button>
+					<!-- User Dropdown Menu -->
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button variant="ghost" size="sm" class="gap-2" {...props}>
+									<User class="h-4 w-4" />
+									<span class="max-w-25 truncate">{user.name ?? 'Account'}</span>
+									<ChevronDown class="h-3 w-3 opacity-50" />
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="end" class="w-56">
+							<DropdownMenu.Label>
+								<div class="flex flex-col space-y-1">
+									<p class="text-sm leading-none font-medium">{user.name}</p>
+									<p class="text-xs leading-none text-muted-foreground">
+										{user.email}
+									</p>
+								</div>
+							</DropdownMenu.Label>
+							<DropdownMenu.Separator />
+							<DropdownMenu.Group>
+								<DropdownMenu.Item>
+									<a href="/dashboard" class="flex w-full items-center">
+										<LayoutDashboard class="mr-2 h-4 w-4" />
+										<span>Dashboard</span>
+									</a>
+								</DropdownMenu.Item>
+								{#if isAdmin}
+									<DropdownMenu.Item>
+										<a href="/admin" class="flex w-full items-center">
+											<ShieldCheck class="mr-2 h-4 w-4" />
+											<span>Admin</span>
+										</a>
+									</DropdownMenu.Item>
+								{/if}
+								<DropdownMenu.Item>
+									<a href="/profile" class="flex w-full items-center">
+										<User class="mr-2 h-4 w-4" />
+										<span>Profile</span>
+									</a>
+								</DropdownMenu.Item>
+							</DropdownMenu.Group>
+							<DropdownMenu.Separator />
+							<DropdownMenu.Item onclick={signOut}>
+								<LogOut class="mr-2 h-4 w-4" />
+								<span>Sign Out</span>
+							</DropdownMenu.Item>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
 				{:else}
 					<Button variant="default" size="sm" href="/signin" class="gap-2 shadow-sm">
 						<LogIn class="h-4 w-4" />
@@ -149,6 +191,7 @@
 						<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
 					</div>
 				{:else}
+					<!-- In mobile, show ALL items including Dashboard/Admin in the main list -->
 					{#each filteredNavItems as item}
 						<a
 							href={item.href}

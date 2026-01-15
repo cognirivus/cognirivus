@@ -41,12 +41,8 @@
 	};
 </script>
 
-<div class="container mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
+<div class="container mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
 	<div class="mb-8">
-		<Button variant="ghost" href="/" class="mb-4 gap-2">
-			<ArrowLeft class="h-4 w-4" />
-			Back to Home
-		</Button>
 		<h1 class="text-4xl font-extrabold tracking-tight">Your Profile</h1>
 		<p class="mt-2 text-muted-foreground">Manage your account details and preferences.</p>
 	</div>
@@ -56,9 +52,9 @@
 			<!-- Profile Card -->
 			<div class="md:col-span-1">
 				<div class="overflow-hidden rounded-2xl border bg-card shadow-sm">
-					<div class="h-24 bg-gradient-to-br from-primary/20 to-primary/5"></div>
+					<div class="h-24 bg-linear-to-br from-primary/20 to-primary/5"></div>
 					<div class="relative px-6 pb-6 text-center">
-						<div class="absolute -top-12 left-1/2 -translate-x-1/2">
+						<div class="absolute -top-24 left-1/2 -translate-x-1/2">
 							{#if user.image}
 								<img
 									src={user.image}
@@ -108,19 +104,21 @@
 				<div class="rounded-2xl border bg-card p-6 shadow-sm">
 					<h3 class="mb-4 text-lg font-semibold">Account Information</h3>
 					<div class="space-y-4">
-						<div class="flex items-center gap-4 rounded-lg border bg-muted/30 p-4">
-							<div
-								class="flex h-10 w-10 items-center justify-center rounded-full bg-background shadow-sm"
-							>
-								<User class="h-5 w-5 text-primary" />
+						{#if user.role === 'admin'}
+							<div class="flex items-center gap-4 rounded-lg border bg-muted/30 p-4">
+								<div
+									class="flex h-10 w-10 items-center justify-center rounded-full bg-background shadow-sm"
+								>
+									<User class="h-5 w-5 text-primary" />
+								</div>
+								<div class="flex-1">
+									<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+										Admin User ID
+									</p>
+									<p class="font-mono text-xs break-all">{user.id}</p>
+								</div>
 							</div>
-							<div class="flex-1">
-								<p class="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-									User ID
-								</p>
-								<p class="font-mono text-xs break-all">{user.id}</p>
-							</div>
-						</div>
+						{/if}
 
 						<div class="flex items-center gap-4 rounded-lg border bg-muted/30 p-4">
 							<div
