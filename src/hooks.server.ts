@@ -4,8 +4,11 @@ import { createAuth } from '$convex/auth.js';
 import { getToken } from '@mmailaender/convex-better-auth-svelte/sveltekit';
 
 const isPublicRoute = (pathname: string) => {
-	const publicRoutes = ['/', '/signin', '/api/auth'];
-	return publicRoutes.some((route) => pathname === route || pathname.startsWith('/api/auth'));
+	const publicRoutes = ['/', '/signin', '/api/auth', '/blog'];
+	return (
+		publicRoutes.some((route) => pathname === route || pathname.startsWith('/api/auth')) ||
+		pathname.startsWith('/blog/')
+	);
 };
 
 const handleAuth: Handle = async ({ event, resolve }) => {

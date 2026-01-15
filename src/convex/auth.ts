@@ -9,7 +9,6 @@ import authSchema from './betterAuth/schema';
 import { admin } from 'better-auth/plugins';
 
 const siteUrl = process.env.SITE_URL!;
-console.log('Convex Auth Config - Resolved siteUrl:', siteUrl);
 
 /**
  * The auth component client.

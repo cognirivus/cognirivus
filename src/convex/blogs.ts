@@ -3,10 +3,10 @@ import { mutation, query, type QueryCtx, type MutationCtx } from './_generated/s
 import { authComponent } from './auth';
 import { TableAggregate } from '@convex-dev/aggregate';
 import { components } from './_generated/api';
-import { DataModel } from './_generated/dataModel';
+import { DataModel, Id } from './_generated/dataModel';
 
 const likesAggregate = new TableAggregate<{
-	Key: string;
+	Key: Id<'blogs'>;
 	DataModel: DataModel;
 	TableName: 'blog_likes';
 }>(components.aggregateLikes, {
@@ -14,7 +14,7 @@ const likesAggregate = new TableAggregate<{
 });
 
 const dislikesAggregate = new TableAggregate<{
-	Key: string;
+	Key: Id<'blogs'>;
 	DataModel: DataModel;
 	TableName: 'blog_dislikes';
 }>(components.aggregateDislikes, {
@@ -22,7 +22,7 @@ const dislikesAggregate = new TableAggregate<{
 });
 
 const commentsAggregate = new TableAggregate<{
-	Key: string;
+	Key: Id<'blogs'>;
 	DataModel: DataModel;
 	TableName: 'blog_comments';
 }>(components.aggregateComments, {
@@ -30,7 +30,7 @@ const commentsAggregate = new TableAggregate<{
 });
 
 const commentLikesAggregate = new TableAggregate<{
-	Key: string;
+	Key: Id<'blog_comments'>;
 	DataModel: DataModel;
 	TableName: 'comment_likes';
 }>(components.aggregateCommentLikes, {
@@ -38,7 +38,7 @@ const commentLikesAggregate = new TableAggregate<{
 });
 
 const commentDislikesAggregate = new TableAggregate<{
-	Key: string;
+	Key: Id<'blog_comments'>;
 	DataModel: DataModel;
 	TableName: 'comment_dislikes';
 }>(components.aggregateCommentDislikes, {
@@ -74,16 +74,22 @@ export const list = query({
 			blogs.map(async (blog) => {
 				const [likes, dislikes, commentCount] = await Promise.all([
 					likesAggregate.count(ctx, {
-						namespace: undefined,
-						bounds: { lower: { key: blog._id, inclusive: true }, upper: { key: blog._id, inclusive: true } }
+						bounds: {
+							lower: { key: blog._id, inclusive: true },
+							upper: { key: blog._id, inclusive: true }
+						}
 					}),
 					dislikesAggregate.count(ctx, {
-						namespace: undefined,
-						bounds: { lower: { key: blog._id, inclusive: true }, upper: { key: blog._id, inclusive: true } }
+						bounds: {
+							lower: { key: blog._id, inclusive: true },
+							upper: { key: blog._id, inclusive: true }
+						}
 					}),
 					commentsAggregate.count(ctx, {
-						namespace: undefined,
-						bounds: { lower: { key: blog._id, inclusive: true }, upper: { key: blog._id, inclusive: true } }
+						bounds: {
+							lower: { key: blog._id, inclusive: true },
+							upper: { key: blog._id, inclusive: true }
+						}
 					})
 				]);
 				return { ...blog, likes, dislikes, commentCount };
@@ -102,21 +108,32 @@ export const get = query({
 
 		const [likes, dislikes, commentCount] = await Promise.all([
 			likesAggregate.count(ctx, {
-				namespace: undefined,
-				bounds: { lower: { key: args.id, inclusive: true }, upper: { key: args.id, inclusive: true } }
+				bounds: {
+					lower: { key: args.id, inclusive: true },
+					upper: { key: args.id, inclusive: true }
+				}
 			}),
 			dislikesAggregate.count(ctx, {
-				namespace: undefined,
-				bounds: { lower: { key: args.id, inclusive: true }, upper: { key: args.id, inclusive: true } }
+				bounds: {
+					lower: { key: args.id, inclusive: true },
+					upper: { key: args.id, inclusive: true }
+				}
 			}),
 			commentsAggregate.count(ctx, {
-				namespace: undefined,
-				bounds: { lower: { key: args.id, inclusive: true }, upper: { key: args.id, inclusive: true } }
+				bounds: {
+					lower: { key: args.id, inclusive: true },
+					upper: { key: args.id, inclusive: true }
+				}
 			})
 		]);
 
-		const user = await authComponent.getAuthUser(ctx);
+		// FIX: Check identity first. If null, user is null.
+		// This prevents getAuthUser from throwing "Unauthenticated"
+		const identity = await ctx.auth.getUserIdentity();
+		const user = identity ? await authComponent.getAuthUser(ctx) : null;
+
 		let userReaction: 'like' | 'dislike' | null = null;
+
 		if (user) {
 			const like = await ctx.db
 				.query('blog_likes')
@@ -154,20 +171,20 @@ export const getComments = query({
 			.order('desc')
 			.collect();
 
-		const user = await authComponent.getAuthUser(ctx);
+		// FIX: Check identity first to avoid Unauthenticated error
+		const identity = await ctx.auth.getUserIdentity();
+		const user = identity ? await authComponent.getAuthUser(ctx) : null;
 
 		const enrichedComments = await Promise.all(
 			comments.map(async (comment) => {
 				const [likes, dislikes] = await Promise.all([
 					commentLikesAggregate.count(ctx, {
-						namespace: undefined,
 						bounds: {
 							lower: { key: comment._id, inclusive: true },
 							upper: { key: comment._id, inclusive: true }
 						}
 					}),
 					commentDislikesAggregate.count(ctx, {
-						namespace: undefined,
 						bounds: {
 							lower: { key: comment._id, inclusive: true },
 							upper: { key: comment._id, inclusive: true }
@@ -179,7 +196,9 @@ export const getComments = query({
 				if (user) {
 					const like = await ctx.db
 						.query('comment_likes')
-						.withIndex('by_comment_user', (q) => q.eq('commentId', comment._id).eq('userId', user._id))
+						.withIndex('by_comment_user', (q) =>
+							q.eq('commentId', comment._id).eq('userId', user._id)
+						)
 						.unique();
 					if (like) {
 						userReaction = 'like';
@@ -333,7 +352,10 @@ export const toggleCommentLike = mutation({
 				await ctx.db.delete(existingDislike._id);
 				await commentDislikesAggregate.delete(ctx, existingDislike);
 			}
-			const id = await ctx.db.insert('comment_likes', { commentId: args.commentId, userId: user._id });
+			const id = await ctx.db.insert('comment_likes', {
+				commentId: args.commentId,
+				userId: user._id
+			});
 			const doc = await ctx.db.get(id);
 			await commentLikesAggregate.insert(ctx, doc!);
 		}

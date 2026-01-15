@@ -106,13 +106,6 @@
 
 <div class="min-h-screen bg-background p-6">
 	<div class="mx-auto max-w-6xl">
-		<div class="mb-8">
-			<Button variant="ghost" size="sm" class="gap-2" href="/blog">
-				<ChevronLeft class="h-4 w-4" />
-				Back to blog
-			</Button>
-		</div>
-
 		{#if blogQuery.isLoading}
 			<div class="flex h-64 items-center justify-center">
 				<LoaderCircle class="h-8 w-8 animate-spin text-muted-foreground" />
@@ -133,46 +126,68 @@
 						<h1 class="mt-4 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
 							{blog.title}
 						</h1>
+						<!-- Like/Dislike Section -->
+						<div class="mt-10 flex items-center gap-6 border-b border-border pb-6">
+							<div class="flex items-center gap-2">
+								{#if session.value?.data?.user}
+									<Button
+										variant={blog.userReaction === 'like' ? 'default' : 'outline'}
+										size="sm"
+										class="gap-2"
+										onclick={handleLike}
+									>
+										<ThumbsUp class="h-4 w-4" />
+										{blog.likes}
+									</Button>
+									<Button
+										variant={blog.userReaction === 'dislike' ? 'default' : 'outline'}
+										size="sm"
+										class="gap-2"
+										onclick={handleDislike}
+									>
+										<ThumbsDown class="h-4 w-4" />
+										{blog.dislikes}
+									</Button>
+								{:else}
+									<Button
+										variant="outline"
+										size="sm"
+										class="gap-2"
+										href="/signin"
+										title="Sign in to like"
+									>
+										<ThumbsUp class="h-4 w-4" />
+										{blog.likes}
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										class="gap-2"
+										href="/signin"
+										title="Sign in to dislike"
+									>
+										<ThumbsDown class="h-4 w-4" />
+										{blog.dislikes}
+									</Button>
+								{/if}
+							</div>
+							<button
+								class="flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+								onclick={() =>
+									document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth' })}
+							>
+								<MessageCircle class="h-4 w-4" />
+								<span class="text-sm">{blog.commentCount} comments</span>
+							</button>
+						</div>
 					</header>
 
 					<div class="prose prose-neutral dark:prose-invert max-w-none">
 						<Markdown content={blog.content} />
 					</div>
 
-					<!-- Like/Dislike Section -->
-					<div class="mt-10 flex items-center gap-6 border-t border-border pt-6">
-						<div class="flex items-center gap-2">
-							<Button
-								variant={blog.userReaction === 'like' ? 'default' : 'outline'}
-								size="sm"
-								class="gap-2"
-								onclick={handleLike}
-								disabled={!session.value?.data?.user}
-								title={session.value?.data?.user ? 'Like this post' : 'Sign in to like'}
-							>
-								<ThumbsUp class="h-4 w-4" />
-								{blog.likes}
-							</Button>
-							<Button
-								variant={blog.userReaction === 'dislike' ? 'default' : 'outline'}
-								size="sm"
-								class="gap-2"
-								onclick={handleDislike}
-								disabled={!session.value?.data?.user}
-								title={session.value?.data?.user ? 'Dislike this post' : 'Sign in to dislike'}
-							>
-								<ThumbsDown class="h-4 w-4" />
-								{blog.dislikes}
-							</Button>
-						</div>
-						<div class="flex items-center gap-2 text-muted-foreground">
-							<MessageCircle class="h-4 w-4" />
-							<span class="text-sm">{blog.commentCount} comments</span>
-						</div>
-					</div>
-
 					<!-- Comments Section -->
-					<div class="mt-10 border-t border-border pt-8">
+					<div id="comments" class="mt-10 border-t border-border pt-8">
 						<h2 class="mb-6 text-xl font-bold">Comments</h2>
 
 						<!-- Add Comment Form -->
@@ -203,9 +218,12 @@
 							</div>
 						{:else}
 							<div
-								class="mb-8 rounded-lg border border-border bg-muted/30 p-4 text-center text-sm text-muted-foreground"
+								class="mb-8 flex flex-col items-center justify-center rounded-lg border border-border bg-muted/30 p-8 text-center"
 							>
-								<a href="/signin" class="text-primary hover:underline">Sign in</a> to leave a comment.
+								<p class="mb-4 text-sm text-muted-foreground">
+									Log in to join the conversation and share your thoughts.
+								</p>
+								<Button href="/signin" variant="outline" size="sm">Sign in to comment</Button>
 							</div>
 						{/if}
 
@@ -235,26 +253,35 @@
 										</div>
 										<p class="text-sm text-foreground">{comment.content}</p>
 										<div class="mt-3 flex items-center gap-2">
-											<Button
-												variant={comment.userReaction === 'like' ? 'default' : 'ghost'}
-												size="sm"
-												class="h-7 gap-1 px-2"
-												onclick={() => handleCommentLike(comment._id)}
-												disabled={!session.value?.data?.user}
-											>
-												<ThumbsUp class="h-3 w-3" />
-												<span class="text-xs">{comment.likes}</span>
-											</Button>
-											<Button
-												variant={comment.userReaction === 'dislike' ? 'default' : 'ghost'}
-												size="sm"
-												class="h-7 gap-1 px-2"
-												onclick={() => handleCommentDislike(comment._id)}
-												disabled={!session.value?.data?.user}
-											>
-												<ThumbsDown class="h-3 w-3" />
-												<span class="text-xs">{comment.dislikes}</span>
-											</Button>
+											{#if session.value?.data?.user}
+												<Button
+													variant={comment.userReaction === 'like' ? 'default' : 'ghost'}
+													size="sm"
+													class="h-7 gap-1 px-2"
+													onclick={() => handleCommentLike(comment._id)}
+												>
+													<ThumbsUp class="h-3 w-3" />
+													<span class="text-xs">{comment.likes}</span>
+												</Button>
+												<Button
+													variant={comment.userReaction === 'dislike' ? 'default' : 'ghost'}
+													size="sm"
+													class="h-7 gap-1 px-2"
+													onclick={() => handleCommentDislike(comment._id)}
+												>
+													<ThumbsDown class="h-3 w-3" />
+													<span class="text-xs">{comment.dislikes}</span>
+												</Button>
+											{:else}
+												<Button variant="ghost" size="sm" class="h-7 gap-1 px-2" href="/signin">
+													<ThumbsUp class="h-3 w-3" />
+													<span class="text-xs">{comment.likes}</span>
+												</Button>
+												<Button variant="ghost" size="sm" class="h-7 gap-1 px-2" href="/signin">
+													<ThumbsDown class="h-3 w-3" />
+													<span class="text-xs">{comment.dislikes}</span>
+												</Button>
+											{/if}
 										</div>
 									</div>
 								{/each}
@@ -267,32 +294,47 @@
 					</div>
 				</article>
 
-				<aside class="space-y-8">
+				<aside class="sticky top-16 space-y-8 self-start">
 					<div>
 						<h3 class="mb-4 text-sm font-bold tracking-wider text-muted-foreground uppercase">
 							Recent Posts
 						</h3>
 						<div class="space-y-6">
 							{#each otherBlogs as other}
-								<a href="/blog/{other._id}" class="group block space-y-2">
-									<p class="text-xs text-muted-foreground">{formatDate(other.createdAt)}</p>
+								<a
+									href="/blog/{other._id}"
+									class="group -mx-2 flex flex-col rounded-md border-b border-border/50 px-2 py-3 transition-colors last:border-0 hover:bg-muted/80"
+								>
 									<h4
-										class="text-sm leading-tight font-bold transition-colors group-hover:text-primary"
+										class="mb-2 line-clamp-2 text-sm leading-snug font-medium transition-colors group-hover:text-primary"
 									>
 										{other.title}
 									</h4>
+
+									<div class="flex items-center justify-between text-xs text-muted-foreground">
+										<p class="text-[11px] font-medium opacity-80">{formatDate(other.createdAt)}</p>
+
+										<!-- Compact Stats -->
+										<div class="flex items-center gap-3">
+											<div class="flex items-center gap-1">
+												<ThumbsUp class="h-3 w-3" />
+												<span class="text-[10px]">{other.likes}</span>
+											</div>
+											<div class="flex items-center gap-1">
+												<ThumbsDown class="h-3 w-3" />
+												<span class="text-[10px]">{other.dislikes}</span>
+											</div>
+											<div class="flex items-center gap-1">
+												<MessageCircle class="h-3 w-3" />
+												<span class="text-[10px]">{other.commentCount}</span>
+											</div>
+										</div>
+									</div>
 								</a>
 							{:else}
 								<p class="text-sm text-muted-foreground">No other posts yet.</p>
 							{/each}
 						</div>
-					</div>
-
-					<div class="rounded-2xl border border-border bg-card p-6">
-						<h3 class="text-sm font-bold">Stay Updated</h3>
-						<p class="mt-2 text-xs text-muted-foreground">
-							Explore our latest features and platform updates as we build the future of AI chat.
-						</p>
 					</div>
 				</aside>
 			</div>
