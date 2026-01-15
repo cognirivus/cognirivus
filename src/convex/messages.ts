@@ -1,5 +1,6 @@
 import { mutation, query, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
+import { authComponent } from './auth';
 
 /**
  * Lists all messages for a specific chat thread.
@@ -13,12 +14,12 @@ import { v } from 'convex/values';
 export const list = query({
 	args: { threadId: v.id('threads') },
 	handler: async (ctx, { threadId }) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) return [];
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return [];
 
 		// Verify user owns this thread
 		const thread = await ctx.db.get(threadId);
-		if (!thread || thread.userId !== identity.subject) return [];
+		if (!thread || thread.userId !== user._id) return [];
 
 		const messages = await ctx.db
 			.query('messages')
@@ -60,21 +61,21 @@ export const send = mutation({
 		role: v.union(v.literal('user'), v.literal('assistant'))
 	},
 	handler: async (ctx, { body, reasoning, threadId, role }) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) {
 			throw new Error('Not authenticated');
 		}
 
 		// Verify user owns this thread
 		const thread = await ctx.db.get(threadId);
-		if (!thread || thread.userId !== identity.subject) {
+		if (!thread || thread.userId !== user._id) {
 			throw new Error('Thread not found or unauthorized');
 		}
 
 		await ctx.db.insert('messages', {
 			body,
 			reasoning,
-			userId: identity.subject,
+			userId: user._id,
 			threadId,
 			role,
 			createdAt: Date.now()
@@ -202,11 +203,11 @@ export const internalAppendMemories = internalMutation({
 export const cancel = mutation({
 	args: { messageId: v.id('messages') },
 	handler: async (ctx, { messageId }) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) throw new Error('Unauthorized');
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
 
 		const message = await ctx.db.get(messageId);
-		if (!message || message.userId !== identity.subject) return;
+		if (!message || message.userId !== user._id) return;
 
 		// Move signal to a separate table to avoid OptimisticConcurrencyControlFailure
 		const existing = await ctx.db
@@ -229,9 +230,9 @@ export const cancel = mutation({
 export const checkCancelled = query({
 	args: { messageId: v.id('messages') },
 	handler: async (ctx, { messageId }) => {
-		const identity = await ctx.auth.getUserIdentity();
+		const user = await authComponent.getAuthUser(ctx);
 		const message = await ctx.db.get(messageId);
-		if (!message || (identity && message.userId !== identity.subject)) return false;
+		if (!message || (user && message.userId !== user._id)) return false;
 
 		// Check if cancellation exists
 		const cancellation = await ctx.db

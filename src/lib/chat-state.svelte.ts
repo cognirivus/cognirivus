@@ -62,6 +62,7 @@ export class ChatContext {
 			context_length: number;
 			pricing: { prompt: string; completion: string };
 			output_modalities: string[];
+			supported_parameters: string[];
 		}[]
 	>([]);
 
@@ -99,7 +100,8 @@ export class ChatContext {
 				name: m.name,
 				context_length: m.attributes.context_length,
 				pricing: m.attributes.pricing,
-				output_modalities: m.attributes.architecture?.output_modalities || []
+				output_modalities: m.attributes.architecture?.output_modalities || [],
+				supported_parameters: m.attributes.supported_parameters || []
 			}));
 
 			this.models = mappedModels;

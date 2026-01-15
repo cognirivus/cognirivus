@@ -1,4 +1,5 @@
 import { query } from './_generated/server';
+import { authComponent } from './auth';
 
 /**
  * Retrieves usage statistics for the authenticated user's dashboard.
@@ -13,12 +14,12 @@ import { query } from './_generated/server';
  */
 export const getDashboardStats = query({
 	handler: async (ctx) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) return null;
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return null;
 
 		const usageLogs = await ctx.db
 			.query('usage_logs')
-			.withIndex('by_user', (q) => q.eq('userId', identity.subject))
+			.withIndex('by_user', (q) => q.eq('userId', user._id))
 			.collect();
 
 		let totalTokens = 0;

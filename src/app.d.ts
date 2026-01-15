@@ -3,6 +3,14 @@ declare global {
 		interface Locals {
 			token: string | undefined;
 		}
+		interface PageData {
+			currentUser?: {
+				id: string;
+				email: string;
+				name: string;
+			} | null;
+			authState?: import('@mmailaender/convex-better-auth-svelte/sveltekit').AuthState;
+		}
 	}
 }
 

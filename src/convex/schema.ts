@@ -41,7 +41,7 @@ const schema = defineSchema({
 		title: v.string(),
 		userId: v.string(),
 		updatedAt: v.number()
-	}).index('by_user', ['userId']),
+	}).index('by_user', ['userId', 'updatedAt']),
 	usage_logs: defineTable({
 		userId: v.string(),
 		messageId: v.optional(v.id('messages')),
@@ -97,7 +97,16 @@ const schema = defineSchema({
 		lastUpdated: v.number()
 	})
 		.index('by_model_id', ['modelId'])
-		.index('by_enabled', ['isEnabled'])
+		.index('by_enabled', ['isEnabled']),
+	blogs: defineTable({
+		title: v.string(),
+		content: v.string(),
+		authorId: v.string(),
+		createdAt: v.number(),
+		published: v.boolean()
+	})
+		.index('by_created_at', ['createdAt'])
+		.index('by_published', ['published'])
 });
 
 export default schema;

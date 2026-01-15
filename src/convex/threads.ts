@@ -1,5 +1,6 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
+import { authComponent } from './auth';
 
 /**
  * Lists all chat threads for the authenticated user.
@@ -11,14 +12,14 @@ import { v } from 'convex/values';
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) return [];
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return [];
 
 		return await ctx.db
 			.query('threads')
-			.withIndex('by_user', (q) => q.eq('userId', identity.subject))
+			.withIndex('by_user', (q) => q.eq('userId', user._id))
 			.order('desc')
-			.collect();
+			.take(100);
 	}
 });
 
@@ -33,11 +34,11 @@ export const list = query({
 export const get = query({
 	args: { id: v.id('threads') },
 	handler: async (ctx, { id }) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) return null;
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return null;
 
 		const thread = await ctx.db.get(id);
-		if (!thread || thread.userId !== identity.subject) return null;
+		if (!thread || thread.userId !== user._id) return null;
 
 		return thread;
 	}
@@ -53,12 +54,12 @@ export const get = query({
 export const create = mutation({
 	args: { title: v.string() },
 	handler: async (ctx, { title }) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) throw new Error('Not authenticated');
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Not authenticated');
 
 		return await ctx.db.insert('threads', {
 			title,
-			userId: identity.subject,
+			userId: user._id,
 			updatedAt: Date.now()
 		});
 	}
@@ -75,11 +76,11 @@ export const create = mutation({
 export const remove = mutation({
 	args: { id: v.id('threads') },
 	handler: async (ctx, { id }) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) throw new Error('Not authenticated');
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Not authenticated');
 
 		const thread = await ctx.db.get(id);
-		if (!thread || thread.userId !== identity.subject) {
+		if (!thread || thread.userId !== user._id) {
 			throw new Error('Thread not found or unauthorized');
 		}
 
@@ -109,11 +110,11 @@ export const remove = mutation({
 export const rename = mutation({
 	args: { id: v.id('threads'), title: v.string() },
 	handler: async (ctx, { id, title }) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) throw new Error('Not authenticated');
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Not authenticated');
 
 		const thread = await ctx.db.get(id);
-		if (!thread || thread.userId !== identity.subject) {
+		if (!thread || thread.userId !== user._id) {
 			throw new Error('Thread not found or unauthorized');
 		}
 

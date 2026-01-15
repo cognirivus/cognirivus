@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useQuery } from 'convex-svelte';
+	import { api } from '$convex/_generated/api';
 	import { authClient } from '$lib/auth-client';
 	import { page } from '$app/state';
 	import ThemeToggle from './theme-toggle.svelte';
@@ -9,28 +11,48 @@
 		MessageSquare,
 		Image as ImageIcon,
 		LayoutDashboard,
+		ShieldCheck,
+		User,
 		Menu,
+		BookOpen,
 		X
 	} from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import Logo from './Logo.svelte';
 
 	const auth = useAuth();
+	const currentUserQuery = useQuery(api.auth.getCurrentUser, {}, () => ({
+		initialData: (page.data as any).currentUser,
+		keepPreviousData: true
+	}));
+	const user = $derived(currentUserQuery.data);
 
 	let isMobileMenuOpen = $state(false);
 
 	const navItems = [
 		{ name: 'Chat', href: '/chat', icon: MessageSquare, authRequired: true },
 		{ name: 'Images', href: '/image', icon: ImageIcon, authRequired: true },
-		{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, authRequired: true }
+		{ name: 'Blog', href: '/blog', icon: BookOpen, authRequired: false },
+		{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, authRequired: true },
+		{ name: 'Admin', href: '/admin', icon: ShieldCheck, adminOnly: true }
 	];
 
 	const filteredNavItems = $derived(
-		navItems.filter((item) => !item.authRequired || auth.isAuthenticated)
+		navItems.filter((item) => {
+			if (item.adminOnly) {
+				const role = user?.role;
+				const isAdmin = Array.isArray(role) ? role.includes('admin') : role === 'admin';
+				return isAdmin;
+			}
+			return !item.authRequired || !!user;
+		})
 	);
+
+	import { invalidateAll } from '$app/navigation';
 
 	async function signOut() {
 		await authClient.signOut();
+		await invalidateAll();
 	}
 </script>
 
@@ -43,20 +65,42 @@
 
 		<!-- Desktop Navigation -->
 		<div class="hidden md:flex md:items-center md:gap-1">
-			{#each filteredNavItems as item}
-				<a
-					href={item.href}
-					class="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground {page
-						.url.pathname === item.href
-						? 'text-primary'
-						: 'text-muted-foreground'}"
-				>
-					{item.name}
-				</a>
-			{/each}
+			{#if auth.isLoading && !user}
+				<div class="flex items-center gap-2">
+					<div class="h-8 w-16 animate-pulse rounded-md bg-muted/60"></div>
+					<div class="h-8 w-16 animate-pulse rounded-md bg-muted/60"></div>
+					<div class="h-8 w-20 animate-pulse rounded-md bg-muted/60"></div>
+				</div>
+			{:else}
+				{#each filteredNavItems as item}
+					<a
+						href={item.href}
+						class="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground {page
+							.url.pathname === item.href
+							? 'text-primary'
+							: 'text-muted-foreground'}"
+					>
+						{item.name}
+					</a>
+				{/each}
+			{/if}
 
 			<div class="ml-4 flex items-center gap-3">
-				{#if auth.isAuthenticated}
+				{#if auth.isLoading && !user}
+					<div class="flex items-center gap-3">
+						<div class="h-8 w-20 animate-pulse rounded-md bg-muted/60"></div>
+						<div class="h-8 w-24 animate-pulse rounded-md bg-muted/60"></div>
+					</div>
+				{:else if user}
+					<Button
+						variant="ghost"
+						size="sm"
+						href="/profile"
+						class="gap-2 text-muted-foreground transition-colors hover:text-primary"
+					>
+						<User class="h-4 w-4" />
+						<span>Profile</span>
+					</Button>
 					<Button
 						variant="ghost"
 						size="sm"
@@ -98,21 +142,41 @@
 	{#if isMobileMenuOpen}
 		<div class="border-b border-border bg-background/95 backdrop-blur-md md:hidden">
 			<div class="space-y-1 px-4 py-4">
-				{#each filteredNavItems as item}
-					<a
-						href={item.href}
-						class="flex items-center gap-3 rounded-lg px-3 py-3 text-base font-medium transition-colors hover:bg-accent {page
-							.url.pathname === item.href
-							? 'bg-accent/50 text-primary'
-							: 'text-muted-foreground'}"
-						onclick={() => (isMobileMenuOpen = false)}
-					>
-						<item.icon class="h-5 w-5" />
-						{item.name}
-					</a>
-				{/each}
+				{#if auth.isLoading && !user}
+					<div class="space-y-2 py-2">
+						<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
+						<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
+						<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
+					</div>
+				{:else}
+					{#each filteredNavItems as item}
+						<a
+							href={item.href}
+							class="flex items-center gap-3 rounded-lg px-3 py-3 text-base font-medium transition-colors hover:bg-accent {page
+								.url.pathname === item.href
+								? 'bg-accent/50 text-primary'
+								: 'text-muted-foreground'}"
+							onclick={() => (isMobileMenuOpen = false)}
+						>
+							<item.icon class="h-5 w-5" />
+							{item.name}
+						</a>
+					{/each}
+				{/if}
 				<div>
-					{#if auth.isAuthenticated}
+					{#if auth.isLoading && !user}
+						<div class="mt-2 space-y-2">
+							<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
+						</div>
+					{:else if user}
+						<a
+							href="/profile"
+							class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-base font-medium text-muted-foreground transition-colors hover:bg-accent"
+							onclick={() => (isMobileMenuOpen = false)}
+						>
+							<User class="h-5 w-5" />
+							Profile
+						</a>
 						<button
 							onclick={() => {
 								signOut();

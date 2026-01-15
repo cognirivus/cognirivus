@@ -1,7 +1,7 @@
 import { action, query, mutation, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
-
+import { authComponent } from './auth';
 
 // Aspect ratio to dimensions mapping
 const ASPECT_DIMENSIONS: Record<string, { width: number; height: number }> = {
@@ -25,8 +25,8 @@ const ASPECT_DIMENSIONS: Record<string, { width: number; height: number }> = {
 export const listImageModels = action({
 	args: {},
 	handler: async (ctx) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) throw new Error('Unauthorized');
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
 
 		const response = await fetch('https://openrouter.ai/api/v1/models', {
 			headers: {
@@ -84,9 +84,9 @@ export const generate = action({
 		seed: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) throw new Error('Unauthorized');
-		const userId = identity.subject;
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
+		const userId = user._id;
 
 		const { provider, prompt, aspectRatio, model, negativePrompt, steps, guidance, seed } = args;
 		const dimensions = ASPECT_DIMENSIONS[aspectRatio] || ASPECT_DIMENSIONS['1:1'];
@@ -237,13 +237,13 @@ export const saveGeneration = internalMutation({
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) return [];
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return [];
 
 		// All images are now in generated_images table (both standalone and chat-generated)
 		const images = await ctx.db
 			.query('generated_images')
-			.withIndex('by_user', (q) => q.eq('userId', identity.subject))
+			.withIndex('by_user', (q) => q.eq('userId', user._id))
 			.order('desc')
 			.take(50);
 
@@ -280,12 +280,12 @@ export const remove = mutation({
 		id: v.id('generated_images')
 	},
 	handler: async (ctx, { id }) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) throw new Error('Unauthorized');
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
 
 		const image = await ctx.db.get(id);
 		if (!image) throw new Error('Image not found');
-		if (image.userId !== identity.subject) throw new Error('Unauthorized');
+		if (image.userId !== user._id) throw new Error('Unauthorized');
 
 		// Delete from storage
 		await ctx.storage.delete(image.imageId);

@@ -15,6 +15,7 @@ import {
 	judgeMemoryDuplicate,
 	getGenerationStats
 } from './lib/openrouter';
+import { authComponent } from './auth';
 
 /**
  * Internal mutation to store a single user memory.
@@ -139,7 +140,7 @@ export const addMemory = internalAction({
 							decision = 'new';
 						} else {
 							// Stage 2: AI Judge
-							const [existingDoc] = await ctx.runQuery(internal.memories.internalGetMemories, {
+							const [existingDoc] = await ctx.runQuery(internal.memories.internalGetGetMemories, {
 								ids: [topMatch._id]
 							});
 
@@ -271,7 +272,9 @@ export const searchMemories = internalAction({
 
 		// Fetch the actual memory text
 		const memoryIds = results.map((r) => r._id);
-		const memories = await ctx.runQuery(internal.memories.internalGetMemories, { ids: memoryIds });
+		const memories = await ctx.runQuery(internal.memories.internalGetGetMemories, {
+			ids: memoryIds
+		});
 
 		// Merge scores with memories
 		return memories.map((mem: any) => {
@@ -290,7 +293,7 @@ export const searchMemories = internalAction({
  * @param ids - An array of memory IDs to fetch.
  * @returns A list of memory documents.
  */
-export const internalGetMemories = internalQuery({
+export const internalGetGetMemories = internalQuery({
 	args: { ids: v.array(v.id('user_memories')) },
 	handler: async (ctx, args) => {
 		const docs = [];
@@ -313,12 +316,12 @@ export const internalGetMemories = internalQuery({
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) return [];
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return [];
 
 		const memories = await ctx.db
 			.query('user_memories')
-			.withIndex('by_user', (q) => q.eq('userId', identity.subject))
+			.withIndex('by_user', (q) => q.eq('userId', user._id))
 			.collect();
 
 		// Sort by createdAt descending and omit embedding for frontend
@@ -344,11 +347,11 @@ export const list = query({
 export const remove = mutation({
 	args: { id: v.id('user_memories') },
 	handler: async (ctx, args) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) throw new Error('Unauthorized');
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
 
 		const memory = await ctx.db.get(args.id);
-		if (!memory || memory.userId !== identity.subject) {
+		if (!memory || memory.userId !== user._id) {
 			throw new Error('Memory not found or access denied');
 		}
 

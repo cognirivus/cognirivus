@@ -8,7 +8,8 @@
 		Image,
 		Plus,
 		Activity,
-		Database
+		Database,
+		Star
 	} from '@lucide/svelte';
 	import { useChatContext } from '$lib/chat-state.svelte';
 	import { onMount } from 'svelte';
@@ -35,12 +36,27 @@
 	let showToolsMenu = $state(false);
 	let showTokenDetail = $state(false);
 	let searchQuery = $state('');
+	let favoriteModels = $state<string[]>([]);
 
 	let filteredModels = $derived(
 		models.filter((m) => {
 			const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase());
 			const matchesImage = chatState.generateImage ? m.output_modalities.includes('image') : true;
-			return matchesSearch && matchesImage;
+			const matchesReasoning = chatState.includeReasoning ? 
+				(m.supported_parameters?.includes('reasoning') || m.supported_parameters?.includes('include_reasoning')) : true;
+			return matchesSearch && matchesImage && matchesReasoning;
+		}).sort((a, b) => {
+			// Always put selected model first
+			if (a.id === selectedModel) return -1;
+			if (b.id === selectedModel) return 1;
+			
+			// Then sort by favorites
+			const aIsFavorite = favoriteModels.includes(a.id);
+			const bIsFavorite = favoriteModels.includes(b.id);
+			if (aIsFavorite && !bIsFavorite) return -1;
+			if (!aIsFavorite && bIsFavorite) return 1;
+			
+			return 0;
 		})
 	);
 	let container: HTMLElement;
@@ -69,6 +85,45 @@
 			}
 		}
 	}
+
+	function toggleReasoning() {
+		chatState.includeReasoning = !chatState.includeReasoning;
+		if (chatState.includeReasoning) {
+			const currentM = models.find((m) => m.id === selectedModel);
+			if (currentM && !(currentM.supported_parameters?.includes('reasoning') || currentM.supported_parameters?.includes('include_reasoning'))) {
+				const firstReasoningModel = models.find((m) => m.supported_parameters?.includes('reasoning') || m.supported_parameters?.includes('include_reasoning'));
+				if (firstReasoningModel) {
+					selectedModel = firstReasoningModel.id;
+				}
+			}
+		}
+	}
+
+	function toggleFavorite(modelId: string) {
+		if (favoriteModels.includes(modelId)) {
+			favoriteModels = favoriteModels.filter(id => id !== modelId);
+		} else {
+			favoriteModels = [...favoriteModels, modelId];
+		}
+		// Save to localStorage
+		if (typeof window !== 'undefined') {
+			localStorage.setItem('cognirivus_favorite_models', JSON.stringify(favoriteModels));
+		}
+	}
+
+	// Load favorites from localStorage
+	onMount(() => {
+		if (typeof window !== 'undefined') {
+			try {
+				const saved = localStorage.getItem('cognirivus_favorite_models');
+				if (saved) {
+					favoriteModels = JSON.parse(saved);
+				}
+			} catch (e) {
+				console.warn('Failed to load favorite models from localStorage', e);
+			}
+		}
+	});
 </script>
 
 <div
@@ -104,7 +159,7 @@
 				>
 					<button
 						type="button"
-						onclick={() => (chatState.includeReasoning = !chatState.includeReasoning)}
+						onclick={toggleReasoning}
 						disabled={chatStatus === 'streaming'}
 						class="flex h-8 w-9 flex-shrink-0 items-center justify-center rounded-l-[10px] transition-all {chatState.includeReasoning
 							? 'bg-primary text-primary-foreground shadow-sm'
@@ -203,27 +258,45 @@
 								</div>
 								<div class="max-h-[300px] overflow-y-auto p-1">
 									{#each filteredModels as model}
-										<button
-											type="button"
-											disabled={chatStatus === 'streaming'}
-											onclick={() => {
-												selectedModel = model.id;
-												showModelSelector = false;
-												searchQuery = '';
-											}}
-											class="flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-left transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 {selectedModel ===
+										<div class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 transition-colors {selectedModel ===
 											model.id
 												? 'bg-muted shadow-sm ring-1 ring-border'
-												: ''}"
-										>
-											<div class="flex w-full items-center justify-between">
-												<span
-													class="text-[11px] font-bold tracking-tight {selectedModel === model.id
-														? 'text-primary'
-														: 'text-foreground/90'}">{model.name}</span
-												>
-											</div>
-										</button>
+												: ''}">
+											<button
+												type="button"
+												disabled={chatStatus === 'streaming'}
+												onclick={() => {
+													selectedModel = model.id;
+													showModelSelector = false;
+													searchQuery = '';
+												}}
+												class="flex flex-1 flex-col items-start gap-1 text-left rounded-lg px-2 py-1.5 transition-all hover:bg-muted"
+											>
+												<div class="flex w-full items-center justify-between">
+													<span
+														class="text-[11px] font-bold tracking-tight {selectedModel === model.id
+															? 'text-primary'
+															: 'text-foreground/90'}">{model.name}</span
+													>
+													{#if model.supported_parameters?.includes('reasoning') || model.supported_parameters?.includes('include_reasoning')}
+														<div title="Supports Reasoning">
+															<Brain class="h-3 w-3 text-primary" />
+														</div>
+													{/if}
+												</div>
+											</button>
+											<button
+												type="button"
+												onclick={(e) => {
+													e.stopPropagation();
+													toggleFavorite(model.id);
+												}}
+												class="p-0.5 hover:bg-muted/50 rounded transition-colors"
+												title={favoriteModels.includes(model.id) ? 'Remove from favorites' : 'Add to favorites'}
+											>
+												<Star class={`h-3 w-3 ${favoriteModels.includes(model.id) ? 'fill-current text-yellow-500' : 'text-muted-foreground'}`} />
+											</button>
+										</div>
 									{/each}
 									{#if filteredModels.length === 0}
 										<div class="py-12 text-center text-xs text-muted-foreground italic">
@@ -298,7 +371,7 @@
 				<div class="hidden min-w-0 flex-1 items-center gap-1 sm:flex">
 					<button
 						type="button"
-						onclick={() => (chatState.includeReasoning = !chatState.includeReasoning)}
+						onclick={toggleReasoning}
 						disabled={chatStatus === 'streaming'}
 						class="flex h-8 w-8 items-center justify-center rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50 {chatState.includeReasoning
 							? 'bg-primary text-primary-foreground shadow-sm'
@@ -407,49 +480,67 @@
 								</div>
 								<div class="max-h-[300px] overflow-y-auto p-1">
 									{#each filteredModels as model}
-										<button
-											type="button"
-											disabled={chatStatus === 'streaming'}
-											onclick={() => {
-												selectedModel = model.id;
-												showModelSelector = false;
-												searchQuery = '';
-											}}
-											class="flex w-full flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-left transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 {selectedModel ===
+										<div class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 transition-colors {selectedModel ===
 											model.id
 												? 'bg-muted shadow-sm ring-1 ring-border'
-												: ''}"
-										>
-											<div class="flex w-full items-center justify-between">
-												<span
-													class="text-[11px] font-bold tracking-tight {selectedModel === model.id
-														? 'text-primary'
-														: 'text-foreground/90'}">{model.name}</span
-												>
-												{#if model.context_length}
+												: ''}">
+											<button
+												type="button"
+												disabled={chatStatus === 'streaming'}
+												onclick={() => {
+													selectedModel = model.id;
+													showModelSelector = false;
+													searchQuery = '';
+												}}
+												class="flex flex-1 flex-col items-start gap-1 text-left rounded-lg px-2 py-1.5 transition-all hover:bg-muted"
+											>
+												<div class="flex w-full items-center justify-between">
 													<span
-														class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground/70"
+														class="text-[11px] font-bold tracking-tight {selectedModel === model.id
+															? 'text-primary'
+															: 'text-foreground/90'}">{model.name}</span
+													>
+													{#if model.context_length}
+														<span
+															class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground/70"
 														>{Math.round(model.context_length / 1000)}k ctx</span
-													>
-												{/if}
-											</div>
-											{#if model.pricing}
-												<div
-													class="flex w-full items-center gap-3 text-[9px] font-medium tracking-tight text-muted-foreground/60"
-												>
-													<span
-														>IN: ${parseFloat(model.pricing.prompt) * 1000000 < 0.01
-															? (parseFloat(model.pricing.prompt) * 1000000).toPrecision(2)
-															: (parseFloat(model.pricing.prompt) * 1000000).toFixed(2)} / 1M</span
-													>
-													<span
-														>OUT: ${parseFloat(model.pricing.completion) * 1000000 < 0.01
-															? (parseFloat(model.pricing.completion) * 1000000).toPrecision(2)
-															: (parseFloat(model.pricing.completion) * 1000000).toFixed(2)} / 1M</span
-													>
+														>
+													{/if}
 												</div>
-											{/if}
-										</button>
+												{#if model.pricing}
+													<div
+														class="flex w-full items-center gap-3 text-[9px] font-medium tracking-tight text-muted-foreground/60"
+													>
+														<span
+															>IN: ${parseFloat(model.pricing.prompt) * 1000000 < 0.01
+																? (parseFloat(model.pricing.prompt) * 1000000).toPrecision(2)
+																: (parseFloat(model.pricing.prompt) * 1000000).toFixed(2)} / 1M</span
+														>
+														<span
+															>OUT: ${parseFloat(model.pricing.completion) * 1000000 < 0.01
+																? (parseFloat(model.pricing.completion) * 1000000).toPrecision(2)
+																: (parseFloat(model.pricing.completion) * 1000000).toFixed(2)} / 1M</span
+														>
+														{#if model.supported_parameters?.includes('reasoning') || model.supported_parameters?.includes('include_reasoning')}
+															<div title="Supports Reasoning">
+																<Brain class="h-3 w-3 text-primary" />
+															</div>
+														{/if}
+													</div>
+												{/if}
+											</button>
+											<button
+												type="button"
+												onclick={(e) => {
+													e.stopPropagation();
+													toggleFavorite(model.id);
+												}}
+												class="flex h-7 w-7 items-center justify-center rounded-lg bg-muted p-0.5 transition-colors hover:bg-muted/50"
+												title={favoriteModels.includes(model.id) ? 'Remove from favorites' : 'Add to favorites'}
+											>
+												<Star class={`h-3 w-3 ${favoriteModels.includes(model.id) ? 'fill-current text-yellow-500' : 'text-muted-foreground'}`} />
+											</button>
+										</div>
 									{/each}
 									{#if filteredModels.length === 0}
 										<div class="py-12 text-center text-xs text-muted-foreground italic">

@@ -1,4 +1,5 @@
 import { query } from './_generated/server';
+import { authComponent } from './auth';
 
 /**
  * Retrieves the current authenticated user's profile.
@@ -8,8 +9,8 @@ import { query } from './_generated/server';
 export const viewer = query({
 	args: {},
 	handler: async (ctx) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) return null;
-		return { id: identity.subject, email: identity.email, name: identity.name };
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return null;
+		return { id: user._id, email: user.email, name: user.name };
 	}
 });

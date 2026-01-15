@@ -2,6 +2,7 @@ import { action } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { getGenerationStats } from './lib/openrouter';
+import { authComponent } from './auth';
 
 /**
  * Generates an AI response for a given chat thread.
@@ -37,9 +38,9 @@ export const generate = action({
 		ctx,
 		{ threadId, model, includeReasoning, generateImage, imageAspectRatio, useMemory }
 	) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) throw new Error('Unauthorized');
-		const userId = identity.subject;
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
+		const userId = user._id;
 
 		// 1. Get previous messages
 		const messages = await ctx.runQuery(api.messages.list, { threadId });
@@ -50,12 +51,8 @@ export const generate = action({
 
 		// Trigger memory storage for the user's new message (fire-and-forget)
 		// Always store memories regardless of useMemory flag
-		console.log(
-			'Cognirivus: Checking last user message for memory storage:',
-			lastUserMessage?.body
-		);
+
 		if (lastUserMessage && lastUserMessage.body) {
-			console.log('Cognirivus: Scheduling addMemory action for message');
 			await ctx.scheduler.runAfter(0, internal.memories.addMemory, {
 				userId,
 				messageId: lastUserMessage._id,
@@ -220,7 +217,6 @@ export const generate = action({
 							// Capture ID on first chunk - MUST happen before we might break
 							if (json.id && !generationId) {
 								generationId = json.id;
-								console.log(`Cognirivus: Generation ID captured: ${generationId}`);
 							}
 
 							if (json.usage) {
@@ -305,10 +301,6 @@ export const generate = action({
 					}
 				}
 			}
-
-			console.log(
-				`Cognirivus: Stream finished - chunks: ${chunkCount}, final length: ${fullContent.length}`
-			);
 		} catch (e: any) {
 			if (e.name === 'AbortError') {
 				console.log('Cognirivus: Stream aborted by user (AbortController).');
