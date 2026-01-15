@@ -8,7 +8,15 @@ import authConfig from './auth.config';
 import authSchema from './betterAuth/schema';
 import { admin } from 'better-auth/plugins';
 
-const siteUrl = process.env.SITE_URL || 'http://localhost:5173';
+const getSiteUrl = () => {
+	if (process.env.SITE_URL) return process.env.SITE_URL;
+	if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
+	if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+	return 'http://localhost:5173';
+};
+
+const siteUrl = getSiteUrl();
+console.log('Convex Auth Config - Resolved siteUrl:', siteUrl);
 
 /**
  * The auth component client.
@@ -30,9 +38,14 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
 		.map((id) => id.trim())
 		.filter(Boolean);
 
+	const secret = process.env.BETTER_AUTH_SECRET;
+	if (!secret) {
+		console.warn('BETTER_AUTH_SECRET is not defined');
+	}
+
 	return {
 		baseURL: siteUrl,
-		secret: process.env.BETTER_AUTH_SECRET,
+		secret: secret,
 		database: authComponent.adapter(ctx),
 		emailAndPassword: {
 			enabled: true,
