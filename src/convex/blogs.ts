@@ -162,6 +162,56 @@ export const get = query({
 	}
 });
 
+export const create = mutation({
+	args: {
+		title: v.string(),
+		content: v.string(),
+		published: v.boolean()
+	},
+	handler: async (ctx, args) => {
+		const user = await checkAdmin(ctx);
+		if (!user) {
+			throw new Error('Unauthorized: Admin access required');
+		}
+
+		return await ctx.db.insert('blogs', {
+			...args,
+			authorId: user._id,
+			createdAt: Date.now()
+		});
+	}
+});
+
+export const update = mutation({
+	args: {
+		id: v.id('blogs'),
+		title: v.string(),
+		content: v.string(),
+		published: v.boolean()
+	},
+	handler: async (ctx, args) => {
+		const user = await checkAdmin(ctx);
+		if (!user) {
+			throw new Error('Unauthorized: Admin access required');
+		}
+
+		const { id, ...data } = args;
+		await ctx.db.patch(id, data);
+	}
+});
+
+export const remove = mutation({
+	args: { id: v.id('blogs') },
+	handler: async (ctx, args) => {
+		const user = await checkAdmin(ctx);
+		if (!user) {
+			throw new Error('Unauthorized: Admin access required');
+		}
+
+		await ctx.db.delete(args.id);
+	}
+});
+
 export const getComments = query({
 	args: { blogId: v.id('blogs') },
 	handler: async (ctx, args) => {
