@@ -3,7 +3,7 @@
 	import { api } from '../../convex/_generated/api';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Calendar, User, ArrowRight } from '@lucide/svelte';
+	import { Calendar, ArrowRight, ThumbsUp, ThumbsDown, MessageCircle } from '@lucide/svelte';
 
 	const blogsQuery = useQuery(api.blogs.list, { onlyPublished: true });
 
@@ -39,11 +39,9 @@
 					<article
 						class="group relative flex flex-col items-start rounded-2xl border border-border bg-card p-6 transition-all hover:shadow-md"
 					>
-						<div class="flex items-center gap-4 text-xs text-muted-foreground">
-							<div class="flex items-center gap-1">
-								<Calendar class="h-3 w-3" />
-								{formatDate(blog.createdAt)}
-							</div>
+						<div class="flex items-center gap-1 text-xs text-muted-foreground">
+							<Calendar class="h-3 w-3" />
+							{formatDate(blog.createdAt)}
 						</div>
 						<h2 class="mt-4 text-2xl font-bold text-foreground group-hover:text-primary">
 							<a href="/blog/{blog._id}">
@@ -53,7 +51,21 @@
 						<p class="mt-4 line-clamp-3 text-muted-foreground">
 							{blog.content.substring(0, 200)}...
 						</p>
-						<div class="mt-6">
+						<div class="mt-6 flex w-full items-center justify-between">
+							<div class="flex items-center gap-4 text-xs text-muted-foreground">
+								<div class="flex items-center gap-1">
+									<ThumbsUp class="h-3 w-3" />
+									{blog.likes}
+								</div>
+								<div class="flex items-center gap-1">
+									<ThumbsDown class="h-3 w-3" />
+									{blog.dislikes}
+								</div>
+								<div class="flex items-center gap-1">
+									<MessageCircle class="h-3 w-3" />
+									{blog.commentCount}
+								</div>
+							</div>
 							<Button
 								variant="ghost"
 								size="sm"

@@ -106,7 +106,39 @@ const schema = defineSchema({
 		published: v.boolean()
 	})
 		.index('by_created_at', ['createdAt'])
-		.index('by_published', ['published'])
+		.index('by_published', ['published']),
+	blog_likes: defineTable({
+		blogId: v.id('blogs'),
+		userId: v.string()
+	})
+		.index('by_blog', ['blogId'])
+		.index('by_blog_user', ['blogId', 'userId']),
+	blog_dislikes: defineTable({
+		blogId: v.id('blogs'),
+		userId: v.string()
+	})
+		.index('by_blog', ['blogId'])
+		.index('by_blog_user', ['blogId', 'userId']),
+	blog_comments: defineTable({
+		blogId: v.id('blogs'),
+		userId: v.string(),
+		content: v.string(),
+		createdAt: v.number()
+	})
+		.index('by_blog', ['blogId'])
+		.index('by_blog_created_at', ['blogId', 'createdAt']),
+	comment_likes: defineTable({
+		commentId: v.id('blog_comments'),
+		userId: v.string()
+	})
+		.index('by_comment', ['commentId'])
+		.index('by_comment_user', ['commentId', 'userId']),
+	comment_dislikes: defineTable({
+		commentId: v.id('blog_comments'),
+		userId: v.string()
+	})
+		.index('by_comment', ['commentId'])
+		.index('by_comment_user', ['commentId', 'userId'])
 });
 
 export default schema;
