@@ -1,9 +1,18 @@
 import { v } from 'convex/values';
-import { mutation, query, type QueryCtx, type MutationCtx } from './_generated/server';
+import {
+	mutation,
+	query,
+	internalAction,
+	internalQuery,
+	type QueryCtx,
+	type MutationCtx
+} from './_generated/server';
 import { authComponent } from './auth';
+
 import { TableAggregate } from '@convex-dev/aggregate';
-import { components } from './_generated/api';
+import { components, internal } from './_generated/api';
 import { DataModel, Id } from './_generated/dataModel';
+import { rag } from './rag';
 
 const likesAggregate = new TableAggregate<{
 	Key: Id<'blogs'>;
@@ -55,6 +64,39 @@ async function checkAdmin(ctx: QueryCtx | MutationCtx) {
 	if (!isAdmin) return null;
 	return user;
 }
+
+// Internal Actions for RAG
+export const syncRag = internalAction({
+	args: { blogId: v.id('blogs'), title: v.string(), content: v.string() },
+	handler: async (ctx, args) => {
+		await rag.add(ctx, {
+			namespace: 'blogs',
+			key: args.blogId,
+			text: `${args.title}\n\n${args.content}`
+		});
+	}
+});
+
+export const backfillRag = internalAction({
+	args: {},
+	handler: async (ctx) => {
+		const blogs = await ctx.runQuery(internal.blogs.listInternal);
+		for (const blog of blogs) {
+			await rag.add(ctx, {
+				namespace: 'blogs',
+				key: blog._id,
+				text: `${blog.title}\n\n${blog.content}`
+			});
+		}
+	}
+});
+
+export const listInternal = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		return await ctx.db.query('blogs').collect();
+	}
+});
 
 export const list = query({
 	args: { onlyPublished: v.boolean() },
@@ -127,8 +169,6 @@ export const get = query({
 			})
 		]);
 
-		// FIX: Check identity first. If null, user is null.
-		// This prevents getAuthUser from throwing "Unauthenticated"
 		const identity = await ctx.auth.getUserIdentity();
 		const user = identity ? await authComponent.getAuthUser(ctx) : null;
 
@@ -174,11 +214,19 @@ export const create = mutation({
 			throw new Error('Unauthorized: Admin access required');
 		}
 
-		return await ctx.db.insert('blogs', {
+		const id = await ctx.db.insert('blogs', {
 			...args,
 			authorId: user._id,
 			createdAt: Date.now()
 		});
+
+		await ctx.scheduler.runAfter(0, internal.blogs.syncRag, {
+			blogId: id,
+			title: args.title,
+			content: args.content
+		});
+
+		return id;
 	}
 });
 
@@ -197,6 +245,12 @@ export const update = mutation({
 
 		const { id, ...data } = args;
 		await ctx.db.patch(id, data);
+
+		await ctx.scheduler.runAfter(0, internal.blogs.syncRag, {
+			blogId: id,
+			title: data.title,
+			content: data.content
+		});
 	}
 });
 
@@ -209,6 +263,9 @@ export const remove = mutation({
 		}
 
 		await ctx.db.delete(args.id);
+		// Note: RAG deletion requires entryId, which we don't have easily mapped.
+		// Skipping RAG deletion for now. Blog will remain searchable.
+		// TODO: Implement RAG deletion.
 	}
 });
 
@@ -221,7 +278,6 @@ export const getComments = query({
 			.order('desc')
 			.collect();
 
-		// FIX: Check identity first to avoid Unauthenticated error
 		const identity = await ctx.auth.getUserIdentity();
 		const user = identity ? await authComponent.getAuthUser(ctx) : null;
 
@@ -367,7 +423,6 @@ export const removeComment = mutation({
 		const comment = await ctx.db.get(args.id);
 		if (!comment) throw new Error('Comment not found');
 
-		// Only author or admin can remove
 		const isAdmin = Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin';
 		if (comment.userId !== user._id && !isAdmin) {
 			throw new Error('Forbidden');

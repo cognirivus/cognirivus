@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Terminal, Square, Image, ImageOff, Brain } from '@lucide/svelte';
+	import { Terminal, Square, Image, ImageOff, Brain, BookOpen } from '@lucide/svelte';
 	import { Message, MessageContent } from '$lib/components/prompt-kit/message/index.js';
 	import {
 		Reasoning,
@@ -11,7 +11,7 @@
 		message: any;
 		isLast: boolean;
 		isStreaming: boolean;
-		onViewContext: (id: string) => void;
+		onViewContext: (id: string, mode: 'full' | 'rag') => void;
 	}>();
 
 	let revealedMetadata = $state(false);
@@ -217,6 +217,22 @@
 						</Tooltip.Provider>
 					{/if}
 
+					{#if message.metadata?.ragResults?.length > 0}
+						<Button
+							variant="ghost"
+							size="sm"
+							class="h-5 gap-1 px-1.5 py-0 text-[9px] font-medium text-muted-foreground hover:text-foreground"
+							title="View blog context"
+							onclick={(e) => {
+								e.stopPropagation();
+								onViewContext(message._id, 'rag');
+							}}
+						>
+							<BookOpen class="h-3 w-3" />
+							<span>{message.metadata.ragResults.length} RAG</span>
+						</Button>
+					{/if}
+
 					<Button
 						variant="ghost"
 						size="sm"
@@ -224,7 +240,7 @@
 						title="View technical context (JSON)"
 						onclick={(e) => {
 							e.stopPropagation();
-							onViewContext(message._id);
+							onViewContext(message._id, 'full');
 						}}
 					>
 						<Terminal class="h-3 w-3" />
@@ -249,7 +265,7 @@
 				size="icon"
 				onclick={(e) => {
 					e.stopPropagation();
-					onViewContext(message._id);
+					onViewContext(message._id, 'full');
 				}}
 				class="h-6 w-6 text-muted-foreground hover:text-foreground"
 				title="View context sent to AI"

@@ -3,6 +3,7 @@ import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { getGenerationStats } from './lib/openrouter';
 import { authComponent } from './auth';
+import { rag } from './rag';
 
 /**
  * Generates an AI response for a given chat thread.
@@ -84,6 +85,63 @@ export const generate = action({
 			}
 		}
 
+		// RAG Search for Blogs
+		let ragContext = '';
+		let ragEntries: any[] = [];
+		let ragUsage: any = null;
+		try {
+			const result = await rag.search(ctx, {
+				namespace: 'blogs',
+				query: userPrompt,
+				limit: 3
+			});
+			const { text, results, entries, usage } = result;
+			if (text) {
+				console.log('RAG found relevant blogs:', text.substring(0, 100) + '...');
+				console.log('RAG Entries/Chunks:', entries); // Debugging RAG retrieval
+				ragContext = `\n\nRelevant blog posts:\n${text}\n`;
+
+				// Map results (chunks) to include entry metadata for the UI
+				// 'results' contains the specific chunks that matched
+				// Fetch blog titles for each unique blog
+				const uniqueBlogIds = [...new Set(entries.map((e) => e.key as string))];
+				const blogDocs = await Promise.all(
+					uniqueBlogIds.map((id) => ctx.runQuery(api.blogs.get, { id: id as any }))
+				);
+				const blogMap = new Map(blogDocs.filter(Boolean).map((b) => [b!._id, b!.title]));
+
+				ragEntries = results.map((r) => {
+					const entry = entries.find((e) => e.entryId === r.entryId);
+					const blogId = entry?.key as string | undefined;
+					return {
+						key: blogId,
+						title: blogId ? blogMap.get(blogId as any) : undefined,
+						text: r.content[0]?.text || '', // Assuming standard chunker puts text here
+						_score: r.score
+					};
+				});
+
+				ragUsage = usage;
+
+				// Log RAG embedding usage
+				if (usage) {
+					await ctx.runMutation(internal.usage.logUsage, {
+						userId,
+						messageId: undefined, // RAG usage happens before message creation
+						purpose: 'rag_search',
+						model: 'openai/text-embedding-3-small', // Default model configured in rag.ts
+						promptTokens: usage.tokens,
+						completionTokens: 0,
+						totalTokens: usage.tokens,
+						cost: 0, // OpenRouter embedding cost calculation if known, otherwise 0
+						raw_response: { usage }
+					});
+				}
+			}
+		} catch (e) {
+			console.error('Failed to search blogs', e);
+		}
+
 		// Format memories for context
 		const memoryContext =
 			relevantMemories.length > 0
@@ -96,15 +154,15 @@ export const generate = action({
 			content: m.isCancelled || m.metadata?.cancelled ? `[CANCELLED BY USER] ${m.body}` : m.body
 		}));
 
-		// Inject memories into the system instructions or as a system message at the start
-		if (memoryContext) {
+		// Inject memories and RAG context into the system instructions
+		const systemContent = `You are a helpful AI assistant.${memoryContext}${ragContext ? `\n\nUse the following blog posts to answer if relevant:${ragContext}` : ''}`;
+
+		if (memoryContext || ragContext) {
 			// Check if there is already a system message, if not add one.
 			// If existing messages don't have 'system', we can prepend one.
-			// However, usually previous messages are just user/assistant.
-			// We will prepend a system message with memories.
 			openRouterMessages.unshift({
 				role: 'system',
-				content: `You are a helpful AI assistant. Use the following memories to personalize your response if relevant:${memoryContext}`
+				content: systemContent
 			});
 		}
 
@@ -159,11 +217,13 @@ export const generate = action({
 			memorySearchQuery: useMemory !== false ? searchOutputText : undefined,
 			memoryFormulationPayload: useMemory !== false ? rewriterInput : undefined,
 			embeddingModel: useMemory !== false ? 'qwen/qwen3-embedding-8b' : undefined,
-			retrievedMemories: useMemory !== false ? relevantMemories : undefined
+			retrievedMemories: useMemory !== false ? relevantMemories : undefined,
+			ragResults: ragEntries
 		};
 		const initialMetadata = {
 			...(generateImage ? { isGeneratingImage: true, imageAspectRatio } : {}),
 			...(usedMemoriesForMeta.length > 0 ? { usedMemories: usedMemoriesForMeta } : {}),
+			...(ragEntries.length > 0 ? { ragResults: ragEntries } : {}),
 			requestPayload: contextPayload
 		};
 		const messageId = await ctx.runMutation(internal.messages.internalCreate, {
