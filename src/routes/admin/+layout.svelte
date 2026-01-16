@@ -1,21 +1,22 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { BarChart3, Settings } from '@lucide/svelte';
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
+	import { Shield, BookOpen, LayoutDashboard } from '@lucide/svelte';
+	import { buttonVariants } from '$lib/components/ui/button';
+	import { Separator } from '$lib/components/ui/separator';
 	import { cn } from '$lib/utils.js';
 
 	let { children } = $props();
 
 	const navItems = [
 		{
-			name: 'Usage',
-			href: '/dashboard/usage',
-			icon: BarChart3
+			name: 'Users',
+			href: '/admin',
+			icon: LayoutDashboard
 		},
 		{
-			name: 'Memories',
-			href: '/dashboard/memories',
-			icon: Settings
+			name: 'Blog Management',
+			href: '/admin/blog',
+			icon: BookOpen
 		}
 	];
 
@@ -23,14 +24,16 @@
 </script>
 
 <div class="flex h-[calc(100vh-4rem)] w-full flex-col bg-background">
-	<!-- Sub-navigation Navbar -->
+	<!-- Admin Navbar -->
 	<header class="border-b border-border bg-background/80 backdrop-blur-md">
 		<div
-			class="mx-auto flex h-auto min-h-[4rem] max-w-6xl flex-col items-start justify-center gap-2 px-6 py-3 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:py-0"
+			class="mx-auto flex h-auto min-h-[4rem] max-w-7xl flex-col items-start justify-center gap-2 px-6 py-3 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:py-0"
 		>
 			<div class="flex w-full items-center justify-between gap-8 sm:w-auto sm:justify-start">
-				<h2 class="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard</h2>
-				<!-- Hidden on desktop, shown on mobile for compact menu -->
+				<div class="flex items-center gap-2">
+					<Shield class="h-5 w-5 text-primary" />
+					<h2 class="text-lg font-bold tracking-tight text-foreground sm:text-xl">Admin</h2>
+				</div>
 			</div>
 			<nav class="flex w-full items-center gap-1 overflow-x-auto pb-1 sm:w-auto sm:pb-0">
 				{#each navItems as item}

@@ -2,6 +2,9 @@
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { MessageSquare, Sparkles, Shield, Image as ImageIcon, ArrowRight } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Separator } from '$lib/components/ui/separator';
 
 	const auth = useAuth();
 </script>
@@ -12,18 +15,21 @@
 		<div class="mx-auto max-w-4xl py-24 sm:py-32 lg:py-40">
 			<div class="text-center">
 				<div class="mb-8 flex justify-center">
-					<div
-						class="relative rounded-full px-3 py-1 text-sm leading-6 text-muted-foreground ring-1 ring-border transition-all hover:ring-primary/50"
+					<Badge
+						variant="outline"
+						class="px-3 py-1 text-sm font-medium transition-colors hover:border-primary/50"
 					>
-						Introducing Cognirivus v1.0. <a href="/chat" class="font-semibold text-primary"
-							><span class="absolute inset-0" aria-hidden="true"></span>Read more
-							<span aria-hidden="true">&rarr;</span></a
-						>
-					</div>
+						<span class="mr-2 inline-flex h-2 w-2 animate-pulse rounded-full bg-primary"></span>
+						Introducing Cognirivus v1.0.
+						<a href="/blog" class="ml-2 font-bold text-primary hover:underline">
+							Read more &rarr;
+						</a>
+					</Badge>
 				</div>
 				<h1 class="text-4xl font-extrabold tracking-tight text-foreground sm:text-6xl lg:text-7xl">
-					Experience the future of <span
-						class="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent"
+					Experience the future of <br />
+					<span
+						class="bg-gradient-to-r from-primary via-primary/80 to-primary/40 bg-clip-text text-transparent"
 						>AI Interaction</span
 					>
 				</h1>
@@ -62,47 +68,59 @@
 
 	<!-- Simple Features Section -->
 	<div id="features" class="mx-auto max-w-7xl px-6 pb-24 sm:pb-32 lg:px-8">
+		<div class="mb-16 flex flex-col items-center text-center">
+			<h2 class="text-3xl font-bold tracking-tight sm:text-4xl">
+				Everything you need in one place
+			</h2>
+			<p class="mt-4 max-w-2xl text-lg text-muted-foreground">
+				We've combined the most powerful AI capabilities into a single, intuitive interface.
+			</p>
+			<Separator class="mt-8 w-24" />
+		</div>
+
 		<div class="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-none">
-			<dl class="grid max-w-xl grid-cols-1 gap-x-12 gap-y-16 lg:max-w-none lg:grid-cols-3">
-				<div
-					class="flex flex-col items-start gap-4 rounded-2xl border border-border bg-card p-8 shadow-sm transition-all hover:border-primary/20 hover:shadow-md"
-				>
-					<div class="rounded-lg bg-primary/10 p-3 text-primary">
-						<MessageSquare class="h-6 w-6" />
-					</div>
-					<div>
-						<dt class="text-lg font-bold text-foreground">Real-time Chat</dt>
-						<dd class="mt-2 text-base leading-7 text-muted-foreground">
+			<dl class="grid max-w-xl grid-cols-1 gap-x-8 gap-y-8 lg:max-w-none lg:grid-cols-3">
+				<Card.Root class="group transition-all hover:border-primary/50 hover:shadow-lg">
+					<Card.Header>
+						<div
+							class="mb-2 w-fit rounded-lg bg-primary/10 p-3 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
+						>
+							<MessageSquare class="h-6 w-6" />
+						</div>
+						<Card.Title>Real-time Chat</Card.Title>
+						<Card.Description class="text-base leading-7">
 							Lightning-fast streaming responses from the world's best AI models.
-						</dd>
-					</div>
-				</div>
-				<div
-					class="flex flex-col items-start gap-4 rounded-2xl border border-border bg-card p-8 shadow-sm transition-all hover:border-primary/20 hover:shadow-md"
-				>
-					<div class="rounded-lg bg-primary/10 p-3 text-primary">
-						<ImageIcon class="h-6 w-6" />
-					</div>
-					<div>
-						<dt class="text-lg font-bold text-foreground">Image Generation</dt>
-						<dd class="mt-2 text-base leading-7 text-muted-foreground">
+						</Card.Description>
+					</Card.Header>
+				</Card.Root>
+
+				<Card.Root class="group transition-all hover:border-primary/50 hover:shadow-lg">
+					<Card.Header>
+						<div
+							class="mb-2 w-fit rounded-lg bg-primary/10 p-3 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
+						>
+							<ImageIcon class="h-6 w-6" />
+						</div>
+						<Card.Title>Image Generation</Card.Title>
+						<Card.Description class="text-base leading-7">
 							Create stunning visuals with integrated DALL-E and custom models.
-						</dd>
-					</div>
-				</div>
-				<div
-					class="flex flex-col items-start gap-4 rounded-2xl border border-border bg-card p-8 shadow-sm transition-all hover:border-primary/20 hover:shadow-md"
-				>
-					<div class="rounded-lg bg-primary/10 p-3 text-primary">
-						<Shield class="h-6 w-6" />
-					</div>
-					<div>
-						<dt class="text-lg font-bold text-foreground">Secure & Private</dt>
-						<dd class="mt-2 text-base leading-7 text-muted-foreground">
+						</Card.Description>
+					</Card.Header>
+				</Card.Root>
+
+				<Card.Root class="group transition-all hover:border-primary/50 hover:shadow-lg">
+					<Card.Header>
+						<div
+							class="mb-2 w-fit rounded-lg bg-primary/10 p-3 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
+						>
+							<Shield class="h-6 w-6" />
+						</div>
+						<Card.Title>Secure & Private</Card.Title>
+						<Card.Description class="text-base leading-7">
 							Your data is secured with enterprise-grade authentication and encryption.
-						</dd>
-					</div>
-				</div>
+						</Card.Description>
+					</Card.Header>
+				</Card.Root>
 			</dl>
 		</div>
 	</div>

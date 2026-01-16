@@ -20,6 +20,7 @@
 	} from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import { Separator } from '$lib/components/ui/separator';
 	import Logo from './Logo.svelte';
 	import { invalidateAll } from '$app/navigation';
 
@@ -98,7 +99,6 @@
 			<div class="ml-4 flex items-center gap-3">
 				{#if auth.isLoading && !user}
 					<div class="flex items-center gap-3">
-						<div class="h-8 w-20 animate-pulse rounded-md bg-muted/60"></div>
 						<div class="h-8 w-24 animate-pulse rounded-md bg-muted/60"></div>
 					</div>
 				{:else if user}
@@ -206,6 +206,9 @@
 						</a>
 					{/each}
 				{/if}
+
+				<Separator class="my-2" />
+
 				<div>
 					{#if auth.isLoading && !user}
 						<div class="mt-2 space-y-2">

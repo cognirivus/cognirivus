@@ -3,7 +3,10 @@
 	import { api } from '../../convex/_generated/api';
 	import type { Id } from '../../convex/_generated/dataModel';
 	import { Trash2, Brain, Loader2, Tag } from '@lucide/svelte';
-	import { Button } from '$lib/components/ui/button/index.js';
+	import { Button } from '$lib/components/ui/button';
+	import * as Card from '$lib/components/ui/card';
+	import { Badge } from '$lib/components/ui/badge';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { cn } from '$lib/utils';
 
 	const memories = useQuery(api.memories.list, {});
@@ -42,19 +45,35 @@
 </script>
 
 {#if memories.isLoading}
-	<div class="flex items-center justify-center py-12">
-		<Loader2 class="h-8 w-8 animate-spin text-primary" />
+	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+		{#each Array(6) as _}
+			<Card.Root>
+				<Card.Header class="flex flex-row items-center justify-between space-y-0 pb-2">
+					<Skeleton class="h-8 w-8 rounded-full" />
+					<Skeleton class="h-4 w-4 rounded-full" />
+				</Card.Header>
+				<Card.Content class="space-y-2">
+					<Skeleton class="h-4 w-full" />
+					<Skeleton class="h-4 w-[80%]" />
+					<div class="pt-4">
+						<Skeleton class="h-4 w-[60px] rounded-full" />
+					</div>
+				</Card.Content>
+			</Card.Root>
+		{/each}
 	</div>
 {:else if memories.data?.length === 0}
-	<div
-		class="flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center"
+	<Card.Root
+		class="flex min-h-[200px] flex-col items-center justify-center border-dashed bg-card/50 text-center"
 	>
-		<Brain class="mb-4 h-12 w-12 text-muted-foreground/20" />
-		<h3 class="text-lg font-medium text-foreground">No memories found</h3>
-		<p class="max-w-xs text-sm text-muted-foreground">
-			Chat with the AI to build your memory bank! It automatically remembers important details.
-		</p>
-	</div>
+		<Card.Content class="flex flex-col items-center pt-6">
+			<Brain class="mb-4 h-12 w-12 text-muted-foreground/20" />
+			<h3 class="text-lg font-medium text-foreground">No memories found</h3>
+			<p class="max-w-xs text-sm text-muted-foreground">
+				Chat with the AI to build your memory bank! It automatically remembers important details.
+			</p>
+		</Card.Content>
+	</Card.Root>
 {:else}
 	<!-- Tabs -->
 	<div class="scrollbar-none mb-6 flex flex-nowrap gap-2 overflow-x-auto pb-1">
@@ -64,23 +83,21 @@
 					activeTab = category;
 				}}
 				class={cn(
-					'inline-flex shrink-0 items-center rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200',
+					'inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200',
 					activeTab === category
 						? 'bg-primary text-primary-foreground shadow-sm'
 						: 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
 				)}
 			>
 				{category}
-				<span
-					class={cn(
-						'ml-2 rounded-full px-1.5 py-0.5 text-[10px]',
-						activeTab === category ? 'bg-primary-foreground/20' : 'bg-muted-foreground/20'
-					)}
+				<Badge
+					variant={activeTab === category ? 'secondary' : 'outline'}
+					class="ml-auto h-5 min-w-5 px-1 text-[10px]"
 				>
 					{category === 'All'
 						? (memories.data?.length ?? 0)
 						: (memories.data?.filter((m) => m.category === category).length ?? 0)}
-				</span>
+				</Badge>
 			</button>
 		{/each}
 	</div>
@@ -96,39 +113,43 @@
 	</style>
 
 	{#if filteredMemories.length === 0}
-		<div
-			class="flex min-h-[200px] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center"
+		<Card.Root
+			class="flex min-h-[200px] flex-col items-center justify-center border-dashed bg-card/50 text-center"
 		>
-			<Tag class="mb-4 h-12 w-12 text-muted-foreground/20" />
-			<h3 class="text-lg font-medium text-foreground">No memories in this category</h3>
-		</div>
+			<Card.Content class="flex flex-col items-center pt-6">
+				<Tag class="mb-4 h-12 w-12 text-muted-foreground/20" />
+				<h3 class="text-lg font-medium text-foreground">No memories in this category</h3>
+			</Card.Content>
+		</Card.Root>
 	{:else}
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 			{#each filteredMemories as memory (memory._id)}
-				<div
-					class="group relative flex flex-col justify-between rounded-2xl border border-border bg-card p-5 transition-all duration-200 hover:border-primary/20 hover:shadow-md hover:shadow-primary/5"
+				<Card.Root
+					class="group relative flex flex-col justify-between transition-all duration-200 hover:border-primary/20 hover:shadow-md hover:shadow-primary/5"
 				>
-					<div class="mb-4 flex items-start justify-between gap-4">
-						<div class="flex flex-col gap-1.5">
+					<Card.Header class="flex flex-row items-start justify-between space-y-0 pb-2">
+						<div class="flex flex-col gap-2">
 							<div
 								class="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary"
 							>
 								<Brain class="h-4 w-4" />
 							</div>
 							{#if memory.category}
-								<span
-									class="inline-flex w-fit items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium {categoryColors[
-										memory.category
-									] || categoryColors.Other}"
+								<Badge
+									variant="secondary"
+									class={cn(
+										'text-[10px] font-medium',
+										categoryColors[memory.category] || categoryColors.Other
+									)}
 								>
 									{memory.category}
-								</span>
+								</Badge>
 							{/if}
 						</div>
 						<Button
 							variant="ghost"
 							size="icon"
-							class="h-8 w-8 shrink-0 rounded-full opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
+							class="h-8 w-8 shrink-0 rounded-full opacity-0 transition-opacity group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
 							onclick={() => handleDelete(memory._id)}
 							disabled={deletingId === memory._id}
 						>
@@ -138,23 +159,25 @@
 								<Trash2 class="h-4 w-4" />
 							{/if}
 						</Button>
-					</div>
+					</Card.Header>
 
-					<div class="space-y-3">
+					<Card.Content class="pt-2">
 						<p class="text-[15px] leading-relaxed text-foreground/90">
 							{memory.text}
 						</p>
+					</Card.Content>
+					<Card.Footer>
 						<div class="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
-							<span class="rounded-full bg-muted px-2 py-0.5">
+							<Badge variant="outline" class="font-normal">
 								{new Date(memory.createdAt).toLocaleDateString(undefined, {
 									month: 'short',
 									day: 'numeric',
 									year: 'numeric'
 								})}
-							</span>
+							</Badge>
 						</div>
-					</div>
-				</div>
+					</Card.Footer>
+				</Card.Root>
 			{/each}
 		</div>
 	{/if}
