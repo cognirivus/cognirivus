@@ -33,6 +33,10 @@
 	}
 
 	import { onMount } from 'svelte';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+
 	let mounted = $state(false);
 	onMount(() => {
 		mounted = true;
@@ -114,38 +118,38 @@
 		<div
 			class="mt-1 flex animate-in items-center gap-1.5 px-1 duration-500 fade-in slide-in-from-right-2"
 		>
-			<button
-				onclick={(e) => {
-					e.stopPropagation();
-					showLearnedFacts = !showLearnedFacts;
-				}}
-				class="group/learned relative flex cursor-pointer items-center gap-1 rounded-full border border-emerald-200/50 bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-950/30 dark:text-emerald-400"
-			>
-				<Brain class="h-2.5 w-2.5" />
-				<span
-					>Learned {message.metadata.memoriesAdded.length}
-					{message.metadata.memoriesAdded.length === 1 ? 'Fact' : 'Facts'}</span
-				>
-
-				<!-- Tooltip with the actual facts -->
-				<div
-					class="pointer-events-none absolute right-0 bottom-full z-10 mb-2 w-64 rounded-xl border border-border bg-popover p-3 text-left text-popover-foreground shadow-xl transition-all duration-200 {showLearnedFacts
-						? 'block translate-y-0 opacity-100'
-						: 'hidden group-hover/learned:block'}"
-				>
-					<p class="mb-2 text-[10px] font-bold text-foreground">New Memories Learned:</p>
-					<div class="space-y-2">
-						{#each message.metadata.memoriesAdded as mem}
-							<div class="flex flex-col gap-0.5 border-l-2 border-emerald-500/30 pl-2">
-								<span class="text-[10px] leading-relaxed text-foreground/90">{mem.text}</span>
-								<span class="text-[8px] font-bold tracking-wider text-emerald-600/80 uppercase"
-									>{mem.category}</span
-								>
-							</div>
-						{/each}
-					</div>
-				</div>
-			</button>
+			<Tooltip.Provider>
+				<Tooltip.Root>
+					<Tooltip.Trigger>
+						<Badge
+							variant="outline"
+							class="flex cursor-default items-center gap-1 border-emerald-200/50 bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-950/30 dark:text-emerald-400"
+						>
+							<Brain class="h-2.5 w-2.5" />
+							<span
+								>Learned {message.metadata.memoriesAdded.length}
+								{message.metadata.memoriesAdded.length === 1 ? 'Fact' : 'Facts'}</span
+							>
+						</Badge>
+					</Tooltip.Trigger>
+					<Tooltip.Content
+						side="top"
+						class="w-64 border border-border bg-popover p-3 text-popover-foreground shadow-xl backdrop-blur-md"
+					>
+						<p class="mb-2 text-[10px] font-bold text-foreground">New Memories Learned:</p>
+						<div class="space-y-2">
+							{#each message.metadata.memoriesAdded as mem}
+								<div class="flex flex-col gap-0.5 border-l-2 border-emerald-500/30 pl-2">
+									<span class="text-[10px] leading-relaxed text-foreground/90">{mem.text}</span>
+									<span class="text-[8px] font-bold tracking-wider text-emerald-600/80 uppercase"
+										>{mem.category}</span
+									>
+								</div>
+							{/each}
+						</div>
+					</Tooltip.Content>
+				</Tooltip.Root>
+			</Tooltip.Provider>
 		</div>
 	{/if}
 
@@ -180,42 +184,43 @@
 						</div>
 					{/if}
 					{#if message.metadata?.usedMemories?.length > 0}
-						<button
-							class="group/mem relative flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary transition-colors hover:bg-primary/20"
-							title="Memories used for this response"
-							onclick={(e) => {
-								e.stopPropagation();
-								showUsedMemories = !showUsedMemories;
-							}}
-						>
-							<Brain class="h-3 w-3" />
-							<span>{message.metadata.usedMemories.length} memories</span>
-							<div
-								class="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-64 rounded-lg border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg transition-all duration-200 {showUsedMemories
-									? 'block translate-y-0 opacity-100'
-									: 'hidden group-hover/mem:block'}"
-							>
-								<p class="mb-1 text-[10px] font-semibold">Memories used:</p>
-								<ul class="list-inside list-disc space-y-0.5 text-[10px]">
-									{#each message.metadata.usedMemories as mem}
-										<li class="flex items-center gap-1">
-											<span class="flex-1 truncate">{mem.text}</span>
-											{#if mem._score !== undefined}
-												<span
-													class="shrink-0 rounded bg-primary/20 px-1 text-[8px] font-medium text-primary"
-												>
-													{(mem._score * 100).toFixed(0)}%
-												</span>
-											{/if}
-										</li>
-									{/each}
-								</ul>
-							</div>
-						</button>
+						<Tooltip.Provider>
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									<Badge
+										variant="secondary"
+										class="flex cursor-default items-center gap-1 px-1.5 py-0.5 text-[9px] font-medium transition-colors"
+									>
+										<Brain class="h-3 w-3" />
+										<span>{message.metadata.usedMemories.length} memories</span>
+									</Badge>
+								</Tooltip.Trigger>
+								<Tooltip.Content side="top" class="w-64 p-2">
+									<p class="mb-1 text-[10px] font-semibold">Memories used:</p>
+									<ul class="list-inside list-disc space-y-0.5 text-[10px]">
+										{#each message.metadata.usedMemories as mem}
+											<li class="flex items-center gap-1">
+												<span class="flex-1 truncate">{mem.text}</span>
+												{#if mem._score !== undefined}
+													<Badge
+														variant="outline"
+														class="h-4 shrink-0 px-1 py-0 text-[8px] font-medium"
+													>
+														{(mem._score * 100).toFixed(0)}%
+													</Badge>
+												{/if}
+											</li>
+										{/each}
+									</ul>
+								</Tooltip.Content>
+							</Tooltip.Root>
+						</Tooltip.Provider>
 					{/if}
 
-					<button
-						class="flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+					<Button
+						variant="ghost"
+						size="sm"
+						class="h-5 gap-1 px-1.5 py-0 text-[9px] font-medium text-muted-foreground hover:text-foreground"
 						title="View technical context (JSON)"
 						onclick={(e) => {
 							e.stopPropagation();
@@ -224,7 +229,7 @@
 					>
 						<Terminal class="h-3 w-3" />
 						<span>Context</span>
-					</button>
+					</Button>
 				</div>
 			</div>
 		</div>
@@ -239,16 +244,18 @@
 			<span class="text-[10px] text-muted-foreground">
 				{mounted ? new Date(message.createdAt).toLocaleString() : ''}
 			</span>
-			<button
+			<Button
+				variant="ghost"
+				size="icon"
 				onclick={(e) => {
 					e.stopPropagation();
 					onViewContext(message._id);
 				}}
-				class="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] font-medium text-muted-foreground transition-all hover:bg-muted hover:text-foreground"
+				class="h-6 w-6 text-muted-foreground hover:text-foreground"
 				title="View context sent to AI"
 			>
 				<Terminal class="h-3.5 w-3.5" />
-			</button>
+			</Button>
 		</div>
 	{/if}
 </div>

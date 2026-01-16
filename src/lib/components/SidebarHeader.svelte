@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Logo from './Logo.svelte';
 	import { PanelLeft, PanelRight, X } from '@lucide/svelte';
+	import { Button } from '$lib/components/ui/button/index.js';
 
 	let {
 		onClose,
@@ -22,11 +23,13 @@
 	{:else}
 		<div class="w-8"></div>
 	{/if}
-	<button
+	<Button
+		variant="ghost"
+		size="icon"
 		onclick={onClose}
-		class="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+		class="h-8 w-8 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
 		{title}
 	>
 		<Icon class="size-5" />
-	</button>
+	</Button>
 </div>

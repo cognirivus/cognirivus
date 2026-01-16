@@ -7,6 +7,8 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { useChatContext } from '$lib/chat-state.svelte';
+	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
+	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 
 	const chatState = useChatContext();
 
@@ -36,7 +38,10 @@
 	<div class="px-4 pb-4">
 		<a
 			href="/chat"
-			class="flex w-full items-center justify-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/50 px-4 py-2 text-sm font-medium text-sidebar-foreground transition-all hover:bg-sidebar-accent"
+			class={buttonVariants({
+				variant: 'outline',
+				class: 'w-full gap-2 bg-sidebar-accent/50 hover:bg-sidebar-accent'
+			})}
 		>
 			<Plus class="h-4 w-4" />
 			New Chat
@@ -46,10 +51,10 @@
 	<div class="flex-1 overflow-y-auto px-2 py-2">
 		<div class="space-y-1">
 			{#if threads.isLoading}
-				<div class="flex items-center justify-center py-4">
-					<div
-						class="h-4 w-4 animate-spin rounded-full border-2 border-sidebar-border border-t-sidebar-foreground"
-					></div>
+				<div class="space-y-2 px-2">
+					<Skeleton class="h-9 w-full rounded-lg" />
+					<Skeleton class="h-9 w-full rounded-lg" />
+					<Skeleton class="h-9 w-full rounded-lg" />
 				</div>
 			{:else if threads.data}
 				{#each threads.data as thread}
@@ -77,10 +82,10 @@
 	<div class="mt-auto border-t border-sidebar-border p-2">
 		<a
 			href="/dashboard"
-			class="mb-2 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground {page
-				.url.pathname === '/dashboard'
-				? 'bg-sidebar-accent font-semibold text-sidebar-foreground shadow-sm'
-				: ''}"
+			class={buttonVariants({
+				variant: page.url.pathname === '/dashboard' ? 'secondary' : 'ghost',
+				class: 'mb-2 w-full justify-start gap-3'
+			})}
 		>
 			<BarChart3 class="h-4 w-4" />
 			Dashboard

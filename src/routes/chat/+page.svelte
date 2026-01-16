@@ -40,9 +40,11 @@
 	});
 </script>
 
-<div class="flex flex-1 flex-col items-center justify-center">
+<div class="flex flex-1 flex-col items-center justify-center p-4">
 	<div class="mb-32 animate-in text-center duration-700 fade-in slide-in-from-bottom-4">
-		<h2 class="text-4xl font-bold tracking-tight text-foreground">Cognirivus</h2>
-		<p class="mt-2 text-muted-foreground">How can I help you today?</p>
+		<h2 class="text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl">
+			Cognirivus
+		</h2>
+		<p class="mt-4 text-muted-foreground sm:text-lg">How can I help you today?</p>
 	</div>
 </div>

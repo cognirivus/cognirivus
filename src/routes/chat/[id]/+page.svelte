@@ -13,6 +13,11 @@
 
 	import MessageItem from '$lib/components/MessageItem.svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
+	import * as Card from '$lib/components/ui/card/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
+	import { toast } from 'svelte-sonner';
 
 	const threadId = $derived(page.params.id as Id<'threads'>);
 
@@ -96,6 +101,7 @@
 				console.log('Cognirivus: Generation stopped by user.');
 			} else {
 				console.error('Failed to generate response:', e);
+				toast.error('Failed to generate response. Please try again.');
 				chatState.status = 'error';
 			}
 		} finally {
@@ -201,19 +207,21 @@
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
 	>
-		<div
-			class="flex h-[80vh] w-full max-w-4xl animate-in flex-col rounded-2xl border border-border bg-card shadow-2xl duration-200 zoom-in-95 fade-in"
+		<Card.Root
+			class="flex h-[80vh] w-full max-w-4xl animate-in flex-col shadow-2xl duration-200 zoom-in-95 fade-in"
 		>
-			<div class="flex items-center justify-between border-b border-border px-6 py-4">
-				<h3 class="text-sm font-semibold text-foreground">Context Sent to AI</h3>
-				<button
+			<Card.Header class="flex flex-row items-center justify-between space-y-0 border-b px-6 py-4">
+				<Card.Title class="text-sm font-semibold">Context Sent to AI</Card.Title>
+				<Button
+					variant="ghost"
+					size="icon"
 					onclick={() => (viewingContextId = null)}
-					class="rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					class="rounded-full"
 				>
 					<X class="h-4 w-4" />
-				</button>
-			</div>
-			<div class="flex-1 space-y-8 overflow-auto p-6 font-mono text-xs">
+				</Button>
+			</Card.Header>
+			<Card.Content class="flex-1 overflow-auto p-6 font-mono text-xs">
 				{#if messages.find((m) => m._id === viewingContextId)?.metadata?.requestPayload}
 					{@const payload = messages.find((m) => m._id === viewingContextId)?.metadata
 						?.requestPayload}
@@ -222,11 +230,11 @@
 					<div class="space-y-6">
 						<!-- Step 1: Query Formulation -->
 						<div class="relative border-l-2 border-primary/20 pb-2 pl-8">
-							<div
-								class="absolute top-0 -left-[9px] flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm"
+							<Badge
+								class="absolute top-0 -left-[11px] flex h-5 w-5 items-center justify-center rounded-full p-0 font-bold shadow-sm"
 							>
 								1
-							</div>
+							</Badge>
 							<div class="mb-3">
 								<h3 class="text-[10px] font-bold tracking-wider text-primary uppercase">
 									Step 1: Standalone Query Formulation
@@ -268,11 +276,11 @@
 
 						<!-- Step 2: Memory Retrieval -->
 						<div class="relative border-l-2 border-primary/20 pb-2 pl-8">
-							<div
-								class="absolute top-0 -left-[9px] flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm"
+							<Badge
+								class="absolute top-0 -left-[11px] flex h-5 w-5 items-center justify-center rounded-full p-0 font-bold shadow-sm"
 							>
 								2
-							</div>
+							</Badge>
 							<div>
 								<h3 class="text-[10px] font-bold tracking-wider text-primary uppercase">
 									Step 2: Contextual Memory Retrieval
@@ -293,11 +301,12 @@
 												class="flex items-start gap-2 rounded-lg border border-primary/10 bg-primary/5 p-2 text-[10px]"
 											>
 												<div class="flex-1 text-foreground/90">{mem.text}</div>
-												<div
-													class="shrink-0 rounded bg-primary/20 px-1.5 py-0.5 text-[8px] font-bold text-primary"
+												<Badge
+													variant="secondary"
+													class="h-4 shrink-0 px-1.5 py-0 text-[8px] font-bold"
 												>
 													{(mem._score * 100).toFixed(0)}%
-												</div>
+												</Badge>
 											</div>
 										{/each}
 									</div>
@@ -311,11 +320,11 @@
 
 						<!-- Step 3: Final Generation -->
 						<div class="relative border-l-0 pb-2 pl-8">
-							<div
-								class="absolute top-0 -left-[9px] flex h-4 w-4 animate-pulse items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm"
+							<Badge
+								class="absolute top-0 -left-[11px] flex h-5 w-5 animate-pulse items-center justify-center rounded-full p-0 font-bold shadow-sm"
 							>
 								3
-							</div>
+							</Badge>
 							<div>
 								<h3 class="text-[10px] font-bold tracking-wider text-primary uppercase">
 									Step 3: Final Response Generation
@@ -367,8 +376,8 @@
 						</div>
 					</div>
 				{/if}
-			</div>
-		</div>
+			</Card.Content>
+		</Card.Root>
 	</div>
 {/if}
 ```

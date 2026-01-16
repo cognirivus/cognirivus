@@ -13,6 +13,13 @@
 	} from '@lucide/svelte';
 	import { useChatContext } from '$lib/chat-state.svelte';
 	import { onMount } from 'svelte';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import { Input } from '$lib/components/ui/input/index.js';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Separator } from '$lib/components/ui/separator/index.js';
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 
 	const chatState = useChatContext();
 
@@ -39,25 +46,29 @@
 	let favoriteModels = $state<string[]>([]);
 
 	let filteredModels = $derived(
-		models.filter((m) => {
-			const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase());
-			const matchesImage = chatState.generateImage ? m.output_modalities.includes('image') : true;
-			const matchesReasoning = chatState.includeReasoning ? 
-				(m.supported_parameters?.includes('reasoning') || m.supported_parameters?.includes('include_reasoning')) : true;
-			return matchesSearch && matchesImage && matchesReasoning;
-		}).sort((a, b) => {
-			// Always put selected model first
-			if (a.id === selectedModel) return -1;
-			if (b.id === selectedModel) return 1;
-			
-			// Then sort by favorites
-			const aIsFavorite = favoriteModels.includes(a.id);
-			const bIsFavorite = favoriteModels.includes(b.id);
-			if (aIsFavorite && !bIsFavorite) return -1;
-			if (!aIsFavorite && bIsFavorite) return 1;
-			
-			return 0;
-		})
+		models
+			.filter((m) => {
+				const matchesSearch = m.name.toLowerCase().includes(searchQuery.toLowerCase());
+				const matchesImage = chatState.generateImage ? m.output_modalities.includes('image') : true;
+				const matchesReasoning = chatState.includeReasoning
+					? m.supported_parameters?.includes('reasoning') ||
+						m.supported_parameters?.includes('include_reasoning')
+					: true;
+				return matchesSearch && matchesImage && matchesReasoning;
+			})
+			.sort((a, b) => {
+				// Always put selected model first
+				if (a.id === selectedModel) return -1;
+				if (b.id === selectedModel) return 1;
+
+				// Then sort by favorites
+				const aIsFavorite = favoriteModels.includes(a.id);
+				const bIsFavorite = favoriteModels.includes(b.id);
+				if (aIsFavorite && !bIsFavorite) return -1;
+				if (!aIsFavorite && bIsFavorite) return 1;
+
+				return 0;
+			})
 	);
 	let container: HTMLElement;
 
@@ -90,8 +101,18 @@
 		chatState.includeReasoning = !chatState.includeReasoning;
 		if (chatState.includeReasoning) {
 			const currentM = models.find((m) => m.id === selectedModel);
-			if (currentM && !(currentM.supported_parameters?.includes('reasoning') || currentM.supported_parameters?.includes('include_reasoning'))) {
-				const firstReasoningModel = models.find((m) => m.supported_parameters?.includes('reasoning') || m.supported_parameters?.includes('include_reasoning'));
+			if (
+				currentM &&
+				!(
+					currentM.supported_parameters?.includes('reasoning') ||
+					currentM.supported_parameters?.includes('include_reasoning')
+				)
+			) {
+				const firstReasoningModel = models.find(
+					(m) =>
+						m.supported_parameters?.includes('reasoning') ||
+						m.supported_parameters?.includes('include_reasoning')
+				);
 				if (firstReasoningModel) {
 					selectedModel = firstReasoningModel.id;
 				}
@@ -101,7 +122,7 @@
 
 	function toggleFavorite(modelId: string) {
 		if (favoriteModels.includes(modelId)) {
-			favoriteModels = favoriteModels.filter(id => id !== modelId);
+			favoriteModels = favoriteModels.filter((id) => id !== modelId);
 		} else {
 			favoriteModels = [...favoriteModels, modelId];
 		}
@@ -138,11 +159,11 @@
 		<div
 			class="flex flex-col rounded-2xl border border-border bg-card/70 shadow-sm backdrop-blur-md"
 		>
-			<textarea
-				class="min-h-[60px] w-full resize-none border-0 bg-transparent px-3 pt-3 pb-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:ring-0 focus:outline-none disabled:opacity-50 sm:min-h-[80px] sm:px-4 sm:pt-4 sm:pb-2"
+			<Textarea
+				class="min-h-[60px] w-full resize-none border-0 bg-transparent px-3 pt-3 pb-1.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:outline-none disabled:opacity-50 sm:min-h-[80px] sm:px-4 sm:pt-4 sm:pb-2"
 				bind:value={input}
 				placeholder="What can I help you with?"
-				rows="2"
+				rows={2}
 				disabled={chatStatus === 'streaming'}
 				onkeydown={(e) => {
 					if (e.key === 'Enter' && !e.shiftKey) {
@@ -150,52 +171,49 @@
 						if (input.trim() && chatStatus !== 'streaming') handleSubmit(e);
 					}
 				}}
-			></textarea>
+			/>
 
 			<div class="flex items-center gap-2 px-2 pb-2 sm:px-3 sm:pb-3" bind:this={container}>
 				<!-- Mobile Unified Toolbar (Radio-like Pill) -->
 				<div
 					class="flex min-w-0 flex-1 items-center gap-0 rounded-xl border border-border/50 bg-muted/30 p-0.5 sm:hidden"
 				>
-					<button
-						type="button"
+					<Button
+						variant={chatState.includeReasoning ? 'default' : 'ghost'}
+						size="icon"
 						onclick={toggleReasoning}
 						disabled={chatStatus === 'streaming'}
-						class="flex h-8 w-9 flex-shrink-0 items-center justify-center rounded-l-[10px] transition-all {chatState.includeReasoning
-							? 'bg-primary text-primary-foreground shadow-sm'
-							: 'text-muted-foreground hover:bg-muted/80'}"
+						class="h-8 w-9 flex-shrink-0 rounded-l-[10px] rounded-r-none transition-all"
 						title="Toggle Reasoning"
 					>
 						<Brain class="h-3.5 w-3.5" />
-					</button>
+					</Button>
 
 					<div class="h-4 w-[1px] bg-border/50"></div>
 
-					<button
-						type="button"
+					<Button
+						variant={chatState.useMemory ? 'default' : 'ghost'}
+						size="icon"
 						onclick={() => (chatState.useMemory = !chatState.useMemory)}
 						disabled={chatStatus === 'streaming'}
-						class="flex h-8 w-9 flex-shrink-0 items-center justify-center transition-all {chatState.useMemory
-							? 'bg-primary text-primary-foreground shadow-sm'
-							: 'text-muted-foreground hover:bg-muted/80'}"
+						class="h-8 w-9 flex-shrink-0 rounded-none transition-all"
 						title="Use Memory"
 					>
 						<Database class="h-3.5 w-3.5" />
-					</button>
+					</Button>
 
 					<div class="h-4 w-[1px] bg-border/50"></div>
 
-					<button
-						type="button"
+					<Button
+						variant={chatState.generateImage ? 'default' : 'ghost'}
+						size="icon"
 						onclick={toggleImageGen}
 						disabled={chatStatus === 'streaming'}
-						class="flex h-8 w-9 flex-shrink-0 items-center justify-center transition-all {chatState.generateImage
-							? 'bg-primary text-primary-foreground shadow-sm'
-							: 'text-muted-foreground hover:bg-muted/80'}"
+						class="h-8 w-9 flex-shrink-0 rounded-none transition-all"
 						title="Generate Image"
 					>
 						<Image class="h-3.5 w-3.5" />
-					</button>
+					</Button>
 
 					{#if chatState.generateImage}
 						<select
@@ -224,23 +242,23 @@
 							}}
 							disabled={chatStatus === 'streaming' || isLoadingModels}
 							class="flex w-full items-center justify-between gap-1 px-2 py-1.5 text-[10px] font-bold text-muted-foreground transition-all hover:bg-muted/80 disabled:opacity-50"
-						>
-							<span class="truncate">
-								{#if isLoadingModels}
-									<div class="flex items-center gap-1.5">
-										<div
-											class="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-muted-foreground"
-										></div>
-										<span>Loading...</span>
-									</div>
-								{:else}
-									{models
-										.find((m) => m.id === selectedModel)
-										?.name.split('/')
-										.pop()}
-								{/if}
-							</span>
-							<ChevronDown class="h-3 w-3 flex-shrink-0" />
+							>
+								<span class="truncate">
+									{#if isLoadingModels}
+										<div class="flex items-center gap-1.5">
+											<div
+												class="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-muted-foreground"
+											></div>
+											<span>Loading...</span>
+										</div>
+									{:else}
+										{models
+											.find((m) => m.id === selectedModel)
+											?.name.split('/')
+											.pop()}
+									{/if}
+								</span>
+								<ChevronDown class="h-3 w-3 flex-shrink-0" />
 						</button>
 
 						{#if showModelSelector}
@@ -280,7 +298,7 @@
 													>
 													{#if model.supported_parameters?.includes('reasoning') || model.supported_parameters?.includes('include_reasoning')}
 														<div title="Supports Reasoning">
-															<Brain class="h-3 w-3 text-primary" />
+														<Brain class="h-3 w-3 text-primary" />
 														</div>
 													{/if}
 												</div>
@@ -311,19 +329,23 @@
 					<div class="h-4 w-[1px] bg-border/50"></div>
 
 					<div class="relative flex items-center">
-						<button
-							type="button"
-							class="flex h-8 w-9 flex-shrink-0 items-center justify-center rounded-r-[10px] transition-all {showTokenDetail
-								? 'bg-muted text-primary'
-								: 'text-muted-foreground hover:bg-muted/80'}"
-							onclick={() => {
-								showTokenDetail = !showTokenDetail;
-								if (showTokenDetail) showModelSelector = false;
-							}}
-							title="Session Usage"
-						>
-							<Activity class="h-3.5 w-3.5" />
-						</button>
+						<Tooltip.Provider>
+							<Tooltip.Root>
+								<Tooltip.Trigger>
+									<Button
+										variant="ghost"
+										size="icon"
+										class="h-8 w-9 flex-shrink-0 rounded-l-none rounded-r-[10px] transition-all"
+										onclick={() => {
+											showTokenDetail = !showTokenDetail;
+										}}
+									>
+										<Activity class="h-3.5 w-3.5" />
+									</Button>
+								</Tooltip.Trigger>
+								<Tooltip.Content side="top">Session Usage</Tooltip.Content>
+							</Tooltip.Root>
+						</Tooltip.Provider>
 
 						{#if showTokenDetail}
 							<div
@@ -369,41 +391,52 @@
 
 				<!-- Desktop Tools (Original) -->
 				<div class="hidden min-w-0 flex-1 items-center gap-1 sm:flex">
-					<button
-						type="button"
-						onclick={toggleReasoning}
-						disabled={chatStatus === 'streaming'}
-						class="flex h-8 w-8 items-center justify-center rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50 {chatState.includeReasoning
-							? 'bg-primary text-primary-foreground shadow-sm'
-							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-						title="Toggle Reasoning"
-					>
-						<Brain class="h-4 w-4 {chatState.includeReasoning ? 'fill-current' : ''}" />
-					</button>
+					<Tooltip.Provider>
+						<Tooltip.Root delayDuration={400}>
+							<Tooltip.Trigger>
+								<Button
+									variant={chatState.includeReasoning ? 'default' : 'ghost'}
+									size="icon"
+									onclick={toggleReasoning}
+									disabled={chatStatus === 'streaming'}
+									class="h-8 w-8 transition-all"
+								>
+									<Brain class="h-4 w-4 {chatState.includeReasoning ? 'fill-current' : ''}" />
+								</Button>
+							</Tooltip.Trigger>
+							<Tooltip.Content side="top">Toggle Reasoning</Tooltip.Content>
+						</Tooltip.Root>
 
-					<button
-						type="button"
-						onclick={() => (chatState.useMemory = !chatState.useMemory)}
-						disabled={chatStatus === 'streaming'}
-						class="flex h-8 w-8 items-center justify-center rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50 {chatState.useMemory
-							? 'bg-primary text-primary-foreground shadow-sm'
-							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-						title="Use Memory"
-					>
-						<Database class="h-4 w-4" />
-					</button>
+						<Tooltip.Root delayDuration={400}>
+							<Tooltip.Trigger>
+								<Button
+									variant={chatState.useMemory ? 'default' : 'ghost'}
+									size="icon"
+									onclick={() => (chatState.useMemory = !chatState.useMemory)}
+									disabled={chatStatus === 'streaming'}
+									class="h-8 w-8 transition-all"
+								>
+									<Database class="h-4 w-4" />
+								</Button>
+							</Tooltip.Trigger>
+							<Tooltip.Content side="top">Use Memory</Tooltip.Content>
+						</Tooltip.Root>
 
-					<button
-						type="button"
-						onclick={toggleImageGen}
-						disabled={chatStatus === 'streaming'}
-						class="flex h-8 w-8 items-center justify-center rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50 {chatState.generateImage
-							? 'bg-primary text-primary-foreground shadow-sm'
-							: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-						title="Generate Image"
-					>
-						<Image class="h-4 w-4" />
-					</button>
+						<Tooltip.Root delayDuration={400}>
+							<Tooltip.Trigger>
+								<Button
+									variant={chatState.generateImage ? 'default' : 'ghost'}
+									size="icon"
+									onclick={toggleImageGen}
+									disabled={chatStatus === 'streaming'}
+									class="h-8 w-8 transition-all"
+								>
+									<Image class="h-4 w-4" />
+								</Button>
+							</Tooltip.Trigger>
+							<Tooltip.Content side="top">Generate Image</Tooltip.Content>
+						</Tooltip.Root>
+					</Tooltip.Provider>
 
 					{#if chatState.generateImage}
 						<select
@@ -434,25 +467,25 @@
 									showTokenDetail = false;
 								}
 							}}
-							disabled={chatStatus === 'streaming' || isLoadingModels}
+									disabled={chatStatus === 'streaming' || isLoadingModels}
 							class="flex w-full items-center justify-between gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-bold text-muted-foreground transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-						>
-							<span class="truncate">
-								{#if isLoadingModels}
-									<div class="flex items-center gap-1.5">
-										<div
-											class="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-muted-foreground"
-										></div>
-										<span>Loading...</span>
-									</div>
-								{:else}
-									{models
-										.find((m) => m.id === selectedModel)
-										?.name.split('/')
-										.pop()}
-								{/if}
-							</span>
-							<ChevronDown class="h-3 w-3 flex-shrink-0" />
+								>
+									<span class="truncate">
+										{#if isLoadingModels}
+											<div class="flex items-center gap-1.5">
+												<div
+													class="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-muted-foreground"
+												></div>
+												<span>Loading...</span>
+											</div>
+										{:else}
+											{models
+												.find((m) => m.id === selectedModel)
+												?.name.split('/')
+												.pop()}
+										{/if}
+									</span>
+									<ChevronDown class="h-3 w-3 flex-shrink-0" />
 						</button>
 
 						{#if showModelSelector}
@@ -523,7 +556,7 @@
 														>
 														{#if model.supported_parameters?.includes('reasoning') || model.supported_parameters?.includes('include_reasoning')}
 															<div title="Supports Reasoning">
-																<Brain class="h-3 w-3 text-primary" />
+															<Brain class="h-3 w-3 text-primary" />
 															</div>
 														{/if}
 													</div>
@@ -561,20 +594,19 @@
 								class="flex flex-row items-center gap-2 text-[10px] font-bold tracking-tight text-muted-foreground/70"
 							>
 								{#if totalTokens > 0}
-									<div
-										role="button"
-										tabindex="0"
-										class="relative flex cursor-help items-center gap-1 transition-colors hover:text-foreground"
-										onmouseenter={() => (showTokenDetail = true)}
-										onmouseleave={() => (showTokenDetail = false)}
-									>
-										<span
-											>{totalTokens.toLocaleString()}
-											<span class="hidden sm:inline">tokens</span></span
-										>
-										{#if showTokenDetail}
-											<div
-												class="absolute right-0 bottom-full z-50 mb-3 w-52 overflow-hidden rounded-xl border border-border bg-popover/95 p-4 shadow-2xl backdrop-blur-md"
+									<Tooltip.Provider>
+										<Tooltip.Root delayDuration={400}>
+											<Tooltip.Trigger
+												class="relative flex cursor-help items-center gap-1 transition-colors hover:text-foreground"
+											>
+												<span
+													>{totalTokens.toLocaleString()}
+													<span class="hidden sm:inline">tokens</span></span
+												>
+											</Tooltip.Trigger>
+											<Tooltip.Content
+												side="top"
+												class="w-52 border border-border bg-popover p-4 text-popover-foreground shadow-xl backdrop-blur-md"
 											>
 												<div
 													class="mb-3 text-[9px] font-extrabold tracking-widest text-muted-foreground uppercase"
@@ -602,7 +634,7 @@
 															>
 														</div>
 													</div>
-													<div class="my-2 h-[1px] bg-border"></div>
+													<Separator class="my-2" />
 													<div class="flex items-center justify-between pt-1">
 														<span
 															class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
@@ -613,12 +645,12 @@
 														>
 													</div>
 												</div>
-											</div>
-										{/if}
-									</div>
+											</Tooltip.Content>
+										</Tooltip.Root>
+									</Tooltip.Provider>
 								{/if}
 								{#if totalCost > 0}
-									<span class="hidden font-normal text-border sm:inline">|</span>
+									<Separator orientation="vertical" class="mx-1 h-4" />
 									<span class="font-black tracking-tighter text-foreground/80"
 										>${totalCost.toFixed(6)}</span
 									>
@@ -628,10 +660,11 @@
 					</div>
 
 					{#if chatStatus === 'streaming'}
-						<button
-							type="button"
+						<Button
+							variant="secondary"
+							size="icon"
 							onclick={stopChat}
-							class="hover:text-destructive-foreground flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-foreground shadow-sm transition-all hover:bg-destructive"
+							class="hover:text-destructive-foreground h-9 w-9 rounded-xl shadow-sm transition-all hover:bg-destructive"
 						>
 							{#if isActuallyStreaming}
 								<Square class="h-3.5 w-3.5" fill="currentColor" />
@@ -640,15 +673,15 @@
 									class="h-4 w-4 animate-spin rounded-full border-2 border-primary/20 border-t-primary"
 								></div>
 							{/if}
-						</button>
+						</Button>
 					{:else}
-						<button
+						<Button
 							type="submit"
 							disabled={!input.trim()}
-							class="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 hover:shadow-xl active:scale-95 disabled:scale-100 disabled:opacity-20 disabled:grayscale"
+							class="h-9 w-9 rounded-full shadow-lg shadow-primary/20 transition-all hover:scale-105 hover:shadow-xl active:scale-95"
 						>
 							<SendHorizontal class="h-4 w-4" />
-						</button>
+						</Button>
 					{/if}
 				</div>
 			</div>

@@ -7,6 +7,7 @@
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import Navbar from '$lib/components/Navbar.svelte';
 	import { page } from '$app/state';
+	import Toaster from '$lib/components/ui/sonner/sonner.svelte';
 
 	let { children, data } = $props();
 
@@ -32,3 +33,4 @@
 {/if}
 
 {@render children()}
+<Toaster />
