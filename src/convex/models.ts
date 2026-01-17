@@ -40,7 +40,7 @@ export const syncFromOpenRouter = action({
 		const response = await fetch('https://openrouter.ai/api/v1/models', {
 			headers: {
 				Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-				'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+				'HTTP-Referer': 'https://cognirivus.vercel.app',
 				'X-Title': 'Cognirivus Chat'
 			}
 		});

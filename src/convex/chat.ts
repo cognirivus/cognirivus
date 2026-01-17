@@ -3,7 +3,14 @@ import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { getGenerationStats } from './lib/openrouter';
 import { authComponent } from './auth';
-import { rag } from './rag';
+import { rag, RAG_CONFIG, type RagEntry, type RagUsage } from './rag';
+import type {
+	Memory,
+	OpenRouterMessage,
+	OpenRouterRequestBody,
+	GeneratedImage,
+	ContextPayload
+} from './types/chat';
 
 /**
  * Generates an AI response for a given chat thread.
@@ -23,6 +30,7 @@ import { rag } from './rag';
  * @param generateImage - Optional. Whether to attempt to generate an image based on the prompt.
  * @param imageAspectRatio - Optional. The aspect ratio for any generated images (e.g., "1:1").
  * @param useMemory - Optional. Whether to use stored user memories for personalization.
+ * @param useRag - Optional. Whether to search blog posts for relevant context (defaults to true).
  *
  * @throws {Error} if the user is not authenticated or if the OpenRouter API call fails.
  */
@@ -33,11 +41,12 @@ export const generate = action({
 		includeReasoning: v.optional(v.boolean()),
 		generateImage: v.optional(v.boolean()),
 		imageAspectRatio: v.optional(v.string()),
-		useMemory: v.optional(v.boolean())
+		useMemory: v.optional(v.boolean()),
+		useRag: v.optional(v.boolean())
 	},
 	handler: async (
 		ctx,
-		{ threadId, model, includeReasoning, generateImage, imageAspectRatio, useMemory }
+		{ threadId, model, includeReasoning, generateImage, imageAspectRatio, useMemory, useRag }
 	) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
@@ -62,15 +71,15 @@ export const generate = action({
 		}
 
 		// Retrieve relevant memories (only if useMemory is enabled)
-		let relevantMemories: any[] = [];
+		let relevantMemories: Memory[] = [];
 		let searchOutputText = userPrompt; // Track what was actually used for search
-		let rewriterInput: any[] = [];
+		let rewriterInput: OpenRouterMessage[] = [];
 
 		if (useMemory !== false && userPrompt) {
 			try {
 				const enriched = await ctx.runAction(internal.memories.getEnrichedContext, {
 					userId,
-					history: messages.slice(-5).map((m: any) => ({
+					history: messages.slice(-5).map((m) => ({
 						role: m.role,
 						content: m.body
 					})),
@@ -85,77 +94,135 @@ export const generate = action({
 			}
 		}
 
-		// RAG Search for Blogs
+		// 2. Create empty assistant message early to show "Searching..." status
+		const messageId = await ctx.runMutation(internal.messages.internalCreate, {
+			body: '',
+			userId,
+			threadId,
+			role: 'assistant',
+			model: model || 'google/gemini-2.0-flash-exp:free',
+			metadata: { status: 'searching' }
+		});
+
+		// 3. RAG Search for Blogs (only if enabled)
 		let ragContext = '';
-		let ragEntries: any[] = [];
-		let ragUsage: any = null;
-		try {
-			const result = await rag.search(ctx, {
-				namespace: 'blogs',
-				query: userPrompt,
-				limit: 3
-			});
-			const { text, results, entries, usage } = result;
-			if (text) {
-				console.log('RAG found relevant blogs:', text.substring(0, 100) + '...');
-				console.log('RAG Entries/Chunks:', entries); // Debugging RAG retrieval
-				ragContext = `\n\nRelevant blog posts:\n${text}\n`;
+		let ragEntries: RagEntry[] = [];
+		let ragUsage: RagUsage | null = null;
+		let ragError: string | undefined;
 
-				// Map results (chunks) to include entry metadata for the UI
-				// 'results' contains the specific chunks that matched
-				// Fetch blog titles for each unique blog
-				const uniqueBlogIds = [...new Set(entries.map((e) => e.key as string))];
-				const blogDocs = await Promise.all(
-					uniqueBlogIds.map((id) => ctx.runQuery(api.blogs.get, { id: id as any }))
-				);
-				const blogMap = new Map(blogDocs.filter(Boolean).map((b) => [b!._id, b!.title]));
-
-				ragEntries = results.map((r) => {
-					const entry = entries.find((e) => e.entryId === r.entryId);
-					const blogId = entry?.key as string | undefined;
-					return {
-						key: blogId,
-						title: blogId ? blogMap.get(blogId as any) : undefined,
-						text: r.content[0]?.text || '', // Assuming standard chunker puts text here
-						_score: r.score
-					};
+		if (useRag !== false) {
+			try {
+				// 1. Vector Search
+				const vectorResult = await rag.search(ctx, {
+					namespace: RAG_CONFIG.namespace,
+					query: userPrompt,
+					limit: RAG_CONFIG.search.limit,
+					vectorScoreThreshold: RAG_CONFIG.search.scoreThreshold,
+					chunkContext: RAG_CONFIG.search.chunkContext
 				});
 
+				// 2. Text Search (Hybrid)
+				const textResults = await ctx.runQuery(internal.blogs.searchInternal, {
+					query: userPrompt,
+					limit: 2
+				});
+
+				const { text: vectorText, results: vectorResults, entries, usage } = vectorResult;
 				ragUsage = usage;
+
+				// Combine and deduplicate
+				const uniqueBlogIds = new Set([...entries.map((e) => e.key as string)]);
+				for (const blog of textResults) {
+					uniqueBlogIds.add(blog._id);
+				}
+
+				if (uniqueBlogIds.size > 0) {
+					// Fetch all unique blog docs
+					const blogDocs = await Promise.all(
+						[...uniqueBlogIds].map((id) => ctx.runQuery(api.blogs.get, { id: id as any }))
+					);
+					const blogMap = new Map(blogDocs.filter(Boolean).map((b) => [b!._id, b!]));
+
+					// Build combined context text
+					let combinedText = vectorText || '';
+
+					// Add text search results if they aren't already well-represented
+					for (const blog of textResults) {
+						if (!entries.some((e) => e.key === blog._id)) {
+							combinedText += `\n\n--- Source: ${blog.title} ---\n${blog.content.substring(0, 1000)}...\n`;
+						}
+					}
+
+					if (combinedText) {
+						console.log('RAG found relevant blogs (Hybrid)');
+						ragContext = `\n\nRelevant blog posts:\n${combinedText}\n`;
+
+						// Map for UI
+						ragEntries = [
+							...vectorResults.map((r) => {
+								const entry = entries.find((e) => e.entryId === r.entryId);
+								const blogId = entry?.key as string | undefined;
+								return {
+									key: blogId || '',
+									title: blogId ? blogMap.get(blogId as any)?.title : undefined,
+									text: r.content[0]?.text || '',
+									_score: r.score
+								};
+							}),
+							...textResults
+								.filter((blog) => !entries.some((e) => e.key === blog._id))
+								.map((blog) => ({
+									key: blog._id,
+									title: blog.title,
+									text: blog.content.substring(0, 500) + '...',
+									_score: 0.8 // Arbitrary score for text match display
+								}))
+						];
+					}
+				}
 
 				// Log RAG embedding usage
 				if (usage) {
 					await ctx.runMutation(internal.usage.logUsage, {
 						userId,
-						messageId: undefined, // RAG usage happens before message creation
+						messageId: undefined,
 						purpose: 'rag_search',
-						model: 'openai/text-embedding-3-small', // Default model configured in rag.ts
+						model: RAG_CONFIG.model,
 						promptTokens: usage.tokens,
 						completionTokens: 0,
 						totalTokens: usage.tokens,
-						cost: 0, // OpenRouter embedding cost calculation if known, otherwise 0
+						cost: 0,
 						raw_response: { usage }
 					});
 				}
+			} catch (e) {
+				console.error('Failed to search blogs', e);
+				ragError = e instanceof Error ? e.message : String(e);
+				// Graceful degradation - continue without RAG context
 			}
-		} catch (e) {
-			console.error('Failed to search blogs', e);
 		}
+
+		// Update message status to "generating"
+		await ctx.runMutation(internal.messages.internalUpdate, {
+			messageId,
+			body: '',
+			metadata: { status: 'generating' }
+		});
 
 		// Format memories for context
 		const memoryContext =
 			relevantMemories.length > 0
-				? `\n\nRelevant memories about the user:\n${relevantMemories.map((m: any) => `- ${m.text}`).join('\n')}\n`
+				? `\n\nRelevant memories about the user:\n${relevantMemories.map((m) => `- ${m.text}`).join('\n')}\n`
 				: '';
 
-		// 2. Prepare OpenRouter payload
-		const openRouterMessages = messages.map((m: any) => ({
+		// 4. Prepare OpenRouter payload
+		const openRouterMessages: OpenRouterMessage[] = messages.map((m) => ({
 			role: m.role,
 			content: m.isCancelled || m.metadata?.cancelled ? `[CANCELLED BY USER] ${m.body}` : m.body
 		}));
 
 		// Inject memories and RAG context into the system instructions
-		const systemContent = `You are a helpful AI assistant.${memoryContext}${ragContext ? `\n\nUse the following blog posts to answer if relevant:${ragContext}` : ''}`;
+		const systemContent = `You are a helpful AI assistant.${memoryContext}${ragContext ? `\n\nUse the following blog posts to answer if relevant. If you use information from a blog, cite it like [Source Title].\n\n${ragContext}` : ''}`;
 
 		if (memoryContext || ragContext) {
 			// Check if there is already a system message, if not add one.
@@ -166,11 +233,11 @@ export const generate = action({
 			});
 		}
 
-		// 3. Call OpenRouter
+		// 5. Call OpenRouter
 		const modelToUse = model || 'google/gemini-2.0-flash-exp:free';
 		const controller = new AbortController();
 
-		const requestBody: any = {
+		const requestBody: OpenRouterRequestBody = {
 			model: modelToUse,
 			messages: openRouterMessages,
 			stream: true,
@@ -189,7 +256,7 @@ export const generate = action({
 			method: 'POST',
 			headers: {
 				Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-				'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+				'HTTP-Referer': 'https://cognirivus.vercel.app',
 				'X-Title': 'Cognirivus Chat',
 				'Content-Type': 'application/json'
 			},
@@ -205,37 +272,38 @@ export const generate = action({
 
 		if (!response.body) throw new Error('No response body');
 
-		// 4. Create empty assistant message with request context in metadata
-		const usedMemoriesForMeta = relevantMemories.map((m: any) => ({
+		// 6. Update assistant message with request context in metadata
+		const usedMemoriesForMeta = relevantMemories.map((m) => ({
 			_id: m._id,
 			text: m.text,
 			_score: m._score
 		}));
 		// Store the full request payload for context display
-		const contextPayload = {
+		const contextPayload: ContextPayload = {
 			...requestBody,
 			memorySearchQuery: useMemory !== false ? searchOutputText : undefined,
 			memoryFormulationPayload: useMemory !== false ? rewriterInput : undefined,
 			embeddingModel: useMemory !== false ? 'qwen/qwen3-embedding-8b' : undefined,
 			retrievedMemories: useMemory !== false ? relevantMemories : undefined,
-			ragResults: ragEntries
+			ragResults: ragEntries,
+			ragError: ragError
 		};
 		const initialMetadata = {
+			status: 'streaming',
 			...(generateImage ? { isGeneratingImage: true, imageAspectRatio } : {}),
 			...(usedMemoriesForMeta.length > 0 ? { usedMemories: usedMemoriesForMeta } : {}),
 			...(ragEntries.length > 0 ? { ragResults: ragEntries } : {}),
+			...(ragError ? { ragError } : {}),
 			requestPayload: contextPayload
 		};
-		const messageId = await ctx.runMutation(internal.messages.internalCreate, {
+
+		await ctx.runMutation(internal.messages.internalUpdate, {
+			messageId,
 			body: '',
-			userId,
-			threadId,
-			role: 'assistant',
-			model: modelToUse,
 			metadata: initialMetadata
 		});
 
-		// 5. Stream and update
+		// 7. Stream and update
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
 		let fullContent = '';
@@ -290,8 +358,6 @@ export const generate = action({
 										completionTokens: json.usage.completion_tokens,
 										totalTokens: json.usage.total_tokens
 									}
-									// If we captured images during streaming (less likely for images, but possible)
-									// We usually handle images after they arrive
 								});
 								continue;
 							}
@@ -361,8 +427,9 @@ export const generate = action({
 					}
 				}
 			}
-		} catch (e: any) {
-			if (e.name === 'AbortError') {
+		} catch (e: unknown) {
+			const error = e as Error;
+			if (error.name === 'AbortError') {
 				console.log('Cognirivus: Stream aborted by user (AbortController).');
 			} else {
 				console.error('Stream error', e);

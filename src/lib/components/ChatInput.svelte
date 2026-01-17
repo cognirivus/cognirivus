@@ -9,7 +9,8 @@
 		Plus,
 		Activity,
 		Database,
-		Star
+		Star,
+		BookOpen
 	} from '@lucide/svelte';
 	import { useChatContext } from '$lib/chat-state.svelte';
 	import { onMount } from 'svelte';
@@ -21,7 +22,7 @@
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 
-	const chatState = useChatContext();
+	const chatState = useChatContext() as any;
 
 	let {
 		input = $bindable(),
@@ -173,7 +174,7 @@
 				}}
 			/>
 
-			<div class="flex items-center gap-2 px-2 pb-2 sm:px-3 sm:pb-3" bind:this={container}>
+			<div class="flex items-center gap-2 p-2 align-middle" bind:this={container}>
 				<!-- Mobile Unified Toolbar (Radio-like Pill) -->
 				<div
 					class="flex min-w-0 flex-1 items-center gap-0 rounded-xl border border-border/50 bg-muted/30 p-0.5 sm:hidden"
@@ -200,6 +201,19 @@
 						title="Use Memory"
 					>
 						<Database class="h-3.5 w-3.5" />
+					</Button>
+
+					<div class="h-4 w-[1px] bg-border/50"></div>
+
+					<Button
+						variant={chatState.useRag ? 'default' : 'ghost'}
+						size="icon"
+						onclick={() => (chatState.useRag = !chatState.useRag)}
+						disabled={chatStatus === 'streaming'}
+						class="h-8 w-9 flex-shrink-0 rounded-none transition-all"
+						title="Search Blogs (RAG)"
+					>
+						<BookOpen class="h-3.5 w-3.5" />
 					</Button>
 
 					<div class="h-4 w-[1px] bg-border/50"></div>
@@ -242,23 +256,23 @@
 							}}
 							disabled={chatStatus === 'streaming' || isLoadingModels}
 							class="flex w-full items-center justify-between gap-1 px-2 py-1.5 text-[10px] font-bold text-muted-foreground transition-all hover:bg-muted/80 disabled:opacity-50"
-							>
-								<span class="truncate">
-									{#if isLoadingModels}
-										<div class="flex items-center gap-1.5">
-											<div
-												class="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-muted-foreground"
-											></div>
-											<span>Loading...</span>
-										</div>
-									{:else}
-										{models
-											.find((m) => m.id === selectedModel)
-											?.name.split('/')
-											.pop()}
-									{/if}
-								</span>
-								<ChevronDown class="h-3 w-3 flex-shrink-0" />
+						>
+							<span class="truncate">
+								{#if isLoadingModels}
+									<div class="flex items-center gap-1.5">
+										<div
+											class="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-muted-foreground"
+										></div>
+										<span>Loading...</span>
+									</div>
+								{:else}
+									{models
+										.find((m: any) => m.id === selectedModel)
+										?.name.split('/')
+										.pop()}
+								{/if}
+							</span>
+							<ChevronDown class="h-3 w-3 flex-shrink-0" />
 						</button>
 
 						{#if showModelSelector}
@@ -276,10 +290,12 @@
 								</div>
 								<div class="max-h-[300px] overflow-y-auto p-1">
 									{#each filteredModels as model}
-										<div class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 transition-colors {selectedModel ===
+										<div
+											class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 transition-colors {selectedModel ===
 											model.id
 												? 'bg-muted shadow-sm ring-1 ring-border'
-												: ''}">
+												: ''}"
+										>
 											<button
 												type="button"
 												disabled={chatStatus === 'streaming'}
@@ -288,7 +304,7 @@
 													showModelSelector = false;
 													searchQuery = '';
 												}}
-												class="flex flex-1 flex-col items-start gap-1 text-left rounded-lg px-2 py-1.5 transition-all hover:bg-muted"
+												class="flex flex-1 flex-col items-start gap-1 rounded-lg px-2 py-1.5 text-left transition-all hover:bg-muted"
 											>
 												<div class="flex w-full items-center justify-between">
 													<span
@@ -298,7 +314,7 @@
 													>
 													{#if model.supported_parameters?.includes('reasoning') || model.supported_parameters?.includes('include_reasoning')}
 														<div title="Supports Reasoning">
-														<Brain class="h-3 w-3 text-primary" />
+															<Brain class="h-3 w-3 text-primary" />
 														</div>
 													{/if}
 												</div>
@@ -309,10 +325,14 @@
 													e.stopPropagation();
 													toggleFavorite(model.id);
 												}}
-												class="p-0.5 hover:bg-muted/50 rounded transition-colors"
-												title={favoriteModels.includes(model.id) ? 'Remove from favorites' : 'Add to favorites'}
+												class="rounded p-0.5 transition-colors hover:bg-muted/50"
+												title={favoriteModels.includes(model.id)
+													? 'Remove from favorites'
+													: 'Add to favorites'}
 											>
-												<Star class={`h-3 w-3 ${favoriteModels.includes(model.id) ? 'fill-current text-yellow-500' : 'text-muted-foreground'}`} />
+												<Star
+													class={`h-3 w-3 ${favoriteModels.includes(model.id) ? 'fill-current text-yellow-500' : 'text-muted-foreground'}`}
+												/>
 											</button>
 										</div>
 									{/each}
@@ -425,6 +445,21 @@
 						<Tooltip.Root delayDuration={400}>
 							<Tooltip.Trigger>
 								<Button
+									variant={chatState.useRag ? 'default' : 'ghost'}
+									size="icon"
+									onclick={() => (chatState.useRag = !chatState.useRag)}
+									disabled={chatStatus === 'streaming'}
+									class="h-8 w-8 transition-all"
+								>
+									<BookOpen class="h-4 w-4" />
+								</Button>
+							</Tooltip.Trigger>
+							<Tooltip.Content side="top">Search Blogs (RAG)</Tooltip.Content>
+						</Tooltip.Root>
+
+						<Tooltip.Root delayDuration={400}>
+							<Tooltip.Trigger>
+								<Button
 									variant={chatState.generateImage ? 'default' : 'ghost'}
 									size="icon"
 									onclick={toggleImageGen}
@@ -467,25 +502,25 @@
 									showTokenDetail = false;
 								}
 							}}
-									disabled={chatStatus === 'streaming' || isLoadingModels}
+							disabled={chatStatus === 'streaming' || isLoadingModels}
 							class="flex w-full items-center justify-between gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-bold text-muted-foreground transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-								>
-									<span class="truncate">
-										{#if isLoadingModels}
-											<div class="flex items-center gap-1.5">
-												<div
-													class="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-muted-foreground"
-												></div>
-												<span>Loading...</span>
-											</div>
-										{:else}
-											{models
-												.find((m) => m.id === selectedModel)
-												?.name.split('/')
-												.pop()}
-										{/if}
-									</span>
-									<ChevronDown class="h-3 w-3 flex-shrink-0" />
+						>
+							<span class="truncate">
+								{#if isLoadingModels}
+									<div class="flex items-center gap-1.5">
+										<div
+											class="h-3 w-3 animate-spin rounded-full border-[1.5px] border-muted-foreground/30 border-t-muted-foreground"
+										></div>
+										<span>Loading...</span>
+									</div>
+								{:else}
+									{models
+										.find((m: any) => m.id === selectedModel)
+										?.name.split('/')
+										.pop()}
+								{/if}
+							</span>
+							<ChevronDown class="h-3 w-3 flex-shrink-0" />
 						</button>
 
 						{#if showModelSelector}
@@ -513,10 +548,12 @@
 								</div>
 								<div class="max-h-[300px] overflow-y-auto p-1">
 									{#each filteredModels as model}
-										<div class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 transition-colors {selectedModel ===
+										<div
+											class="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 transition-colors {selectedModel ===
 											model.id
 												? 'bg-muted shadow-sm ring-1 ring-border'
-												: ''}">
+												: ''}"
+										>
 											<button
 												type="button"
 												disabled={chatStatus === 'streaming'}
@@ -525,7 +562,7 @@
 													showModelSelector = false;
 													searchQuery = '';
 												}}
-												class="flex flex-1 flex-col items-start gap-1 text-left rounded-lg px-2 py-1.5 transition-all hover:bg-muted"
+												class="flex flex-1 flex-col items-start gap-1 rounded-lg px-2 py-1.5 text-left transition-all hover:bg-muted"
 											>
 												<div class="flex w-full items-center justify-between">
 													<span
@@ -536,7 +573,7 @@
 													{#if model.context_length}
 														<span
 															class="rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground/70"
-														>{Math.round(model.context_length / 1000)}k ctx</span
+															>{Math.round(model.context_length / 1000)}k ctx</span
 														>
 													{/if}
 												</div>
@@ -556,7 +593,7 @@
 														>
 														{#if model.supported_parameters?.includes('reasoning') || model.supported_parameters?.includes('include_reasoning')}
 															<div title="Supports Reasoning">
-															<Brain class="h-3 w-3 text-primary" />
+																<Brain class="h-3 w-3 text-primary" />
 															</div>
 														{/if}
 													</div>
@@ -569,9 +606,13 @@
 													toggleFavorite(model.id);
 												}}
 												class="flex h-7 w-7 items-center justify-center rounded-lg bg-muted p-0.5 transition-colors hover:bg-muted/50"
-												title={favoriteModels.includes(model.id) ? 'Remove from favorites' : 'Add to favorites'}
+												title={favoriteModels.includes(model.id)
+													? 'Remove from favorites'
+													: 'Add to favorites'}
 											>
-												<Star class={`h-3 w-3 ${favoriteModels.includes(model.id) ? 'fill-current text-yellow-500' : 'text-muted-foreground'}`} />
+												<Star
+													class={`h-3 w-3 ${favoriteModels.includes(model.id) ? 'fill-current text-yellow-500' : 'text-muted-foreground'}`}
+												/>
 											</button>
 										</div>
 									{/each}

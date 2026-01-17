@@ -10,7 +10,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { Plus, Pencil, Trash2, Eye, EyeOff, Save, X, ArrowLeft } from '@lucide/svelte';
+	import { Plus, Pencil, Trash2, Eye, EyeOff, Save, X, ArrowLeft, BookOpen } from '@lucide/svelte';
 
 	const blogsQuery = useQuery(api.blogs.list, { onlyPublished: false });
 	const client = useConvexClient();
@@ -79,13 +79,10 @@
 	}
 </script>
 
-<div class="container mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+<div class="container mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 	<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div class="space-y-1">
 			<div class="flex items-center gap-2">
-				<Button href="/admin" variant="ghost" size="icon-sm" class="rounded-full">
-					<ArrowLeft class="h-4 w-4" />
-				</Button>
 				<h1 class="text-3xl font-bold tracking-tight">Blog Management</h1>
 			</div>
 			<p class="ml-10 text-muted-foreground">

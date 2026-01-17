@@ -11,7 +11,7 @@ export async function createEmbedding(text: string) {
 		headers: {
 			Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 			'Content-Type': 'application/json',
-			'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+			'HTTP-Referer': 'https://cognirivus.vercel.app',
 			'X-Title': 'Cognirivus Chat'
 		},
 		body: JSON.stringify({
@@ -50,7 +50,7 @@ export async function extractMemories(text: string): Promise<{
 		headers: {
 			Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 			'Content-Type': 'application/json',
-			'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+			'HTTP-Referer': 'https://cognirivus.vercel.app',
 			'X-Title': 'Cognirivus Chat'
 		},
 		body: JSON.stringify({
@@ -105,7 +105,7 @@ export async function formulateStandaloneQuery(history: { role: string; content:
 		headers: {
 			Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 			'Content-Type': 'application/json',
-			'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+			'HTTP-Referer': 'https://cognirivus.vercel.app',
 			'X-Title': 'Cognirivus Chat'
 		},
 		body: JSON.stringify({
@@ -161,7 +161,7 @@ export async function judgeMemoryDuplicate(
 		headers: {
 			Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
 			'Content-Type': 'application/json',
-			'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+			'HTTP-Referer': 'https://cognirivus.vercel.app',
 			'X-Title': 'Cognirivus Chat'
 		},
 		body: JSON.stringify({

@@ -31,7 +31,7 @@ export const listImageModels = action({
 		const response = await fetch('https://openrouter.ai/api/v1/models', {
 			headers: {
 				Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-				'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+				'HTTP-Referer': 'https://cognirivus.vercel.app',
 				'X-Title': 'Cognirivus Chat'
 			}
 		});
@@ -129,7 +129,7 @@ export const generate = action({
 				method: 'POST',
 				headers: {
 					Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-					'HTTP-Referer': 'https://cognirivus-chat.vercel.app',
+					'HTTP-Referer': 'https://cognirivus.vercel.app',
 					'X-Title': 'Cognirivus Chat',
 					'Content-Type': 'application/json'
 				},

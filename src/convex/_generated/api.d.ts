@@ -12,6 +12,7 @@ import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as blogs from "../blogs.js";
 import type * as chat from "../chat.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as image from "../image.js";
 import type * as lib_openrouter from "../lib/openrouter.js";
@@ -20,6 +21,7 @@ import type * as messages from "../messages.js";
 import type * as models from "../models.js";
 import type * as rag from "../rag.js";
 import type * as threads from "../threads.js";
+import type * as types_chat from "../types/chat.js";
 import type * as usage from "../usage.js";
 import type * as users from "../users.js";
 
@@ -34,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   blogs: typeof blogs;
   chat: typeof chat;
+  crons: typeof crons;
   http: typeof http;
   image: typeof image;
   "lib/openrouter": typeof lib_openrouter;
@@ -42,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   models: typeof models;
   rag: typeof rag;
   threads: typeof threads;
+  "types/chat": typeof types_chat;
   usage: typeof usage;
   users: typeof users;
 }>;

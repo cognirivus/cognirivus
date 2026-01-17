@@ -103,19 +103,20 @@ const schema = defineSchema({
 		content: v.string(),
 		authorId: v.string(),
 		createdAt: v.number(),
-		published: v.boolean()
+		published: v.boolean(),
+		/** RAG entry ID for vector search (used for cleanup on deletion) */
+		ragEntryId: v.optional(v.string())
 	})
 		.index('by_created_at', ['createdAt'])
-		.index('by_published', ['published']),
-	blog_likes: defineTable({
+		.index('by_published', ['published'])
+		.searchIndex('search_content', {
+			searchField: 'content',
+			filterFields: ['published']
+		}),
+	blog_reactions: defineTable({
 		blogId: v.id('blogs'),
-		userId: v.string()
-	})
-		.index('by_blog', ['blogId'])
-		.index('by_blog_user', ['blogId', 'userId']),
-	blog_dislikes: defineTable({
-		blogId: v.id('blogs'),
-		userId: v.string()
+		userId: v.string(),
+		like_dislike: v.number() // 1 for like, -1 for dislike
 	})
 		.index('by_blog', ['blogId'])
 		.index('by_blog_user', ['blogId', 'userId']),
@@ -127,15 +128,10 @@ const schema = defineSchema({
 	})
 		.index('by_blog', ['blogId'])
 		.index('by_blog_created_at', ['blogId', 'createdAt']),
-	comment_likes: defineTable({
+	comment_reactions: defineTable({
 		commentId: v.id('blog_comments'),
-		userId: v.string()
-	})
-		.index('by_comment', ['commentId'])
-		.index('by_comment_user', ['commentId', 'userId']),
-	comment_dislikes: defineTable({
-		commentId: v.id('blog_comments'),
-		userId: v.string()
+		userId: v.string(),
+		like_dislike: v.number() // 1 for like, -1 for dislike
 	})
 		.index('by_comment', ['commentId'])
 		.index('by_comment_user', ['commentId', 'userId'])

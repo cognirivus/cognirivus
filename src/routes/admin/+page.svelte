@@ -4,7 +4,6 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
-	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import {
 		Shield,
@@ -13,7 +12,6 @@
 		UserMinus,
 		UserCheck,
 		Search,
-		BookOpen,
 		RefreshCw
 	} from '@lucide/svelte';
 
@@ -76,10 +74,6 @@
 			<Button variant="outline" size="sm" onclick={fetchUsers} disabled={loading}>
 				<RefreshCw class="mr-2 h-4 w-4 {loading ? 'animate-spin' : ''}" />
 				Refresh
-			</Button>
-			<Button href="/admin/blog" variant="outline" size="sm" class="gap-2">
-				<BookOpen class="h-4 w-4" />
-				Manage Blog
 			</Button>
 		</div>
 	</div>

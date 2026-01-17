@@ -6,6 +6,10 @@
 		ReasoningContent,
 		ReasoningTrigger
 	} from '$lib/components/prompt-kit/reasoning/index.js';
+	import { onMount } from 'svelte';
+	import { Badge } from '$lib/components/ui/badge/index.js';
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 
 	let { message, isLast, isStreaming, onViewContext } = $props<{
 		message: any;
@@ -15,8 +19,7 @@
 	}>();
 
 	let revealedMetadata = $state(false);
-	let showLearnedFacts = $state(false);
-	let showUsedMemories = $state(false);
+	let mounted = $state(false);
 
 	const ASPECT_SIZE_MAP: Record<string, string> = {
 		'1:1': 'h-64 w-64',
@@ -32,24 +35,19 @@
 		return ASPECT_SIZE_MAP[ratio] || 'h-64 w-64';
 	}
 
-	import { onMount } from 'svelte';
-	import { Badge } from '$lib/components/ui/badge/index.js';
-	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
-
-	let mounted = $state(false);
 	onMount(() => {
 		mounted = true;
 	});
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	onclick={() => (revealedMetadata = !revealedMetadata)}
 	class="group flex w-full cursor-pointer flex-col {message.role === 'user'
 		? 'items-end'
 		: 'items-start'}"
+	role="button"
+	tabindex="0"
+	onkeydown={(e) => e.key === 'Enter' && (revealedMetadata = !revealedMetadata)}
 >
 	<Message class="w-full flex-col gap-2 {message.role === 'user' ? 'items-end' : 'items-start'}">
 		{#if message.role === 'assistant'}
@@ -68,14 +66,18 @@
 					/>
 				</Reasoning>
 			{/if}
-			<MessageContent
-				markdown
-				content={message.body}
-				class="w-full max-w-none bg-transparent p-0 leading-relaxed"
-			/>
+
+			{#if message.body}
+				<MessageContent
+					markdown
+					content={message.body}
+					class="w-full max-w-none bg-transparent p-0 leading-relaxed"
+				/>
+			{/if}
+
 			{#if message.imageUrls?.length > 0 || message.deletedImageCount > 0}
 				<div class="mt-2 flex flex-wrap gap-2">
-					{#each message.imageUrls as url}
+					{#each message.imageUrls || [] as url}
 						<img
 							src={url}
 							alt="Generated content"
@@ -171,9 +173,7 @@
 					<span>Prompt: {message.usage.promptTokens}</span>
 					<span>Completions: {message.usage.completionTokens}</span>
 					{#if message.cost !== undefined}
-						<span class="font-bold text-foreground/80">
-							${message.cost.toFixed(6)}
-						</span>
+						<span class="font-bold text-foreground/80">${message.cost.toFixed(6)}</span>
 					{/if}
 					{#if message.isCancelled || message.metadata?.cancelled}
 						<div
@@ -189,7 +189,7 @@
 								<Tooltip.Trigger>
 									<Badge
 										variant="secondary"
-										class="flex cursor-default items-center gap-1 px-1.5 py-0.5 text-[9px] font-medium transition-colors"
+										class="flex cursor-default items-center gap-1 px-1.5 py-0.5 text-[9px] font-medium"
 									>
 										<Brain class="h-3 w-3" />
 										<span>{message.metadata.usedMemories.length} memories</span>
@@ -222,7 +222,6 @@
 							variant="ghost"
 							size="sm"
 							class="h-5 gap-1 px-1.5 py-0 text-[9px] font-medium text-muted-foreground hover:text-foreground"
-							title="View blog context"
 							onclick={(e) => {
 								e.stopPropagation();
 								onViewContext(message._id, 'rag');
@@ -237,7 +236,6 @@
 						variant="ghost"
 						size="sm"
 						class="h-5 gap-1 px-1.5 py-0 text-[9px] font-medium text-muted-foreground hover:text-foreground"
-						title="View technical context (JSON)"
 						onclick={(e) => {
 							e.stopPropagation();
 							onViewContext(message._id, 'full');
@@ -260,18 +258,6 @@
 			<span class="text-[10px] text-muted-foreground">
 				{mounted ? new Date(message.createdAt).toLocaleString() : ''}
 			</span>
-			<Button
-				variant="ghost"
-				size="icon"
-				onclick={(e) => {
-					e.stopPropagation();
-					onViewContext(message._id, 'full');
-				}}
-				class="h-6 w-6 text-muted-foreground hover:text-foreground"
-				title="View context sent to AI"
-			>
-				<Terminal class="h-3.5 w-3.5" />
-			</Button>
 		</div>
 	{/if}
 </div>

@@ -89,13 +89,16 @@
 	async function triggerResponse() {
 		chatState.status = 'streaming';
 		try {
+			// @ts-ignore - useRag might not be in generated types yet
 			await client.action(api.chat.generate, {
 				threadId,
 				model: chatState.selectedModel,
 				includeReasoning: chatState.includeReasoning,
 				generateImage: chatState.generateImage,
 				imageAspectRatio: chatState.generateImage ? chatState.imageAspectRatio : undefined,
-				useMemory: chatState.useMemory
+				useMemory: chatState.useMemory,
+				// @ts-ignore
+				useRag: chatState.useRag
 			});
 		} catch (e: any) {
 			if ((chatState.status as string) === 'ready') {
@@ -187,7 +190,7 @@
 					{message}
 					isLast={messageIndex === lastMessageIndex}
 					isStreaming={chatState.status === 'streaming'}
-					onViewContext={(id, mode) => {
+					onViewContext={(id: string, mode: 'full' | 'rag') => {
 						viewingContextId = id;
 						viewingContextMode = mode;
 					}}
