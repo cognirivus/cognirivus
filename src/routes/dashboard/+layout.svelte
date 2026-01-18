@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { BarChart3, Settings } from '@lucide/svelte';
+	import { ChartLine, Settings } from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 
@@ -10,7 +10,7 @@
 		{
 			name: 'Usage',
 			href: '/dashboard/usage',
-			icon: BarChart3
+			icon: ChartLine
 		},
 		{
 			name: 'Memories',

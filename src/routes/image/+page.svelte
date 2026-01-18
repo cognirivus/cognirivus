@@ -19,6 +19,8 @@
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
 	import { onMount } from 'svelte';
+	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
+	import { ChartLine } from '@lucide/svelte';
 
 	const client = useConvexClient();
 
@@ -349,6 +351,16 @@
 
 		<!-- Mode Switcher -->
 		<div class="border-t border-border p-2">
+			<a
+				href="/dashboard"
+				class={buttonVariants({
+					variant: 'secondary',
+					class: 'mb-2 w-full justify-start gap-3'
+				})}
+			>
+				<ChartLine class="h-4 w-4" />
+				Dashboard
+			</a>
 			<div class="flex rounded-lg bg-muted p-1">
 				<a
 					href="/chat"

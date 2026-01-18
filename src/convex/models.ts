@@ -35,7 +35,7 @@ export const syncFromOpenRouter = action({
 	args: {},
 	handler: async (ctx) => {
 		const user = await authComponent.getAuthUser(ctx);
-		if (!user) throw new Error('Unauthorized');
+		if (!user) throw new Error('Unauthorized access to syncFromOpenRouter');
 
 		const response = await fetch('https://openrouter.ai/api/v1/models', {
 			headers: {

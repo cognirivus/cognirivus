@@ -6,7 +6,7 @@ export class ChatContext {
 	includeReasoning = $state(false);
 	useMemory = $state(false); // Memory-based personalization (off by default)
 	/** RAG toggle state */
-	useRag = $state(true); // RAG-based blog search (on by default)
+	useRag = $state(false); // RAG-based blog search (off by default)
 	generateImage = $state(false);
 	imageAspectRatio = $state<string>('1:1');
 	input = $state('');

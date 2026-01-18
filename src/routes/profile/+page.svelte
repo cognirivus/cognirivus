@@ -14,10 +14,15 @@
 		LogOut,
 		Clock,
 		ArrowLeft,
-		ExternalLink
+		ExternalLink,
+		Trash2,
+		AlertTriangle
 	} from '@lucide/svelte';
 	import { authClient } from '$lib/auth-client';
 	import { goto, invalidateAll } from '$app/navigation';
+	import { useConvexClient } from 'convex-svelte';
+	import { api } from '../../convex/_generated/api';
+	import { toast } from 'svelte-sonner';
 
 	interface Props {
 		data: {
@@ -29,11 +34,31 @@
 	let { data }: Props = $props();
 	const session = authClient.useSession();
 	const user = $derived($session.data?.user || data.currentUser);
+	const client = useConvexClient();
 
 	async function signOut() {
 		await authClient.signOut();
 		await invalidateAll();
 		goto('/signin');
+	}
+
+	async function handleDeleteAllChats() {
+		if (
+			!confirm(
+				'Are you sure you want to delete ALL chat history? This action cannot be undone and will permanently remove all your threads and messages.'
+			)
+		) {
+			return;
+		}
+
+		try {
+			await client.mutation(api.threads.deleteAll, {});
+			toast.success('All chat history has been deleted.');
+			await invalidateAll();
+		} catch (error) {
+			console.error('Failed to delete chats:', error);
+			toast.error('Failed to delete chat history. Please try again.');
+		}
 	}
 
 	const formatDate = (timestamp: any) => {
@@ -220,6 +245,39 @@
 						</Card.Footer>
 					</Card.Root>
 				{/if}
+
+				<!-- Danger Zone -->
+				<Card.Root class="border-destructive/30 bg-destructive/5">
+					<Card.Header class="flex flex-row items-center gap-4 space-y-0">
+						<div class="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+							<AlertTriangle class="h-6 w-6 text-destructive" />
+						</div>
+						<div class="flex-1">
+							<Card.Title class="text-destructive">Danger Zone</Card.Title>
+							<Card.Description class="text-destructive/70">
+								Irreversible actions related to your data.
+							</Card.Description>
+						</div>
+					</Card.Header>
+					<Card.Content class="space-y-4">
+						<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+							<div class="space-y-1">
+								<p class="font-medium text-foreground">Delete All Chat History</p>
+								<p class="text-xs text-muted-foreground">
+									Permanently remove all threads and messages.
+								</p>
+							</div>
+							<Button
+								variant="destructive"
+								class="w-full gap-2 sm:w-auto"
+								onclick={handleDeleteAllChats}
+							>
+								<Trash2 class="h-4 w-4" />
+								Delete Everything
+							</Button>
+						</div>
+					</Card.Content>
+				</Card.Root>
 			</div>
 		</div>
 	{:else if $session.isPending}

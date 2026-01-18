@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { useQuery } from 'convex-svelte';
 	import { api } from '../../../convex/_generated/api';
-	import { Coins, Zap, MessageSquare, Ban, TrendingUp, BarChart3 } from '@lucide/svelte';
+	import { Coins, Zap, MessageSquare, Ban, TrendingUp, ChartLine } from '@lucide/svelte';
 	import * as Card from '$lib/components/ui/card';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Badge } from '$lib/components/ui/badge';
@@ -160,7 +160,7 @@
 				<Card.Root>
 					<Card.Header>
 						<Card.Title class="flex items-center gap-2 text-base">
-							<BarChart3 class="h-4 w-4" />
+							<ChartLine class="h-4 w-4" />
 							Purpose Breakdown
 						</Card.Title>
 					</Card.Header>
@@ -192,7 +192,7 @@
 				<Card.Root>
 					<Card.Header>
 						<Card.Title class="flex items-center gap-2 text-base">
-							<BarChart3 class="h-4 w-4" />
+							<ChartLine class="h-4 w-4" />
 							Model Breakdown
 						</Card.Title>
 					</Card.Header>

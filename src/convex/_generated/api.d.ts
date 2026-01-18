@@ -16,6 +16,7 @@ import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as image from "../image.js";
 import type * as lib_openrouter from "../lib/openrouter.js";
+import type * as lib_semantic from "../lib/semantic.js";
 import type * as memories from "../memories.js";
 import type * as messages from "../messages.js";
 import type * as models from "../models.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   image: typeof image;
   "lib/openrouter": typeof lib_openrouter;
+  "lib/semantic": typeof lib_semantic;
   memories: typeof memories;
   messages: typeof messages;
   models: typeof models;

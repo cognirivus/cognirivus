@@ -204,8 +204,28 @@
 					(latestMessage?.role === 'assistant' && !latestMessage.body && !latestMessage.reasoning)}
 
 				{#if showLoader}
-					<div class="flex w-full justify-start px-2 py-4">
-						<Loader variant="typing" />
+					{@const status =
+						latestMessage?.role === 'assistant' ? latestMessage.metadata?.status : null}
+					<div class="flex w-full items-center px-2 py-4">
+						{#if status === 'searching'}
+							<div class="flex h-5 items-center">
+								<span
+									class="animate-pulse text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
+								>
+									🔍 Searching knowledge base...
+								</span>
+							</div>
+						{:else if status === 'highlighting'}
+							<div class="flex h-5 items-center">
+								<span
+									class="animate-pulse text-[10px] font-medium tracking-wide text-primary uppercase"
+								>
+									✨ Identifying relevant segments...
+								</span>
+							</div>
+						{:else}
+							<Loader variant="typing" />
+						{/if}
 					</div>
 				{/if}
 			{/if}
@@ -264,7 +284,26 @@
 												{/if}
 											</div>
 											<div class="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
-												{entry.text}
+												{#if entry.key === 'ai-highlights'}
+													{#each entry.text.split('\n') as line}
+														{@const match = line.match(/^\*\*\[(\d+)%\]\*\*\s*(.*)/)}
+														{#if match}
+															<div class="mb-1.5 flex items-start gap-2">
+																<Badge
+																	variant="secondary"
+																	class="h-5 shrink-0 px-1.5 py-0 text-[10px] font-bold"
+																>
+																	{match[1]}%
+																</Badge>
+																<span>{match[2]}</span>
+															</div>
+														{:else}
+															<div class="min-h-[1em]">{line}</div>
+														{/if}
+													{/each}
+												{:else}
+													{entry.text}
+												{/if}
 											</div>
 											{#if entry._score}
 												<Badge variant="secondary" class="mt-2 text-[10px]">
@@ -403,9 +442,30 @@
 														{/if}
 													</div>
 													<div
-														class="max-h-20 overflow-y-auto whitespace-pre-wrap text-foreground/80"
+														class="max-h-60 overflow-y-auto whitespace-pre-wrap text-foreground/80"
 													>
-														{entry.text}
+														{#if entry.key === 'ai-highlights'}
+															<div class="space-y-1">
+																{#each entry.text.split('\n') as line}
+																	{@const match = line.match(/^\*\*\[(\d+)%\]\*\*\s*(.*)/)}
+																	{#if match}
+																		<div class="flex items-start gap-2 text-[10px]">
+																			<Badge
+																				variant="secondary"
+																				class="h-4 shrink-0 px-1 py-0 text-[9px] font-bold"
+																			>
+																				{match[1]}%
+																			</Badge>
+																			<span>{match[2]}</span>
+																		</div>
+																	{:else}
+																		<div class="min-h-[1em]">{line}</div>
+																	{/if}
+																{/each}
+															</div>
+														{:else}
+															{entry.text}
+														{/if}
 													</div>
 												</div>
 											{/each}

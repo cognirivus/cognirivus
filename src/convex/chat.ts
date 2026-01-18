@@ -2,6 +2,7 @@ import { action } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { getGenerationStats } from './lib/openrouter';
+import { highlightText } from './lib/semantic';
 import { authComponent } from './auth';
 import { rag, RAG_CONFIG, type RagEntry, type RagUsage } from './rag';
 import type {
@@ -127,7 +128,7 @@ export const generate = action({
 					limit: 2
 				});
 
-				const { text: vectorText, results: vectorResults, entries, usage } = vectorResult;
+				const { results: vectorResults, entries, usage } = vectorResult;
 				ragUsage = usage;
 
 				// Combine and deduplicate
@@ -136,6 +137,10 @@ export const generate = action({
 					uniqueBlogIds.add(blog._id);
 				}
 
+				console.log(
+					`RAG Search Results: ${entries.length} vector, ${textResults.length} text, ${uniqueBlogIds.size} unique docs`
+				);
+
 				if (uniqueBlogIds.size > 0) {
 					// Fetch all unique blog docs
 					const blogDocs = await Promise.all(
@@ -143,41 +148,109 @@ export const generate = action({
 					);
 					const blogMap = new Map(blogDocs.filter(Boolean).map((b) => [b!._id, b!]));
 
-					// Build combined context text
-					let combinedText = vectorText || '';
+					// 1. Collect all chunks (Vector + Text)
+					let allContext = '';
+					const contextSources: { id: string; title: string; text: string; score: number }[] = [];
 
-					// Add text search results if they aren't already well-represented
-					for (const blog of textResults) {
-						if (!entries.some((e) => e.key === blog._id)) {
-							combinedText += `\n\n--- Source: ${blog.title} ---\n${blog.content.substring(0, 1000)}...\n`;
+					// Add Vector Results
+					for (const r of vectorResults) {
+						const entry = entries.find((e) => e.entryId === r.entryId);
+						const blogId = entry?.key as string | undefined;
+						const blog = blogId ? blogMap.get(blogId as any) : undefined;
+						const text = r.content[0]?.text || '';
+
+						if (text) {
+							allContext += `\n\n--- Source: ${blog?.title || 'Unknown'} ---\n${text}\n`;
+							contextSources.push({
+								id: blog?._id || '',
+								title: blog?.title || 'Unknown',
+								text,
+								score: r.score
+							});
 						}
 					}
 
-					if (combinedText) {
-						console.log('RAG found relevant blogs (Hybrid)');
-						ragContext = `\n\nRelevant blog posts:\n${combinedText}\n`;
+					// Add Text Results
+					const uniqueTextResults = textResults.filter(
+						(blog) => !entries.some((e) => e.key === blog._id)
+					);
+					for (const blog of uniqueTextResults) {
+						const text = blog.content.substring(0, 1000);
+						if (text) {
+							allContext += `\n\n--- Source: ${blog.title} ---\n${text}\n`;
+							contextSources.push({
+								id: blog._id,
+								title: blog.title,
+								text,
+								score: 0.8
+							});
+						}
+					}
 
-						// Map for UI
-						ragEntries = [
-							...vectorResults.map((r) => {
-								const entry = entries.find((e) => e.entryId === r.entryId);
-								const blogId = entry?.key as string | undefined;
-								return {
-									key: blogId || '',
-									title: blogId ? blogMap.get(blogId as any)?.title : undefined,
-									text: r.content[0]?.text || '',
-									_score: r.score
-								};
-							}),
-							...textResults
-								.filter((blog) => !entries.some((e) => e.key === blog._id))
-								.map((blog) => ({
-									key: blog._id,
-									title: blog.title,
-									text: blog.content.substring(0, 500) + '...',
-									_score: 0.8 // Arbitrary score for text match display
-								}))
-						];
+					// 2. Single API Call to Highlight Combined Context
+					if (allContext) {
+						// Update status to 'highlighting'
+						await ctx.runMutation(internal.messages.internalUpdate, {
+							messageId,
+							body: '',
+							metadata: { status: 'highlighting' }
+						});
+
+						console.log('Sending combined context to highlighter...');
+						const { highlightedText, scores } = await highlightText(userPrompt, allContext);
+
+						if (highlightedText) {
+							console.log('--- Highlighted Sentences (Combined) ---');
+							console.log(highlightedText);
+
+							if (scores) {
+								console.log(`--- Scores (Raw: ${scores.length}) ---`);
+								// Just log the first few stats about scores to avoid spamming mismatched logs
+								console.log(
+									`Min: ${Math.min(...scores).toFixed(4)}, Max: ${Math.max(...scores).toFixed(4)}, Avg: ${(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(4)}`
+								);
+							}
+
+							console.log('RAG found relevant blogs (Highlighted)');
+							ragContext = `\n\nRelevant blog posts (Highlighted):\n${highlightedText}\n`;
+						} else {
+							console.warn('Highlighter returned empty result for combined context.');
+							ragContext = ''; // Or fallback to allContext if preferred? Currently strict no-fallback.
+						}
+
+						// Map for UI - We show the sources that contributed to the context
+						ragEntries = contextSources.map((s) => ({
+							key: s.id,
+							title: s.title,
+							text: s.text,
+							_score: s.score
+						}));
+
+						// Add a special entry for the AI Highlights if available
+						if (highlightedText) {
+							// Format the text to include scores if available
+							let formattedText = highlightedText;
+							if (scores && scores.length > 0) {
+								const lines = highlightedText.split('\n');
+								// Only format if lengths match to be safe
+								if (lines.length === scores.length) {
+									formattedText = lines
+										.map((line, i) => {
+											const percent = Math.round(scores[i] * 100);
+											// Using bold for visibility, similar to a text badge
+											return `**[${percent}%]** ${line}`;
+										})
+										.join('\n');
+								}
+							}
+
+							ragEntries.unshift({
+								key: 'ai-highlights',
+								title: '✨ AI Highlights',
+								text: formattedText,
+								_score: 1.0
+							});
+						}
 					}
 				}
 

@@ -121,3 +121,38 @@ export const rename = mutation({
 		await ctx.db.patch(id, { title });
 	}
 });
+
+/**
+ * Deletes ALL chat threads and associated messages for the authenticated user.
+ *
+ * This is a destructive action that wipes the user's entire conversation history.
+ *
+ * @throws {Error} if the user is not authenticated.
+ */
+export const deleteAll = mutation({
+	args: {},
+	handler: async (ctx) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Not authenticated');
+
+		// 1. Delete all messages for this user (using by_user index for speed)
+		const messages = await ctx.db
+			.query('messages')
+			.withIndex('by_user', (q) => q.eq('userId', user._id))
+			.collect();
+
+		for (const message of messages) {
+			await ctx.db.delete(message._id);
+		}
+
+		// 2. Delete all threads for this user
+		const threads = await ctx.db
+			.query('threads')
+			.withIndex('by_user', (q) => q.eq('userId', user._id))
+			.collect();
+
+		for (const thread of threads) {
+			await ctx.db.delete(thread._id);
+		}
+	}
+});

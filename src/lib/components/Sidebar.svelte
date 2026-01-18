@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Plus, Trash2, BarChart3, X, MessageSquare, ImageIcon } from '@lucide/svelte';
+	import { Plus, Trash2, ChartLine, X, MessageSquare, ImageIcon } from '@lucide/svelte';
 	import SidebarHeader from './SidebarHeader.svelte';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
@@ -8,7 +8,7 @@
 	import { goto } from '$app/navigation';
 	import { useChatContext } from '$lib/chat-state.svelte';
 	import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
-	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
+	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 
 	const chatState = useChatContext();
 
@@ -64,10 +64,8 @@
 	<div class="flex-1 overflow-y-auto px-2 py-2">
 		<div class="space-y-1">
 			{#if threads.isLoading}
-				<div class="space-y-2 px-2">
-					<Skeleton class="h-9 w-full rounded-lg" />
-					<Skeleton class="h-9 w-full rounded-lg" />
-					<Skeleton class="h-9 w-full rounded-lg" />
+				<div class="flex items-center justify-center">
+					<Loader variant="circular" size="sm" />
 				</div>
 			{:else if threads.data}
 				{#each threads.data as thread}
@@ -99,11 +97,11 @@
 		<a
 			href="/dashboard"
 			class={buttonVariants({
-				variant: page.url.pathname === '/dashboard' ? 'secondary' : 'ghost',
+				variant: 'secondary',
 				class: 'mb-2 w-full justify-start gap-3'
 			})}
 		>
-			<BarChart3 class="h-4 w-4" />
+			<ChartLine class="h-4 w-4" />
 			Dashboard
 		</a>
 
