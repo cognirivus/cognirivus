@@ -18,6 +18,7 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import { toast } from 'svelte-sonner';
+	import HighlightToggle from '$lib/components/HighlightToggle.svelte';
 
 	const threadId = $derived(page.params.id as Id<'threads'>);
 
@@ -177,6 +178,10 @@
 	});
 </script>
 
+<!-- Top right fixed -->
+<div class="fixed top-10 right-1 z-50 flex items-center md:top-2 md:right-12">
+	<HighlightToggle />
+</div>
 <!-- Scrollable Message Area -->
 <div bind:this={viewport} class="flex-1 overflow-y-auto [scrollbar-gutter:stable]">
 	{#if messagesQuery?.isLoading && messages.length === 0}

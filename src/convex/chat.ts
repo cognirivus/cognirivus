@@ -295,16 +295,16 @@ export const generate = action({
 		}));
 
 		// Inject memories and RAG context into the system instructions
-		const systemContent = `You are a helpful AI assistant.${memoryContext}${ragContext ? `\n\nUse the following blog posts to answer if relevant. If you use information from a blog, cite it like [Source Title].\n\n${ragContext}` : ''}`;
+		const systemContent = `You are a helpful AI assistant.
+MANDATORY: In every response, wrap only key terms with <hl>...</hl>.
+Focus highlighting on direct answers, essential facts, and core concepts relevant to the question.
+Example: “The capital of France is <hl>Paris</hl>, with a population of <hl>2.1 million</hl>.”${memoryContext}${ragContext ? `\n\nUse the following blog posts to answer if relevant. If you use information from a blog, cite it like [Source Title].\n\n${ragContext}` : ''}`;
 
-		if (memoryContext || ragContext) {
-			// Check if there is already a system message, if not add one.
-			// If existing messages don't have 'system', we can prepend one.
-			openRouterMessages.unshift({
-				role: 'system',
-				content: systemContent
-			});
-		}
+		// Always inject system prompt
+		openRouterMessages.unshift({
+			role: 'system',
+			content: systemContent
+		});
 
 		// 5. Call OpenRouter
 		const modelToUse = model || 'google/gemini-2.0-flash-exp:free';

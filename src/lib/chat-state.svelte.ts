@@ -2,7 +2,7 @@ type ChatStatus = 'ready' | 'submitted' | 'streaming' | 'error';
 
 export class ChatContext {
 	// Settings and drafts (local to tab)
-	selectedModel = $state('openai/gpt-oss-20b');
+	selectedModel = $state('openai/gpt-oss-20b:free');
 	includeReasoning = $state(false);
 	useMemory = $state(false); // Memory-based personalization (off by default)
 	/** RAG toggle state */

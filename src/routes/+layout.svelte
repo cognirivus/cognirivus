@@ -27,7 +27,7 @@
 {#if showNavbar}
 	<Navbar />
 {:else}
-	<div class="fixed top-2 right-2 z-50">
+	<div class="fixed top-1 right-1 z-50 lg:top-2 lg:right-2">
 		<ThemeToggle />
 	</div>
 {/if}

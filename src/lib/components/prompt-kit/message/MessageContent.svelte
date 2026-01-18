@@ -2,7 +2,7 @@
 	import { cn } from "$lib/utils";
 	import type { Snippet } from "svelte";
 	import type { HTMLAttributes } from "svelte/elements";
-	import Markdown from "$lib/components/prompt-kit/markdown/Markdown.svelte";
+	import HighlightedMarkdown from "$lib/components/prompt-kit/markdown/HighlightedMarkdown.svelte";
 
 	let {
 		markdown = false,
@@ -29,7 +29,7 @@
 	<!-- <div class={classNames} {...restProps}>
 		{@render children()}
 	</div> -->
-	<Markdown class={classNames} {content}></Markdown>
+	<HighlightedMarkdown class={classNames} {content}></HighlightedMarkdown>
 {:else}
 	<div class={classNames} {...restProps}>
 		{@render children?.()}
