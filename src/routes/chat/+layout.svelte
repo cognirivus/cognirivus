@@ -5,9 +5,17 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
 	import SidebarToggle from '$lib/components/SidebarToggle.svelte';
+	import { useQuery } from 'convex-svelte';
+	import { api } from '../../convex/_generated/api';
 
 	let { children } = $props();
 	const chatState = setChatContext();
+
+	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
+	const user = $derived(currentUserQuery.data);
+	const isAdmin = $derived(
+		!!(user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin'))
+	);
 
 	// Browser responsiveness
 	$effect(() => {
@@ -60,6 +68,7 @@
 			totalCost={chatState.totalCost}
 			isActuallyStreaming={chatState.isActuallyStreaming}
 			isLoadingModels={chatState.isLoadingModels}
+			{isAdmin}
 		/>
 	</div>
 </div>

@@ -46,7 +46,8 @@ export const listImageModels = action({
 			.filter((m: any) => m.architecture?.output_modalities?.includes('image'))
 			.map((m: any) => ({
 				id: m.id,
-				name: m.name
+				name: m.name,
+				pricing: m.pricing
 			}));
 	}
 });

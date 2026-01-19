@@ -37,7 +37,8 @@
 		totalCompletionTokens = 0,
 		totalCost = 0,
 		isActuallyStreaming = false,
-		isLoadingModels = false
+		isLoadingModels = false,
+		isAdmin = false
 	} = $props();
 
 	let showModelSelector = $state(false);
@@ -45,6 +46,10 @@
 	let showTokenDetail = $state(false);
 	let searchQuery = $state('');
 	let favoriteModels = $state<string[]>([]);
+
+	// Helper to check if model is free (pricing is 0 for both prompt and completion)
+	const isFreeModel = (m: (typeof models)[0]) =>
+		m.pricing && parseFloat(m.pricing.prompt) === 0 && parseFloat(m.pricing.completion) === 0;
 
 	let filteredModels = $derived(
 		models
@@ -55,7 +60,9 @@
 					? m.supported_parameters?.includes('reasoning') ||
 						m.supported_parameters?.includes('include_reasoning')
 					: true;
-				return matchesSearch && matchesImage && matchesReasoning;
+				// Non-admin users can only see free models
+				const matchesPricing = isAdmin || isFreeModel(m);
+				return matchesSearch && matchesImage && matchesReasoning && matchesPricing;
 			})
 			.sort((a, b) => {
 				// Always put selected model first

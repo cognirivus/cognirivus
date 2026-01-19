@@ -24,22 +24,39 @@
 
 	const client = useConvexClient();
 
-	// Custom Modal model
+	// User and admin check
+	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
+	const user = $derived(currentUserQuery.data);
+	const isAdmin = $derived(
+		user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin')
+	);
+
+	// Custom Modal model (free)
 	const CUSTOM_MODEL = {
 		id: 'z-image-turbo',
 		name: 'Tongyi-MAI/Z-Image-Turbo',
-		provider: 'modal' as const
+		provider: 'modal' as const,
+		pricing: { prompt: '0', completion: '0', image: '0' }
 	};
 
 	// OpenRouter image models (fetched from API)
-	let openRouterModels = $state<{ id: string; name: string; provider: 'openrouter' }[]>([]);
+	let openRouterModels = $state<
+		{ id: string; name: string; provider: 'openrouter'; pricing?: any }[]
+	>([]);
 	let modelsLoading = $state(true);
+
+	// Helper to check if model is free
+	const isFreeModel = (m: { pricing?: any }) =>
+		m.pricing &&
+		parseFloat(m.pricing.prompt || '0') === 0 &&
+		parseFloat(m.pricing.completion || '0') === 0 &&
+		parseFloat(m.pricing.image || '0') === 0;
 
 	// Fetch models on mount
 	onMount(async () => {
 		try {
 			const models = await client.action(api.image.listImageModels, {});
-			openRouterModels = models.map((m: { id: string; name: string }) => ({
+			openRouterModels = models.map((m: { id: string; name: string; pricing?: any }) => ({
 				...m,
 				provider: 'openrouter' as const
 			}));
@@ -50,8 +67,10 @@
 		}
 	});
 
-	// All models: custom + OpenRouter image models
-	const allModels = $derived([CUSTOM_MODEL, ...openRouterModels]);
+	// All models: custom + OpenRouter image models, filtered by admin status
+	const allModels = $derived(
+		[CUSTOM_MODEL, ...openRouterModels].filter((m) => isAdmin || isFreeModel(m))
+	);
 
 	// State
 	let selectedModelId = $state('z-image-turbo');
