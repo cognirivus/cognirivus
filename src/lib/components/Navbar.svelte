@@ -17,7 +17,8 @@
 		BookOpen,
 		Brain,
 		X,
-		ChevronDown
+		ChevronDown,
+		Newspaper
 	} from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -42,6 +43,7 @@
 	const navItems = [
 		{ name: 'Chat', href: '/chat', icon: MessageSquare, authRequired: true },
 		{ name: 'Images', href: '/image', icon: ImageIcon, authRequired: true },
+		{ name: 'Current Affairs', href: '/currentaffairs', icon: Newspaper, authRequired: false },
 		{ name: 'Knowledge Base', href: '/content', icon: Brain, authRequired: false },
 		{ name: 'Blog', href: '/blog', icon: BookOpen, authRequired: false },
 		{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, authRequired: true },

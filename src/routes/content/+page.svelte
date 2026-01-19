@@ -23,6 +23,7 @@
 
 	const subjectsQuery = useQuery((api as any).subjects.list, {});
 	const contentQuery = useQuery((api as any).content.list, () => ({
+		excludeTopic: 'Current Affairs',
 		subjectId:
 			selectedSubject === 'All'
 				? undefined

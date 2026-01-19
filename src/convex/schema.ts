@@ -150,10 +150,12 @@ const schema = defineSchema({
 		topic: v.string(),
 		source: v.optional(v.string()),
 		newsId: v.optional(v.id('news')),
+		date: v.optional(v.string()),
 		createdAt: v.number()
 	})
 		.index('by_subjectId', ['subjectId'])
 		.index('by_topic', ['topic'])
+		.index('by_topic_date', ['topic', 'date'])
 		.index('by_created_at', ['createdAt'])
 		.index('by_newsId', ['newsId'])
 		.searchIndex('search_all', {

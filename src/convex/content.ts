@@ -1,52 +1,98 @@
+import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query } from './_generated/server';
+
+async function enrichContentItems(ctx: any, items: any[]) {
+	return await Promise.all(
+		items.map(async (item) => {
+			const subject = await ctx.db.get(item.subjectId);
+			let newsDate;
+			if (item.newsId) {
+				const news = await ctx.db.get(item.newsId);
+				newsDate = news?.date;
+			}
+
+			// Fetch linked entities
+			const links = await ctx.db
+				.query('content_entities')
+				.withIndex('by_content', (q: any) => q.eq('contentId', item._id))
+				.collect();
+
+			const entities = await Promise.all(links.map(async (l: any) => await ctx.db.get(l.entityId)));
+
+			return {
+				...item,
+				newsDate,
+				subject,
+				entities: entities.filter((e: any): e is NonNullable<typeof e> => !!e)
+			};
+		})
+	);
+}
 
 export const list = query({
 	args: {
 		subjectId: v.optional(v.id('subjects')),
+		topic: v.optional(v.string()),
+		excludeTopic: v.optional(v.string()),
 		limit: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
-		const { subjectId, limit } = args;
+		const { subjectId, topic, excludeTopic, limit } = args;
 
-		let content;
+		let queryBuilder;
+
 		if (subjectId) {
-			content = await ctx.db
+			queryBuilder = ctx.db
 				.query('content')
-				.withIndex('by_subjectId', (dbq) => dbq.eq('subjectId', subjectId))
-				.take(limit ?? 50);
+				.withIndex('by_subjectId', (q) => q.eq('subjectId', subjectId));
+		} else if (topic) {
+			queryBuilder = ctx.db.query('content').withIndex('by_topic', (q) => q.eq('topic', topic));
 		} else {
-			content = await ctx.db
-				.query('content')
-				.order('desc')
-				.take(limit ?? 50);
+			queryBuilder = ctx.db.query('content').order('desc');
 		}
 
-		return await Promise.all(
-			content.map(async (item) => {
-				const subject = await ctx.db.get(item.subjectId);
-				let newsDate;
-				if (item.newsId) {
-					const news = await ctx.db.get(item.newsId);
-					newsDate = news?.date;
-				}
+		let content = await queryBuilder.take(limit ?? 100);
 
-				// Fetch linked entities
-				const links = await ctx.db
-					.query('content_entities')
-					.withIndex('by_content', (q) => q.eq('contentId', item._id))
-					.collect();
+		if (excludeTopic) {
+			content = content.filter((item) => item.topic !== excludeTopic);
+		}
 
-				const entities = await Promise.all(links.map(async (l) => await ctx.db.get(l.entityId)));
+		return await enrichContentItems(ctx, content);
+	}
+});
 
-				return {
-					...item,
-					newsDate,
-					subject,
-					entities: entities.filter((e): e is NonNullable<typeof e> => !!e)
-				};
-			})
-		);
+export const listPaginated = query({
+	args: {
+		topic: v.optional(v.string()),
+		search: v.optional(v.string()),
+		paginationOpts: paginationOptsValidator
+	},
+	handler: async (ctx, args) => {
+		const { topic, search, paginationOpts } = args;
+		let queryBuilder;
+
+		if (search) {
+			queryBuilder = ctx.db.query('content').withSearchIndex('search_all', (q) => {
+				const searchQ = q.search('text', search);
+				return topic ? searchQ.eq('topic', topic) : searchQ;
+			});
+		} else if (topic) {
+			queryBuilder = ctx.db
+				.query('content')
+				.withIndex('by_topic_date', (q) => q.eq('topic', topic))
+				.order('desc');
+		} else {
+			queryBuilder = ctx.db.query('content').order('desc');
+		}
+
+		const result = await queryBuilder.paginate(paginationOpts);
+		const enrichedPage = await enrichContentItems(ctx, result.page);
+
+		return {
+			...result,
+			page: enrichedPage
+		};
 	}
 });
 
@@ -99,6 +145,98 @@ export const getById = query({
 	}
 });
 
+// Helper logic for saving extracted facts
+async function saveFactLogic(
+	ctx: any,
+	args: {
+		title: string;
+		text: string;
+		subjectName: string;
+		topic: string;
+		entityType: string;
+		source: string;
+		newsId: any;
+		date?: string;
+	}
+) {
+	const { title, subjectName, entityType, ...rest } = args;
+
+	// 1. Resolve Subject
+	let subject = await ctx.db
+		.query('subjects')
+		.withIndex('by_name', (q: any) => q.eq('name', subjectName))
+		.unique();
+
+	if (!subject) {
+		subject = await ctx.db
+			.query('subjects')
+			.withIndex('by_name', (q: any) => q.eq('name', 'Other'))
+			.unique();
+	}
+
+	if (!subject) {
+		throw new Error('Subject "Other" not found. Please run seed mutation.');
+	}
+
+	// 2. Create the content entry
+	const contentId = await ctx.db.insert('content', {
+		title,
+		subjectId: subject._id,
+		...rest,
+		createdAt: Date.now()
+	});
+
+	// 3. Handle Entity Linking
+	const entityName = title.trim();
+
+	let entity = await ctx.db
+		.query('entities')
+		.withIndex('by_name', (q: any) => q.eq('name', entityName))
+		.filter((q: any) => q.eq(q.field('type'), entityType))
+		.first();
+
+	if (!entity) {
+		const slug = entityName
+			.toLowerCase()
+			.replace(/[^\w\s-]/g, '')
+			.replace(/[\s_-]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+
+		const entityId = await ctx.db.insert('entities', {
+			name: entityName,
+			type: entityType,
+			slug
+		});
+		entity = await ctx.db.get(entityId);
+	}
+
+	// 4. Create the junction entry
+	if (entity) {
+		await ctx.db.insert('content_entities', {
+			contentId,
+			entityId: entity._id
+		});
+	}
+
+	return contentId;
+}
+
+export const saveExtractedFact = internalMutation({
+	args: {
+		title: v.string(), // This is the entity name
+		text: v.string(),
+		subjectName: v.string(), // Name of the subject to resolve
+		topic: v.string(),
+		entityType: v.string(), // 'location' or 'Current Affairs'
+		source: v.string(),
+		newsId: v.id('news'),
+		date: v.optional(v.string())
+	},
+	handler: async (ctx, args) => {
+		return await saveFactLogic(ctx, args);
+	}
+});
+
 export const saveExtractedLocation = internalMutation({
 	args: {
 		title: v.string(), // This is the entity name (Location)
@@ -106,86 +244,37 @@ export const saveExtractedLocation = internalMutation({
 		subjectName: v.string(), // Name of the subject to resolve
 		topic: v.string(),
 		source: v.string(),
-		newsId: v.id('news')
+		newsId: v.id('news'),
+		date: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		const { title, subjectName, ...rest } = args;
-
-		// 1. Resolve Subject
-		let subject = await ctx.db
-			.query('subjects')
-			.withIndex('by_name', (q) => q.eq('name', subjectName))
-			.unique();
-
-		if (!subject) {
-			// Fallback to "Other"
-			subject = await ctx.db
-				.query('subjects')
-				.withIndex('by_name', (q) => q.eq('name', 'Other'))
-				.unique();
-		}
-
-		if (!subject) {
-			throw new Error('Subject "Other" not found. Please run seed mutation.');
-		}
-
-		// 2. Create the content entry
-		const contentId = await ctx.db.insert('content', {
-			title,
-			subjectId: subject._id,
-			...rest,
-			createdAt: Date.now()
+		return await saveFactLogic(ctx, {
+			...args,
+			entityType: 'location'
 		});
-
-		// 3. Handle Entity Linking (Location)
-		const entityName = title.trim();
-		const type = 'location';
-
-		let entity = await ctx.db
-			.query('entities')
-			.withIndex('by_name', (q) => q.eq('name', entityName))
-			.filter((q) => q.eq(q.field('type'), type))
-			.first();
-
-		if (!entity) {
-			const slug = entityName
-				.toLowerCase()
-				.replace(/[^\w\s-]/g, '')
-				.replace(/[\s_-]+/g, '-')
-				.replace(/^-+|-+$/g, '');
-
-			const entityId = await ctx.db.insert('entities', {
-				name: entityName,
-				type,
-				slug
-			});
-			entity = await ctx.db.get(entityId);
-		}
-
-		// 4. Create the junction entry
-		if (entity) {
-			await ctx.db.insert('content_entities', {
-				contentId,
-				entityId: entity._id
-			});
-		}
-
-		return contentId;
 	}
 });
 
 export const listEntityTypes = query({
-	args: {},
-	handler: async (ctx) => {
-		const entities = await ctx.db.query('entities').collect();
-		const types = new Set(entities.map((e) => e.type));
+	args: {
+		excludeType: v.optional(v.string())
+	},
+	handler: async (ctx, args) => {
+		let query = ctx.db.query('entities');
+		const entities = await query.collect();
+
+		const filteredEntities = args.excludeType
+			? entities.filter((e) => e.type !== args.excludeType)
+			: entities;
+
+		const types = new Set(filteredEntities.map((e) => e.type));
 
 		// Return types with some basic metadata
 		return Array.from(types)
 			.sort()
 			.map((type) => ({
 				type,
-				count: entities.filter((e) => e.type === type).length
+				count: filteredEntities.filter((e) => e.type === type).length
 			}));
 	}
 });
@@ -273,12 +362,18 @@ export const listByEntity = query({
 });
 
 export const isNewsProcessed = internalQuery({
-	args: { newsId: v.id('news') },
+	args: { newsId: v.id('news'), topic: v.optional(v.string()) },
 	handler: async (ctx, args) => {
-		const existing = await ctx.db
+		const query = ctx.db
 			.query('content')
-			.withIndex('by_newsId', (q) => q.eq('newsId', args.newsId))
-			.first();
+			.withIndex('by_newsId', (q) => q.eq('newsId', args.newsId));
+
+		if (args.topic) {
+			const results = await query.collect();
+			return results.some((r) => r.topic === args.topic);
+		}
+
+		const existing = await query.first();
 		return !!existing;
 	}
 });
@@ -314,5 +409,28 @@ export const listReportArchive = query({
 			.withIndex('by_entity', (q) => q.eq('entityId', args.entityId))
 			.order('desc')
 			.collect();
+	}
+});
+
+/**
+ * Internal mutation to backfill the 'date' field in the 'content' table.
+ */
+export const backfillDates = internalMutation({
+	args: {},
+	handler: async (ctx) => {
+		const items = await ctx.db.query('content').collect();
+		let updatedCount = 0;
+
+		for (const item of items) {
+			if (!item.date && item.newsId) {
+				const news = await ctx.db.get(item.newsId);
+				if (news?.date) {
+					await ctx.db.patch(item._id, { date: news.date });
+					updatedCount++;
+				}
+			}
+		}
+
+		return { total: items.length, updated: updatedCount };
 	}
 });

@@ -25,7 +25,9 @@
 	} from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 
-	const entityTypesQuery = useQuery((api as any).content.listEntityTypes, {});
+	const entityTypesQuery = useQuery((api as any).content.listEntityTypes, {
+		excludeType: 'Current Affairs'
+	});
 	const entityTypes = $derived(entityTypesQuery.data || []);
 
 	const typeMetaMap: Record<string, any> = {

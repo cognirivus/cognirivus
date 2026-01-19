@@ -33,7 +33,7 @@
 	}
 
 	const contentQuery = useQuery((api as any).content.list, () =>
-		subject ? { subjectId: subject._id } : 'skip'
+		subject ? { subjectId: subject._id, excludeTopic: 'Current Affairs' } : 'skip'
 	);
 	const items = $derived(contentQuery.data || []);
 
