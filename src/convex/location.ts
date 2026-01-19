@@ -52,7 +52,7 @@ export const extractFromNews = action({
 						'X-Title': 'Cognirivus Chat'
 					},
 					body: JSON.stringify({
-						model: 'google/gemini-2.0-flash-exp:free',
+						model: 'google/gemini-2.5-flash-lite',
 						messages: [
 							{
 								role: 'system',

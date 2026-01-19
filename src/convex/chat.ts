@@ -26,7 +26,7 @@ import type {
  * 7. Saves any generated images and logs usage/cost metadata.
  *
  * @param threadId - The unique identifier of the chat thread.
- * @param model - Optional. The AI model to use (defaults to google/gemini-2.0-flash-exp:free).
+ * @param model - Optional. The AI model to use (defaults to google/gemini-2.5-flash-lite).
  * @param includeReasoning - Optional. Whether to include the model's reasoning in the response.
  * @param generateImage - Optional. Whether to attempt to generate an image based on the prompt.
  * @param imageAspectRatio - Optional. The aspect ratio for any generated images (e.g., "1:1").
@@ -101,7 +101,7 @@ export const generate = action({
 			userId,
 			threadId,
 			role: 'assistant',
-			model: model || 'google/gemini-2.0-flash-exp:free',
+			model: model || 'google/gemini-2.5-flash-lite',
 			metadata: { status: 'searching' }
 		});
 
@@ -307,7 +307,7 @@ Example: “The capital of France is <hl>Paris</hl>, with a population of <hl>2.
 		});
 
 		// 5. Call OpenRouter
-		const modelToUse = model || 'google/gemini-2.0-flash-exp:free';
+		const modelToUse = model || 'google/gemini-2.5-flash-lite';
 		const controller = new AbortController();
 
 		const requestBody: OpenRouterRequestBody = {
