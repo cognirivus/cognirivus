@@ -12,7 +12,7 @@ import { authComponent } from './auth';
 
 import { TableAggregate } from '@convex-dev/aggregate';
 import { components, internal } from './_generated/api';
-import { DataModel, Id } from './_generated/dataModel';
+import type { DataModel, Id } from './_generated/dataModel';
 import { rag, RAG_CONFIG } from './rag';
 
 const likesAggregate = new TableAggregate<{

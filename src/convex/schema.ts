@@ -134,7 +134,61 @@ const schema = defineSchema({
 		like_dislike: v.number() // 1 for like, -1 for dislike
 	})
 		.index('by_comment', ['commentId'])
-		.index('by_comment_user', ['commentId', 'userId'])
+		.index('by_comment_user', ['commentId', 'userId']),
+	news: defineTable({
+		date: v.string(),
+		content: v.string()
+	})
+		.index('by_date', ['date'])
+		.searchIndex('search_content', {
+			searchField: 'content'
+		}),
+	content: defineTable({
+		title: v.string(),
+		text: v.string(),
+		subjectId: v.id('subjects'),
+		topic: v.string(),
+		source: v.optional(v.string()),
+		newsId: v.optional(v.id('news')),
+		createdAt: v.number()
+	})
+		.index('by_subjectId', ['subjectId'])
+		.index('by_topic', ['topic'])
+		.index('by_created_at', ['createdAt'])
+		.index('by_newsId', ['newsId'])
+		.searchIndex('search_all', {
+			searchField: 'text',
+			filterFields: ['topic']
+		}),
+	subjects: defineTable({
+		name: v.string(),
+		gsPaper: v.number(), // 0, 1, 2, 3, 4
+		slug: v.string()
+	})
+		.index('by_gsPaper', ['gsPaper'])
+		.index('by_slug', ['slug'])
+		.index('by_name', ['name']),
+	entities: defineTable({
+		name: v.string(),
+		type: v.string(), // e.g., 'location'
+		slug: v.string(),
+		report: v.optional(v.string()),
+		reportGeneratedAt: v.optional(v.number())
+	})
+		.index('by_type', ['type'])
+		.index('by_slug', ['slug'])
+		.index('by_name', ['name']),
+	content_entities: defineTable({
+		contentId: v.id('content'),
+		entityId: v.id('entities')
+	})
+		.index('by_content', ['contentId'])
+		.index('by_entity', ['entityId']),
+	report_archive: defineTable({
+		entityId: v.id('entities'),
+		report: v.string(),
+		createdAt: v.number()
+	}).index('by_entity', ['entityId'])
 });
 
 export default schema;

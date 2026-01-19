@@ -15,6 +15,7 @@
 		User,
 		Menu,
 		BookOpen,
+		Brain,
 		X,
 		ChevronDown
 	} from '@lucide/svelte';
@@ -41,6 +42,7 @@
 	const navItems = [
 		{ name: 'Chat', href: '/chat', icon: MessageSquare, authRequired: true },
 		{ name: 'Images', href: '/image', icon: ImageIcon, authRequired: true },
+		{ name: 'Knowledge Base', href: '/content', icon: Brain, authRequired: false },
 		{ name: 'Blog', href: '/blog', icon: BookOpen, authRequired: false },
 		{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, authRequired: true },
 		{ name: 'Admin', href: '/admin', icon: ShieldCheck, adminOnly: true }
