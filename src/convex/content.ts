@@ -113,6 +113,40 @@ export const insert = mutation({
 	}
 });
 
+export const update = mutation({
+	args: {
+		id: v.id('content'),
+		title: v.string(),
+		text: v.string(),
+		subjectId: v.id('subjects'),
+		topic: v.string(),
+		source: v.optional(v.string()),
+		date: v.optional(v.string())
+	},
+	handler: async (ctx, args) => {
+		const { id, ...updates } = args;
+		await ctx.db.patch(id, updates);
+		return id;
+	}
+});
+
+export const remove = mutation({
+	args: { id: v.id('content') },
+	handler: async (ctx, args) => {
+		const links = await ctx.db
+			.query('content_entities')
+			.withIndex('by_content', (q) => q.eq('contentId', args.id))
+			.collect();
+
+		for (const link of links) {
+			await ctx.db.delete(link._id);
+		}
+
+		await ctx.db.delete(args.id);
+		return args.id;
+	}
+});
+
 export const getById = query({
 	args: { id: v.id('content') },
 	handler: async (ctx, args) => {

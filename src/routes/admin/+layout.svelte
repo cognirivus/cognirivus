@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Shield, BookOpen, LayoutDashboard } from '@lucide/svelte';
+	import { Shield, BookOpen, LayoutDashboard, FileText, Newspaper } from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { cn } from '$lib/utils.js';
@@ -14,9 +14,19 @@
 			icon: LayoutDashboard
 		},
 		{
-			name: 'Blog Management',
+			name: 'Blog',
 			href: '/admin/blog',
 			icon: BookOpen
+		},
+		{
+			name: 'Content',
+			href: '/admin/content',
+			icon: FileText
+		},
+		{
+			name: 'News',
+			href: '/admin/news',
+			icon: Newspaper
 		}
 	];
 
