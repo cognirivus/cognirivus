@@ -8,6 +8,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Calendar, Tag, Book, ArrowLeft, ExternalLink, MapPin } from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
+	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 
 	const contentId = $derived(page.params.id as any);
 	const contentQuery = useQuery((api as any).content.getById, () =>
@@ -45,21 +46,24 @@
 	{:else}
 		<article class="space-y-8">
 			<header class="space-y-4">
-				<div class="flex flex-wrap items-center gap-2">
-					{#if item.subject}
-						<a href="/content/subject/{item.subject.slug}">
-							<Badge
-								variant="outline"
-								class="border-orange-200 bg-orange-50 text-xs font-bold tracking-wider text-orange-600 uppercase"
-							>
-								GS-{item.subject.gsPaper} | {item.subject.name}
-							</Badge>
-						</a>
-					{/if}
-					<Badge variant="secondary" class="flex items-center gap-1 text-xs">
-						<Tag class="h-3 w-3" />
-						{item.topic}
-					</Badge>
+				<div class="flex flex-wrap items-center justify-between gap-2">
+					<div class="flex flex-wrap items-center gap-2">
+						{#if item.subject}
+							<a href="/content/subject/{item.subject.slug}">
+								<Badge
+									variant="outline"
+									class="border-orange-200 bg-orange-50 text-xs font-bold tracking-wider text-orange-600 uppercase"
+								>
+									GS-{item.subject.gsPaper} | {item.subject.name}
+								</Badge>
+							</a>
+						{/if}
+						<Badge variant="secondary" class="flex items-center gap-1 text-xs">
+							<Tag class="h-3 w-3" />
+							{item.topic}
+						</Badge>
+					</div>
+					<MarkCompleteToggle contentId={item._id} />
 				</div>
 
 				<h1 class="text-4xl font-extrabold tracking-tight lg:text-5xl">

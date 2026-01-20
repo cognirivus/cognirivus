@@ -14,9 +14,11 @@
 		Users,
 		Building2,
 		Briefcase,
-		Tag
+		Tag,
+		Check
 	} from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
+	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 
 	const slug = $derived((page.params as any).slug);
 	const type = $derived((page.params as any).type);
@@ -44,6 +46,7 @@
 		subject && entity ? { subjectId: subject._id, entityId: entity._id } : 'skip'
 	);
 	const items = $derived(contentQuery.data || []);
+	const progressQuery = useQuery(api.content.getUserProgress, {});
 </script>
 
 <svelte:head>
@@ -120,17 +123,28 @@
 			<div class="mx-auto max-w-4xl space-y-12">
 				{#each items as item}
 					<article class="group relative space-y-4">
-						<header class="flex flex-wrap items-center gap-3">
-							<Badge
-								variant="outline"
-								class="bg-primary/5 text-[10px] font-bold tracking-tight text-primary uppercase"
-							>
-								<Calendar class="mr-1.5 h-3 w-3" />
-								{item.newsDate || 'General Fact'}
-							</Badge>
-							<Badge variant="secondary" class="text-[10px] tracking-wider uppercase"
-								>{item.topic}</Badge
-							>
+						<header class="flex flex-wrap items-center justify-between gap-3">
+							<div class="flex flex-wrap items-center gap-3">
+								<Badge
+									variant="outline"
+									class="bg-primary/5 text-[10px] font-bold tracking-tight text-primary uppercase"
+								>
+									<Calendar class="mr-1.5 h-3 w-3" />
+									{item.newsDate || 'General Fact'}
+								</Badge>
+								<Badge variant="secondary" class="text-[10px] tracking-wider uppercase"
+									>{item.topic}</Badge
+								>
+								{#if progressQuery.data?.[item._id]}
+									<span
+										class="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400"
+									>
+										<Check class="h-3 w-3" />
+										Done
+									</span>
+								{/if}
+							</div>
+							<MarkCompleteToggle contentId={item._id} variant="icon" />
 						</header>
 
 						<div class="prose prose-zinc dark:prose-invert max-w-none">

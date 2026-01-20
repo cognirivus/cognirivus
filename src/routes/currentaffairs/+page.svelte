@@ -12,8 +12,10 @@
 		Newspaper,
 		Search,
 		ChevronRight,
-		ChevronLeft
+		ChevronLeft,
+		Check
 	} from '@lucide/svelte';
+	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 
 	let searchInput = $state('');
 	let searchQuery = $state('');
@@ -33,6 +35,7 @@
 	const stories = $derived(currentData?.page || []);
 	const hasNextPage = $derived(currentData?.isDone === false);
 	const hasPrevPage = $derived(currentCursorIndex > 0);
+	const progressQuery = useQuery(api.content.getUserProgress, {});
 
 	function nextPage() {
 		if (hasNextPage && currentData?.continueCursor) {
@@ -159,6 +162,15 @@
 
 							<div class="mt-8 flex items-center justify-between border-t pt-4">
 								<div class="flex items-center gap-2 md:gap-4">
+									<MarkCompleteToggle contentId={story._id} variant="icon" />
+									{#if progressQuery.data?.[story._id]}
+										<span
+											class="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400"
+										>
+											<Check class="h-3 w-3" />
+											<span class="hidden sm:inline">Completed</span>
+										</span>
+									{/if}
 									<Button
 										variant="ghost"
 										size="sm"

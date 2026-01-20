@@ -14,10 +14,12 @@
 		Users,
 		Building2,
 		Briefcase,
-		Tag
+		Tag,
+		Check
 	} from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { Separator } from '$lib/components/ui/separator/index.js';
+	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 
 	const slug = $derived((page.params as any).slug);
 	const subjectQuery = useQuery((api as any).subjects.getBySlug, () => ({ slug }));
@@ -36,6 +38,7 @@
 		subject ? { subjectId: subject._id, excludeTopic: 'Current Affairs' } : 'skip'
 	);
 	const items = $derived(contentQuery.data || []);
+	const progressQuery = useQuery(api.content.getUserProgress, {});
 
 	const groupedByEntity = $derived.by(() => {
 		const groups: Record<string, { entity: any; items: any[] }> = {};
@@ -214,18 +217,28 @@
 										</p>
 									</Card.Content>
 									<Card.Footer
-										class="flex items-center justify-between border-t bg-muted/30 px-6 py-3"
-									>
-										<Badge variant="secondary" class="text-[10px]">{item.topic}</Badge>
-										<Button
-											variant="link"
-											size="sm"
-											href="/content/{item._id}"
-											class="h-auto p-0 text-xs"
-										>
-											Details
-										</Button>
-									</Card.Footer>
+																		class="flex items-center justify-between border-t bg-muted/30 px-6 py-3"
+																	>
+																		<div class="flex items-center gap-2">
+																			<Badge variant="secondary" class="text-[10px]">{item.topic}</Badge>
+																			{#if progressQuery.data?.[item._id]}
+																				<div
+																					class="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400"
+																				>
+																					<Check class="h-3 w-3" />
+																					Done
+																				</div>
+																			{/if}
+																		</div>
+																		<Button
+																			variant="link"
+																			size="sm"
+																			href="/content/{item._id}"
+																			class="h-auto p-0 text-xs"
+																		>
+																			Details
+																		</Button>
+																	</Card.Footer>
 								</Card.Root>
 							{/each}
 						</div>

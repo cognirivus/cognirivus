@@ -1,12 +1,17 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { ChartLine, Settings } from '@lucide/svelte';
+	import { ChartLine, Settings, BookCheck } from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 
 	let { children } = $props();
 
 	const navItems = [
+		{
+			name: 'Content Progress',
+			href: '/dashboard/content',
+			icon: BookCheck
+		},
 		{
 			name: 'Usage',
 			href: '/dashboard/usage',
@@ -29,7 +34,7 @@
 			class="mx-auto flex h-auto min-h-[4rem] max-w-6xl flex-col items-start justify-center gap-2 px-6 py-3 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:py-0"
 		>
 			<div class="flex w-full items-center justify-between gap-8 sm:w-auto sm:justify-start">
-				<h2 class="text-lg font-bold tracking-tight text-foreground sm:text-xl">Dashboard</h2>
+				<a href="/dashboard" class="text-lg font-bold tracking-tight text-foreground hover:text-primary sm:text-xl">Dashboard</a>
 				<!-- Hidden on desktop, shown on mobile for compact menu -->
 			</div>
 			<nav class="flex w-full items-center gap-1 overflow-x-auto pb-1 sm:w-auto sm:pb-0">

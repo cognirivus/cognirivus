@@ -14,8 +14,10 @@
 		MapPin,
 		ChevronRight,
 		LayoutGrid,
-		Fingerprint
+		Fingerprint,
+		Check
 	} from '@lucide/svelte';
+	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 
 	let searchInput = $state('');
 	let searchQuery = $state('');
@@ -29,6 +31,7 @@
 				? undefined
 				: subjectsQuery.data?.find((s: any) => s.name === selectedSubject)?._id
 	}));
+	const progressQuery = useQuery(api.content.getUserProgress, {});
 
 	const filteredContent = $derived(
 		((contentQuery.data as any[]) || [])?.filter(
@@ -235,14 +238,22 @@
 							</p>
 						</Card.Content>
 						<Card.Footer class="flex items-center justify-between border-t bg-muted/20 px-5 py-3">
-							{#if item.newsDate}
-								<div class="flex items-center gap-2 text-xs font-bold text-primary uppercase">
-									<Calendar class="h-3 w-3" />
-									{item.newsDate}
-								</div>
-							{:else}
-								<div></div>
-							{/if}
+							<div class="flex items-center gap-3">
+								{#if item.newsDate}
+									<div class="flex items-center gap-2 text-xs font-bold text-primary uppercase">
+										<Calendar class="h-3 w-3" />
+										{item.newsDate}
+									</div>
+								{/if}
+								{#if progressQuery.data?.[item._id]}
+									<div
+										class="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400"
+									>
+										<Check class="h-3 w-3" />
+										Done
+									</div>
+								{/if}
+							</div>
 							{#if item.source}
 								<div
 									class="flex items-center gap-1 text-[10px] font-medium tracking-tight text-muted-foreground uppercase"

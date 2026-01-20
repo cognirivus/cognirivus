@@ -16,13 +16,15 @@
 		Users,
 		Building2,
 		Briefcase,
-		Tag
+		Tag,
+		Check
 	} from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Markdown } from '$lib/components/prompt-kit/markdown/index.js';
 	import { useConvexClient } from 'convex-svelte';
 	import { toast } from 'svelte-sonner';
+	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 
 	const type = $derived((page.params as any).type);
 	const slug = $derived((page.params as any).slug);
@@ -80,6 +82,7 @@
 		entity ? { entityId: entity._id } : 'skip'
 	);
 	const items = $derived(timelineQuery.data || []);
+	const progressQuery = useQuery(api.content.getUserProgress, {});
 
 	const sources = $derived.by(() => {
 		const s: Record<string, any> = {};
@@ -288,21 +291,34 @@
 											{#each groupedItems[gs][subjectName] as item}
 												<div class="space-y-4">
 													<div
-														class="not-prose flex flex-wrap items-center gap-3 py-1 text-xs font-bold tracking-tight text-muted-foreground uppercase"
+														class="not-prose flex flex-wrap items-center justify-between gap-3 py-1"
 													>
-														<div class="flex items-center gap-1.5 text-primary">
-															<Calendar class="h-3.5 w-3.5" />
-															{item.newsDate || 'Undated'}
+														<div
+															class="flex flex-wrap items-center gap-3 text-xs font-bold tracking-tight text-muted-foreground uppercase"
+														>
+															<div class="flex items-center gap-1.5 text-primary">
+																<Calendar class="h-3.5 w-3.5" />
+																{item.newsDate || 'Undated'}
+															</div>
+															{#if item.newsId}
+																<a
+																	href="/content/{item._id}"
+																	class="flex items-center gap-1 underline decoration-muted-foreground/30 underline-offset-2 transition-colors hover:text-primary"
+																>
+																	<ExternalLink class="h-3 w-3" />
+																	Source Content
+																</a>
+															{/if}
+															{#if progressQuery.data?.[item._id]}
+																<div
+																	class="flex items-center gap-1 text-green-600 dark:text-green-400"
+																>
+																	<Check class="h-3 w-3" />
+																	Done
+																</div>
+															{/if}
 														</div>
-														{#if item.newsId}
-															<a
-																href="/content/{item._id}"
-																class="flex items-center gap-1 underline decoration-muted-foreground/30 underline-offset-2 transition-colors hover:text-primary"
-															>
-																<ExternalLink class="h-3 w-3" />
-																Source Content
-															</a>
-														{/if}
+														<MarkCompleteToggle contentId={item._id} variant="icon" />
 													</div>
 
 													<div

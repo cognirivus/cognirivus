@@ -1,6 +1,7 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query } from './_generated/server';
+import { authComponent } from './auth';
 
 async function enrichContentItems(ctx: any, items: any[]) {
 	return await Promise.all(
@@ -466,5 +467,180 @@ export const backfillDates = internalMutation({
 		}
 
 		return { total: items.length, updated: updatedCount };
+	}
+});
+
+// ============== User Content Progress ==============
+
+export const toggleComplete = mutation({
+	args: { contentId: v.id('content') },
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Authentication required');
+
+		const existing = await ctx.db
+			.query('user_content_progress')
+			.withIndex('by_user_content', (q) => q.eq('userId', user._id).eq('contentId', args.contentId))
+			.unique();
+
+		if (existing) {
+			await ctx.db.delete(existing._id);
+			return { completed: false };
+		} else {
+			await ctx.db.insert('user_content_progress', {
+				userId: user._id,
+				contentId: args.contentId,
+				completedAt: Date.now()
+			});
+			return { completed: true };
+		}
+	}
+});
+
+export const isCompleted = query({
+	args: { contentId: v.id('content') },
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return false;
+
+		const progress = await ctx.db
+			.query('user_content_progress')
+			.withIndex('by_user_content', (q) => q.eq('userId', user._id).eq('contentId', args.contentId))
+			.unique();
+
+		return !!progress;
+	}
+});
+
+export const getUserProgress = query({
+	args: { contentIds: v.optional(v.array(v.id('content'))) },
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return {};
+
+		const progress = await ctx.db
+			.query('user_content_progress')
+			.withIndex('by_user', (q) => q.eq('userId', user._id))
+			.collect();
+
+		const progressMap: Record<string, boolean> = {};
+		for (const p of progress) {
+			if (!args.contentIds || args.contentIds.includes(p.contentId)) {
+				progressMap[p.contentId] = true;
+			}
+		}
+		return progressMap;
+	}
+});
+
+export const getProgressAnalytics = query({
+	args: {},
+	handler: async (ctx) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return null;
+
+		const completedItems = await ctx.db
+			.query('user_content_progress')
+			.withIndex('by_user', (q) => q.eq('userId', user._id))
+			.collect();
+
+		const completedIds = new Set(completedItems.map((p) => p.contentId));
+		const allContent = await ctx.db.query('content').collect();
+		const allSubjects = await ctx.db.query('subjects').collect();
+
+		const subjectMap = new Map(allSubjects.map((s) => [s._id, s]));
+
+		// Group by subject
+		const bySubject: Record<
+			string,
+			{ name: string; slug: string; gsPaper: number; total: number; completed: number }
+		> = {};
+		// Group by topic
+		const byTopic: Record<string, { total: number; completed: number }> = {};
+		// Group by GS Paper
+		const byGsPaper: Record<number, { total: number; completed: number }> = {};
+
+		for (const content of allContent) {
+			const isCompleted = completedIds.has(content._id);
+			const subject = subjectMap.get(content.subjectId);
+
+			// By subject
+			const subjectKey = content.subjectId;
+			if (!bySubject[subjectKey]) {
+				bySubject[subjectKey] = {
+					name: subject?.name || 'Unknown',
+					slug: subject?.slug || '',
+					gsPaper: subject?.gsPaper ?? 0,
+					total: 0,
+					completed: 0
+				};
+			}
+			bySubject[subjectKey].total++;
+			if (isCompleted) bySubject[subjectKey].completed++;
+
+			// By topic
+			if (!byTopic[content.topic]) {
+				byTopic[content.topic] = { total: 0, completed: 0 };
+			}
+			byTopic[content.topic].total++;
+			if (isCompleted) byTopic[content.topic].completed++;
+
+			// By GS Paper
+			const gs = subject?.gsPaper ?? 0;
+			if (!byGsPaper[gs]) {
+				byGsPaper[gs] = { total: 0, completed: 0 };
+			}
+			byGsPaper[gs].total++;
+			if (isCompleted) byGsPaper[gs].completed++;
+		}
+
+		return {
+			totalContent: allContent.length,
+			totalCompleted: completedIds.size,
+			bySubject: Object.entries(bySubject)
+				.map(([id, data]) => ({ id, ...data }))
+				.sort((a, b) => b.total - a.total),
+			byTopic: Object.entries(byTopic)
+				.map(([topic, data]) => ({ topic, ...data }))
+				.sort((a, b) => b.total - a.total),
+			byGsPaper: Object.entries(byGsPaper)
+				.map(([gs, data]) => ({ gsPaper: Number(gs), ...data }))
+				.sort((a, b) => a.gsPaper - b.gsPaper)
+		};
+	}
+});
+
+export const getRecentlyCompleted = query({
+	args: { paginationOpts: paginationOptsValidator },
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return { page: [], isDone: true, continueCursor: '' };
+
+		const result = await ctx.db
+			.query('user_content_progress')
+			.withIndex('by_user', (q) => q.eq('userId', user._id))
+			.order('desc')
+			.paginate(args.paginationOpts);
+
+		const enrichedPage = await Promise.all(
+			result.page.map(async (progress) => {
+				const content = await ctx.db.get(progress.contentId);
+				if (!content) return null;
+
+				const subject = await ctx.db.get(content.subjectId);
+				return {
+					...progress,
+					content: {
+						...content,
+						subject
+					}
+				};
+			})
+		);
+
+		return {
+			...result,
+			page: enrichedPage.filter((p): p is NonNullable<typeof p> => p !== null)
+		};
 	}
 });

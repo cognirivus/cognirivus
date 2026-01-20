@@ -190,7 +190,14 @@ const schema = defineSchema({
 		entityId: v.id('entities'),
 		report: v.string(),
 		createdAt: v.number()
-	}).index('by_entity', ['entityId'])
+	}).index('by_entity', ['entityId']),
+	user_content_progress: defineTable({
+		userId: v.string(),
+		contentId: v.id('content'),
+		completedAt: v.number()
+	})
+		.index('by_user', ['userId'])
+		.index('by_user_content', ['userId', 'contentId'])
 });
 
 export default schema;
