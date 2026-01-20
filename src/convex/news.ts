@@ -1,6 +1,15 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { internalQuery, mutation, query } from './_generated/server';
+import { authComponent } from './auth';
+
+const checkAdmin = async (ctx: any) => {
+	const user = await authComponent.getAuthUser(ctx);
+	const isAdmin =
+		user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin');
+	if (!isAdmin) throw new Error('Unauthorized: Admin access required');
+	return user;
+};
 
 export const insert = mutation({
 	args: {
@@ -8,6 +17,7 @@ export const insert = mutation({
 		content: v.string()
 	},
 	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
 		await ctx.db.insert('news', {
 			date: args.date,
 			content: args.content
@@ -61,7 +71,10 @@ export const getById = query({
 export const listWithContentCount = query({
 	args: { limit: v.optional(v.number()) },
 	handler: async (ctx, args) => {
-		const news = await ctx.db.query('news').order('desc').take(args.limit ?? 100);
+		const news = await ctx.db
+			.query('news')
+			.order('desc')
+			.take(args.limit ?? 100);
 
 		return await Promise.all(
 			news.map(async (item) => {
@@ -123,6 +136,7 @@ export const update = mutation({
 		content: v.string()
 	},
 	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
 		const { id, ...updates } = args;
 		await ctx.db.patch(id, updates);
 		return id;
@@ -132,6 +146,7 @@ export const update = mutation({
 export const remove = mutation({
 	args: { id: v.id('news') },
 	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
 		const linkedContent = await ctx.db
 			.query('content')
 			.withIndex('by_newsId', (q) => q.eq('newsId', args.id))

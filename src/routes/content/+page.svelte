@@ -15,7 +15,8 @@
 		ChevronRight,
 		LayoutGrid,
 		Fingerprint,
-		Check
+		Check,
+		X
 	} from '@lucide/svelte';
 	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 
@@ -51,6 +52,11 @@
 			handleSearch();
 		}
 	}
+
+	function clearSearch() {
+		searchInput = '';
+		searchQuery = '';
+	}
 </script>
 
 <svelte:head>
@@ -80,6 +86,21 @@
 			<Button onclick={handleSearch} size="lg" class="w-full sm:w-auto">Search</Button>
 		</div>
 	</div>
+
+	{#if searchQuery}
+		<div class="mb-8 flex">
+			<Badge variant="secondary" class="flex items-center gap-2 px-3 py-1.5 text-sm">
+				<span>Search: <span class="font-bold text-primary">{searchQuery}</span></span>
+				<button
+					onclick={clearSearch}
+					class="rounded-full p-0.5 transition-colors hover:bg-muted"
+					aria-label="Clear search"
+				>
+					<X class="h-3.5 w-3.5" />
+				</button>
+			</Badge>
+		</div>
+	{/if}
 
 	<!-- Browsing Entry Points -->
 	<div class="mb-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

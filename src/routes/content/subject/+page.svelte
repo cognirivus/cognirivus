@@ -4,7 +4,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { LayoutGrid, Search, ArrowLeft, BookOpen, ChevronRight } from '@lucide/svelte';
+	import { LayoutGrid, Search, ArrowLeft, BookOpen, ChevronRight, X } from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 
 	let searchInput = $state('');
@@ -34,6 +34,11 @@
 		if (e.key === 'Enter') {
 			handleSearch();
 		}
+	}
+
+	function clearSearch() {
+		searchInput = '';
+		searchQuery = '';
 	}
 </script>
 
@@ -75,6 +80,21 @@
 			<Button onclick={handleSearch} size="lg" class="w-full sm:w-auto">Filter</Button>
 		</div>
 	</div>
+
+	{#if searchQuery}
+		<div class="mb-8 flex">
+			<Badge variant="secondary" class="flex items-center gap-2 px-3 py-1.5 text-sm">
+				<span>Filter: <span class="font-bold text-primary">{searchQuery}</span></span>
+				<button
+					onclick={clearSearch}
+					class="rounded-full p-0.5 transition-colors hover:bg-muted"
+					aria-label="Clear filter"
+				>
+					<X class="h-3.5 w-3.5" />
+				</button>
+			</Badge>
+		</div>
+	{/if}
 
 	{#if subjectsQuery.isLoading}
 		<div class="flex h-[40vh] items-center justify-center">

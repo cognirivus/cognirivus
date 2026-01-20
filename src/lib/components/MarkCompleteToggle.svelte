@@ -14,8 +14,14 @@
 
 	let { contentId, class: className, variant = 'button' }: Props = $props();
 
+	import { page } from '$app/state';
 	const client = useConvexClient();
-	const isCompletedQuery = useQuery(api.content.isCompleted, () => ({ contentId }));
+	const currentUser = $derived(page.data.currentUser);
+	const isAuthenticated = $derived(!!currentUser);
+
+	const isCompletedQuery = useQuery(api.content.isCompleted, () =>
+		isAuthenticated ? { contentId } : 'skip'
+	);
 
 	const isCompleted = $derived(isCompletedQuery.data ?? false);
 	let isLoading = $state(false);
@@ -33,7 +39,7 @@
 {#if variant === 'icon'}
 	<button
 		onclick={toggle}
-		disabled={isLoading || isCompletedQuery.isLoading}
+		disabled={!isAuthenticated || isLoading || isCompletedQuery.isLoading}
 		class={cn(
 			'inline-flex items-center justify-center rounded-full p-1.5 transition-colors',
 			isCompleted
@@ -52,8 +58,9 @@
 {:else}
 	<Button
 		onclick={toggle}
-		disabled={isLoading || isCompletedQuery.isLoading}
+		disabled={!isAuthenticated || isLoading || isCompletedQuery.isLoading}
 		variant={isCompleted ? 'default' : 'outline'}
+		title={!isAuthenticated ? 'Sign in to track progress' : ''}
 		size="sm"
 		class={cn(
 			isCompleted && 'bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800',

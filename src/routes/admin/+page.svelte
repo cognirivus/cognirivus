@@ -12,7 +12,8 @@
 		UserMinus,
 		UserCheck,
 		Search,
-		RefreshCw
+		RefreshCw,
+		X
 	} from '@lucide/svelte';
 
 	interface Props {
@@ -25,9 +26,11 @@
 	let users = $state<any[]>([]);
 	let loading = $state(true);
 	let searchTerm = $state('');
+	let appliedSearch = $state('');
 
 	async function fetchUsers() {
 		loading = true;
+		appliedSearch = searchTerm;
 		// @ts-ignore - Better Auth types can be tricky with plugins
 		const { data, error } = await authClient.admin.listUsers({
 			query: {
@@ -40,6 +43,11 @@
 			users = data.users;
 		}
 		loading = false;
+	}
+
+	function clearSearch() {
+		searchTerm = '';
+		fetchUsers();
 	}
 
 	async function toggleBan(userId: string, isBanned: boolean) {
@@ -97,6 +105,21 @@
 				</div>
 				<Button onclick={fetchUsers} disabled={loading}>Search</Button>
 			</div>
+
+			{#if appliedSearch}
+				<div class="mt-4 flex">
+					<Badge variant="secondary" class="flex items-center gap-2 px-3 py-1.5 text-sm">
+						<span>Search: <span class="font-bold text-primary">{appliedSearch}</span></span>
+						<button
+							onclick={clearSearch}
+							class="rounded-full p-0.5 transition-colors hover:bg-muted"
+							aria-label="Clear search"
+						>
+							<X class="h-3.5 w-3.5" />
+						</button>
+					</Badge>
+				</div>
+			{/if}
 		</Card.Content>
 	</Card.Root>
 

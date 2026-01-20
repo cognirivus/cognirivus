@@ -309,7 +309,7 @@
 																	Source Content
 																</a>
 															{/if}
-															{#if progressQuery.data?.[item._id]}
+															{#if user && progressQuery.data?.[item._id]}
 																<div
 																	class="flex items-center gap-1 text-green-600 dark:text-green-400"
 																>
@@ -318,7 +318,9 @@
 																</div>
 															{/if}
 														</div>
-														<MarkCompleteToggle contentId={item._id} variant="icon" />
+														{#if user}
+															<MarkCompleteToggle contentId={item._id} variant="icon" />
+														{/if}
 													</div>
 
 													<div

@@ -69,7 +69,17 @@
 							{item.topic}
 						</Badge>
 					</div>
-					<MarkCompleteToggle contentId={item._id} />
+					<div class="flex items-center gap-3">
+						{#if page.data.currentUser}
+							<MarkCompleteToggle contentId={item._id} />
+						{:else}
+							<p
+								class="text-[10px] font-bold tracking-tight text-muted-foreground uppercase italic"
+							>
+								Sign in to mark complete
+							</p>
+						{/if}
+					</div>
 				</div>
 
 				<h1 class="text-4xl font-extrabold tracking-tight lg:text-5xl">
@@ -105,7 +115,7 @@
 				</div>
 			</header>
 
-			{#if flashcardsQuery.data && flashcardsQuery.data.length > 0}
+			{#if page.data.currentUser && flashcardsQuery.data && flashcardsQuery.data.length > 0}
 				<Card.Root class="border-primary/20 bg-primary/5">
 					<Card.Content class="flex items-center justify-between p-4">
 						<div class="flex items-center gap-4">
@@ -117,12 +127,26 @@
 								<p class="text-sm text-muted-foreground">Test your knowledge on this topic.</p>
 							</div>
 						</div>
-						<Button href="/flashcards/study?contentId={item._id}" size="sm" class="gap-2">
-							Study Now
-						</Button>
+						<div class="flex flex-col items-end gap-2">
+							{#if !page.data.currentUser}
+								<p
+									class="text-[10px] font-bold tracking-tight text-muted-foreground uppercase italic"
+								>
+									Sign in to study
+								</p>
+							{/if}
+							<Button
+								href="/flashcards/study?contentId={item._id}"
+								size="sm"
+								class="gap-2"
+								disabled={!page.data.currentUser}
+							>
+								Study Now
+							</Button>
+						</div>
 					</Card.Content>
 				</Card.Root>
-			{:else if flashcardsQuery.data && flashcardsQuery.data.length === 0}
+			{:else if page.data.currentUser && flashcardsQuery.data && flashcardsQuery.data.length === 0}
 				<div class="rounded-lg border border-dashed p-4 text-center">
 					<p class="text-sm text-muted-foreground">No flashcards generated for this content yet.</p>
 				</div>

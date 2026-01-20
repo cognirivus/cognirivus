@@ -5,7 +5,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
-	import { Calendar, Search } from '@lucide/svelte';
+	import { Calendar, Search, X } from '@lucide/svelte';
 
 	let searchInput = $state('');
 	let searchQuery = $state('');
@@ -28,6 +28,11 @@
 		if (e.key === 'Enter') {
 			handleSearch();
 		}
+	}
+
+	function clearSearch() {
+		searchInput = '';
+		searchQuery = '';
 	}
 
 	function formatDate(dateStr: string) {
@@ -69,6 +74,21 @@
 			<Button onclick={handleSearch} size="lg" class="w-full sm:w-auto">Search</Button>
 		</div>
 	</div>
+
+	{#if searchQuery}
+		<div class="mb-6 flex justify-end">
+			<Badge variant="secondary" class="flex items-center gap-2 px-3 py-1.5 text-sm">
+				<span>Search: <span class="font-bold text-primary">{searchQuery}</span></span>
+				<button
+					onclick={clearSearch}
+					class="rounded-full p-0.5 transition-colors hover:bg-muted"
+					aria-label="Clear search"
+				>
+					<X class="h-3.5 w-3.5" />
+				</button>
+			</Badge>
+		</div>
+	{/if}
 
 	{#if newsQuery.isLoading}
 		<div class="grid gap-6">

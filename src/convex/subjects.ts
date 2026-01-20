@@ -1,5 +1,14 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import { authComponent } from './auth';
+
+const checkAdmin = async (ctx: any) => {
+	const user = await authComponent.getAuthUser(ctx);
+	const isAdmin =
+		user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin');
+	if (!isAdmin) throw new Error('Unauthorized: Admin access required');
+	return user;
+};
 
 const UPSC_SUBJECTS = [
 	{ name: 'Agriculture', gsPaper: 3 },
@@ -24,6 +33,7 @@ const UPSC_SUBJECTS = [
 
 export const seed = mutation({
 	handler: async (ctx) => {
+		await checkAdmin(ctx);
 		for (const sub of UPSC_SUBJECTS) {
 			const slug = sub.name
 				.toLowerCase()

@@ -47,7 +47,10 @@
 		if (selectedTopic) params.set('topic', selectedTopic);
 		if (searchQuery) params.set('q', searchQuery);
 		const queryString = params.toString();
-		goto(`/admin/content${queryString ? '?' + queryString : ''}`, { replaceState: true, keepFocus: true });
+		goto(`/admin/content${queryString ? '?' + queryString : ''}`, {
+			replaceState: true,
+			keepFocus: true
+		});
 	}
 
 	const contentQuery = useQuery(api.content.listPaginated, () => ({
@@ -82,6 +85,11 @@
 	function applyFilters() {
 		resetPagination();
 		updateUrl();
+	}
+
+	function clearSearch() {
+		searchQuery = '';
+		applyFilters();
 	}
 
 	let isEditing = $state(false);
@@ -171,7 +179,9 @@
 	}
 
 	async function handleDelete(id: Id<'content'>) {
-		if (confirm('Are you sure you want to delete this content? This will also remove entity links.')) {
+		if (
+			confirm('Are you sure you want to delete this content? This will also remove entity links.')
+		) {
 			try {
 				await client.mutation(api.content.remove, { id });
 			} catch (e: any) {
@@ -218,10 +228,17 @@
 					<div>
 						<Card.Title>{editingId ? 'Edit Content' : 'Add New Content'}</Card.Title>
 						<Card.Description>
-							{editingId ? 'Update the content details below.' : 'Fill in the details to create new content.'}
+							{editingId
+								? 'Update the content details below.'
+								: 'Fill in the details to create new content.'}
 						</Card.Description>
 					</div>
-					<Button variant="ghost" size="icon" onclick={() => (isEditing = false)} class="rounded-full">
+					<Button
+						variant="ghost"
+						size="icon"
+						onclick={() => (isEditing = false)}
+						class="rounded-full"
+					>
 						<X class="h-4 w-4" />
 					</Button>
 				</div>
@@ -232,14 +249,20 @@
 					<div class="grid gap-4 sm:grid-cols-2">
 						<div class="space-y-2">
 							<label for="title" class="text-sm font-semibold">Title / Entity Name</label>
-							<Input type="text" id="title" bind:value={title} required placeholder="e.g., Paris Climate Agreement" />
+							<Input
+								type="text"
+								id="title"
+								bind:value={title}
+								required
+								placeholder="e.g., Paris Climate Agreement"
+							/>
 						</div>
 						<div class="space-y-2">
 							<label for="topic" class="text-sm font-semibold">Topic</label>
 							<select
 								id="topic"
 								bind:value={topic}
-								class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+								class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
 							>
 								{#each topics as t}
 									<option value={t}>{t}</option>
@@ -254,7 +277,7 @@
 							<select
 								id="subject"
 								bind:value={subjectId}
-								class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+								class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
 							>
 								{#if subjectsQuery.data}
 									{#each subjectsQuery.data as subject}
@@ -287,7 +310,9 @@
 					</div>
 
 					{#if error}
-						<div class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+						<div
+							class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+						>
 							{error}
 						</div>
 					{/if}
@@ -295,10 +320,19 @@
 					<Separator />
 
 					<div class="flex flex-col-reverse justify-end gap-3 pt-2 sm:flex-row">
-						<Button variant="outline" onclick={() => (isEditing = false)} disabled={isSaving} class="w-full sm:w-auto">
+						<Button
+							variant="outline"
+							onclick={() => (isEditing = false)}
+							disabled={isSaving}
+							class="w-full sm:w-auto"
+						>
 							Cancel
 						</Button>
-						<Button type="submit" disabled={isSaving} class="w-full gap-2 shadow-md shadow-primary/20 sm:w-auto">
+						<Button
+							type="submit"
+							disabled={isSaving}
+							class="w-full gap-2 shadow-md shadow-primary/20 sm:w-auto"
+						>
 							{#if isSaving}
 								<Loader variant="circular" size="sm" />
 								Saving...
@@ -317,9 +351,17 @@
 				<Card.Title>Filters</Card.Title>
 			</Card.Header>
 			<Card.Content>
-				<form class="flex flex-col gap-4 sm:flex-row" onsubmit={(e) => { e.preventDefault(); applyFilters(); }}>
+				<form
+					class="flex flex-col gap-4 sm:flex-row"
+					onsubmit={(e) => {
+						e.preventDefault();
+						applyFilters();
+					}}
+				>
 					<div class="relative flex-1">
-						<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+						<Search
+							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+						/>
 						<Input
 							type="text"
 							placeholder="Search content..."
@@ -330,7 +372,7 @@
 					<select
 						bind:value={selectedTopic}
 						onchange={applyFilters}
-						class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring sm:w-[180px]"
+						class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none sm:w-[180px]"
 					>
 						<option value="">All Topics</option>
 						{#each topics as t}
@@ -339,6 +381,38 @@
 					</select>
 					<Button type="submit" variant="secondary" size="sm">Search</Button>
 				</form>
+
+				{#if urlSearch || urlTopic}
+					<div class="mt-4 flex flex-wrap gap-2">
+						{#if urlSearch}
+							<Badge variant="secondary" class="flex items-center gap-2 px-3 py-1.5 text-sm">
+								<span>Search: <span class="font-bold text-primary">{urlSearch}</span></span>
+								<button
+									onclick={clearSearch}
+									class="rounded-full p-0.5 transition-colors hover:bg-muted"
+									aria-label="Clear search"
+								>
+									<X class="h-3.5 w-3.5" />
+								</button>
+							</Badge>
+						{/if}
+						{#if urlTopic}
+							<Badge variant="secondary" class="flex items-center gap-2 px-3 py-1.5 text-sm">
+								<span>Topic: <span class="font-bold text-primary">{urlTopic}</span></span>
+								<button
+									onclick={() => {
+										selectedTopic = '';
+										applyFilters();
+									}}
+									class="rounded-full p-0.5 transition-colors hover:bg-muted"
+									aria-label="Clear topic"
+								>
+									<X class="h-3.5 w-3.5" />
+								</button>
+							</Badge>
+						{/if}
+					</div>
+				{/if}
 			</Card.Content>
 		</Card.Root>
 
@@ -418,7 +492,9 @@
 														</Badge>
 													{/each}
 													{#if item.entities.length > 2}
-														<Badge variant="outline" class="text-xs">+{item.entities.length - 2}</Badge>
+														<Badge variant="outline" class="text-xs"
+															>+{item.entities.length - 2}</Badge
+														>
 													{/if}
 												</div>
 											{:else}
@@ -455,7 +531,9 @@
 												<FileText class="h-12 w-12 text-muted-foreground/20" />
 												<h3 class="font-semibold text-foreground">No content found</h3>
 												<p class="text-sm text-muted-foreground">
-													{searchQuery || selectedTopic ? 'Try adjusting your filters.' : 'Start by adding some content.'}
+													{searchQuery || selectedTopic
+														? 'Try adjusting your filters.'
+														: 'Start by adding some content.'}
 												</p>
 												{#if !searchQuery && !selectedTopic}
 													<Button variant="outline" size="sm" onclick={startCreate} class="mt-2">

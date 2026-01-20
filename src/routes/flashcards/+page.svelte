@@ -261,15 +261,24 @@
 										</div>
 									</td>
 									<td class="px-4 py-4 text-right">
-										<Button
-											href="/flashcards/study?contentId={content._id}"
-											variant="ghost"
-											size="sm"
-											class="h-8 gap-1.5 px-3 text-xs font-bold tracking-tight uppercase group-hover:bg-primary group-hover:text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-										>
-											Study
-											<ChevronRight class="h-3 w-3" />
-										</Button>
+										<div class="flex flex-col items-end gap-1">
+											<Button
+												href="/flashcards/study?contentId={content._id}"
+												variant="ghost"
+												size="sm"
+												class="h-8 gap-1.5 px-3 text-xs font-bold tracking-tight uppercase group-hover:bg-primary group-hover:text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+												disabled={!isAuthenticated}
+											>
+												Study
+												<ChevronRight class="h-3 w-3" />
+											</Button>
+											{#if !isAuthenticated}
+												<span
+													class="pr-2 text-[8px] font-bold text-muted-foreground uppercase italic"
+													>Sign in required</span
+												>
+											{/if}
+										</div>
 									</td>
 								</tr>
 							{/each}

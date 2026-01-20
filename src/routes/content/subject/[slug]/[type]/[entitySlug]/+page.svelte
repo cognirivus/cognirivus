@@ -20,6 +20,9 @@
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 
+	const currentUser = $derived(page.data.currentUser);
+	const isAuthenticated = $derived(!!currentUser);
+
 	const slug = $derived((page.params as any).slug);
 	const type = $derived((page.params as any).type);
 	const entitySlug = $derived((page.params as any).entitySlug);
@@ -135,7 +138,7 @@
 								<Badge variant="secondary" class="text-[10px] tracking-wider uppercase"
 									>{item.topic}</Badge
 								>
-								{#if progressQuery.data?.[item._id]}
+								{#if isAuthenticated && progressQuery.data?.[item._id]}
 									<span
 										class="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400"
 									>
@@ -144,7 +147,9 @@
 									</span>
 								{/if}
 							</div>
-							<MarkCompleteToggle contentId={item._id} variant="icon" />
+							{#if isAuthenticated}
+								<MarkCompleteToggle contentId={item._id} variant="icon" />
+							{/if}
 						</header>
 
 						<div class="prose prose-zinc dark:prose-invert max-w-none">

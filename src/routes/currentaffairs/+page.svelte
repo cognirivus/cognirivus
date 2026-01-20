@@ -7,15 +7,18 @@
 	import {
 		Calendar,
 		Clock,
-		Share2,
-		Bookmark,
 		Newspaper,
 		Search,
 		ChevronRight,
 		ChevronLeft,
-		Check
+		Check,
+		X
 	} from '@lucide/svelte';
+	import { page } from '$app/state';
 	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
+
+	const currentUser = $derived(page.data.currentUser);
+	const isAuthenticated = $derived(!!currentUser);
 
 	let searchInput = $state('');
 	let searchQuery = $state('');
@@ -61,6 +64,14 @@
 		cursorStack = [null];
 		currentCursorIndex = 0;
 	}
+
+	function clearSearch() {
+		searchInput = '';
+		searchQuery = '';
+		// Reset pagination on clear
+		cursorStack = [null];
+		currentCursorIndex = 0;
+	}
 </script>
 
 <svelte:head>
@@ -96,6 +107,21 @@
 				</div>
 				<Button onclick={handleSearch} size="lg" class="h-12 px-8">Search Feed</Button>
 			</div>
+
+			{#if searchQuery}
+				<div class="mt-4 flex justify-center">
+					<Badge variant="secondary" class="flex items-center gap-2 px-3 py-1.5 text-sm">
+						<span>Search: <span class="font-bold text-primary">{searchQuery}</span></span>
+						<button
+							onclick={clearSearch}
+							class="rounded-full p-0.5 transition-colors hover:bg-muted"
+							aria-label="Clear search"
+						>
+							<X class="h-3.5 w-3.5" />
+						</button>
+					</Badge>
+				</div>
+			{/if}
 		</div>
 	</div>
 
@@ -162,8 +188,10 @@
 
 							<div class="mt-8 flex items-center justify-between border-t pt-4">
 								<div class="flex items-center gap-2 md:gap-4">
-									<MarkCompleteToggle contentId={story._id} variant="icon" />
-									{#if progressQuery.data?.[story._id]}
+									{#if isAuthenticated}
+										<MarkCompleteToggle contentId={story._id} variant="icon" />
+									{/if}
+									{#if isAuthenticated && progressQuery.data?.[story._id]}
 										<span
 											class="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400"
 										>
@@ -171,22 +199,6 @@
 											<span class="hidden sm:inline">Completed</span>
 										</span>
 									{/if}
-									<Button
-										variant="ghost"
-										size="sm"
-										class="h-8 gap-2 px-2 text-[10px] md:px-3 md:text-xs"
-									>
-										<Bookmark class="h-3.5 w-3.5" />
-										<span class="hidden sm:inline">Save</span>
-									</Button>
-									<Button
-										variant="ghost"
-										size="sm"
-										class="h-8 gap-2 px-2 text-[10px] md:px-3 md:text-xs"
-									>
-										<Share2 class="h-3.5 w-3.5" />
-										<span class="hidden sm:inline">Share</span>
-									</Button>
 								</div>
 
 								<div class="flex items-center gap-2">

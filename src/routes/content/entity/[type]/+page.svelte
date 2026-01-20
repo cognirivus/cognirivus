@@ -12,7 +12,8 @@
 		Tag,
 		Users,
 		Building2,
-		Briefcase
+		Briefcase,
+		X
 	} from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { page } from '$app/state';
@@ -84,6 +85,11 @@
 			handleSearch();
 		}
 	}
+
+	function clearSearch() {
+		searchInput = '';
+		searchQuery = '';
+	}
 </script>
 
 <svelte:head>
@@ -124,6 +130,21 @@
 			<Button onclick={handleSearch} size="lg" class="w-full sm:w-auto">Filter</Button>
 		</div>
 	</div>
+
+	{#if searchQuery}
+		<div class="mb-8 flex">
+			<Badge variant="secondary" class="flex items-center gap-2 px-3 py-1.5 text-sm">
+				<span>Filter: <span class="font-bold text-primary">{searchQuery}</span></span>
+				<button
+					onclick={clearSearch}
+					class="rounded-full p-0.5 transition-colors hover:bg-muted"
+					aria-label="Clear filter"
+				>
+					<X class="h-3.5 w-3.5" />
+				</button>
+			</Badge>
+		</div>
+	{/if}
 
 	<!-- Sort Controls -->
 	<div class="mb-8 flex flex-col gap-4 border-b pb-6 sm:flex-row sm:items-center">
