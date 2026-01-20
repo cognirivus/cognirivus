@@ -16,9 +16,7 @@
 		getServerState: () => data.authState
 	});
 
-	const showNavbar = $derived(
-		!page.url.pathname.startsWith('/chat') && !page.url.pathname.startsWith('/image')
-	);
+	const showNavbar = $derived(!page.url.pathname.startsWith('/chat'));
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>

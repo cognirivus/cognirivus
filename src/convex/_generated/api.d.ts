@@ -15,6 +15,7 @@ import type * as chat from "../chat.js";
 import type * as content from "../content.js";
 import type * as crons from "../crons.js";
 import type * as currentAffairs from "../currentAffairs.js";
+import type * as flashcards from "../flashcards.js";
 import type * as http from "../http.js";
 import type * as image from "../image.js";
 import type * as lib_openrouter from "../lib/openrouter.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   content: typeof content;
   crons: typeof crons;
   currentAffairs: typeof currentAffairs;
+  flashcards: typeof flashcards;
   http: typeof http;
   image: typeof image;
   "lib/openrouter": typeof lib_openrouter;

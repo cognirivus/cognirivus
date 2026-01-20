@@ -9,7 +9,6 @@
 		LogIn,
 		LogOut,
 		MessageSquare,
-		Image as ImageIcon,
 		LayoutDashboard,
 		ShieldCheck,
 		User,
@@ -18,7 +17,9 @@
 		Brain,
 		X,
 		ChevronDown,
-		Newspaper
+		Newspaper,
+		GraduationCap,
+		Library
 	} from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -42,9 +43,15 @@
 
 	const navItems = [
 		{ name: 'Chat', href: '/chat', icon: MessageSquare, authRequired: true },
-		{ name: 'Images', href: '/image', icon: ImageIcon, authRequired: true },
-		{ name: 'Current Affairs', href: '/currentaffairs', icon: Newspaper, authRequired: false },
-		{ name: 'Knowledge Base', href: '/content', icon: Brain, authRequired: false },
+		{
+			name: 'Current Affairs',
+			href: '/currentaffairs',
+			icon: Newspaper,
+			authRequired: false,
+			inPrep: true
+		},
+		{ name: 'Knowledge Base', href: '/content', icon: Library, authRequired: false, inPrep: true },
+		{ name: 'Flashcards', href: '/flashcards', icon: Brain, authRequired: false, inPrep: true },
 		{ name: 'Blog', href: '/blog', icon: BookOpen, authRequired: false },
 		{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, authRequired: true },
 		{ name: 'Admin', href: '/admin', icon: ShieldCheck, adminOnly: true }
@@ -59,9 +66,14 @@
 		})
 	);
 
-	// For desktop: Hide Dashboard and Admin from the main bar (move to dropdown)
+	// Prep dropdown items
+	const prepItems = $derived(filteredNavItems.filter((item) => (item as any).inPrep));
+
+	// For desktop: Hide Dashboard, Admin and Prep items from the main bar
 	const desktopNavItems = $derived(
-		filteredNavItems.filter((item) => !['Dashboard', 'Admin'].includes(item.name))
+		filteredNavItems.filter(
+			(item) => !['Dashboard', 'Admin'].includes(item.name) && !(item as any).inPrep
+		)
 	);
 
 	async function signOut() {
@@ -98,6 +110,38 @@
 						{item.name}
 					</a>
 				{/each}
+
+				<!-- Prep Dropdown -->
+				{#if prepItems.length > 0}
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger>
+							{#snippet child({ props })}
+								<Button
+									variant="ghost"
+									size="sm"
+									class="gap-2 font-medium {prepItems.some((i) => page.url.pathname === i.href)
+										? 'text-primary'
+										: 'text-muted-foreground'}"
+									{...props}
+								>
+									<GraduationCap class="h-4 w-4" />
+									Prep
+									<ChevronDown class="h-3 w-3 opacity-50" />
+								</Button>
+							{/snippet}
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content align="start" class="w-48">
+							{#each prepItems as item}
+								<DropdownMenu.Item>
+									<a href={item.href} class="flex w-full items-center gap-2">
+										<item.icon class="h-4 w-4" />
+										<span>{item.name}</span>
+									</a>
+								</DropdownMenu.Item>
+							{/each}
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				{/if}
 			{/if}
 
 			<div class="ml-4 flex items-center gap-3">
@@ -195,8 +239,28 @@
 						<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
 					</div>
 				{:else}
-					<!-- In mobile, show ALL items including Dashboard/Admin in the main list -->
-					{#each filteredNavItems as item}
+					<!-- In mobile, show items grouped logically -->
+					{#each filteredNavItems.filter((item) => !item.inPrep) as item}
+						<a
+							href={item.href}
+							class="flex items-center gap-3 rounded-lg px-3 py-3 text-base font-medium transition-colors hover:bg-accent {page
+								.url.pathname === item.href
+								? 'bg-accent/50 text-primary'
+								: 'text-muted-foreground'}"
+							onclick={() => (isMobileMenuOpen = false)}
+						>
+							<item.icon class="h-5 w-5" />
+							{item.name}
+						</a>
+					{/each}
+
+					<div class="mt-4 mb-2 px-3">
+						<p class="text-[10px] font-bold tracking-widest text-muted-foreground/60 uppercase">
+							Prep Tools
+						</p>
+					</div>
+
+					{#each prepItems as item}
 						<a
 							href={item.href}
 							class="flex items-center gap-3 rounded-lg px-3 py-3 text-base font-medium transition-colors hover:bg-accent {page

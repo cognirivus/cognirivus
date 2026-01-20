@@ -97,6 +97,14 @@ export const listPaginated = query({
 	}
 });
 
+const checkAdmin = async (ctx: any) => {
+	const user = await authComponent.getAuthUser(ctx);
+	const isAdmin =
+		user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin');
+	if (!isAdmin) throw new Error('Unauthorized: Admin access required');
+	return user;
+};
+
 export const insert = mutation({
 	args: {
 		title: v.string(),
@@ -107,8 +115,10 @@ export const insert = mutation({
 		newsId: v.optional(v.id('news'))
 	},
 	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
 		return await ctx.db.insert('content', {
 			...args,
+			flashcardCount: 0,
 			createdAt: Date.now()
 		});
 	}
@@ -125,6 +135,7 @@ export const update = mutation({
 		date: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
 		const { id, ...updates } = args;
 		await ctx.db.patch(id, updates);
 		return id;
@@ -134,6 +145,7 @@ export const update = mutation({
 export const remove = mutation({
 	args: { id: v.id('content') },
 	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
 		const links = await ctx.db
 			.query('content_entities')
 			.withIndex('by_content', (q) => q.eq('contentId', args.id))
@@ -218,6 +230,7 @@ async function saveFactLogic(
 		title,
 		subjectId: subject._id,
 		...rest,
+		flashcardCount: 0,
 		createdAt: Date.now()
 	});
 

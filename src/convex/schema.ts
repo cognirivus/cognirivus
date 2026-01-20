@@ -151,6 +151,7 @@ const schema = defineSchema({
 		source: v.optional(v.string()),
 		newsId: v.optional(v.id('news')),
 		date: v.optional(v.string()),
+		flashcardCount: v.optional(v.number()),
 		createdAt: v.number()
 	})
 		.index('by_subjectId', ['subjectId'])
@@ -197,7 +198,30 @@ const schema = defineSchema({
 		completedAt: v.number()
 	})
 		.index('by_user', ['userId'])
-		.index('by_user_content', ['userId', 'contentId'])
+		.index('by_user_content', ['userId', 'contentId']),
+	flashcards: defineTable({
+		contentId: v.id('content'),
+		front: v.string(),
+		back: v.string(),
+		type: v.string(), // 'basic', 'cloze', 'mcq'
+		difficulty: v.number(), // 1-5
+		createdAt: v.number()
+	})
+		.index('by_content', ['contentId'])
+		.index('by_created_at', ['createdAt']),
+	user_flashcard_progress: defineTable({
+		userId: v.string(),
+		flashcardId: v.id('flashcards'),
+		interval: v.number(), // Days until next review
+		easeFactor: v.number(), // SM-2 ease factor (default 2.5)
+		repetitions: v.number(),
+		nextReviewAt: v.number(),
+		lastReviewedAt: v.number()
+	})
+		.index('by_user', ['userId'])
+		.index('by_user_flashcard', ['userId', 'flashcardId'])
+		.index('by_flashcard', ['flashcardId'])
+		.index('by_next_review', ['userId', 'nextReviewAt'])
 });
 
 export default schema;

@@ -6,15 +6,21 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
-	import { Calendar, Tag, Book, ArrowLeft, ExternalLink, MapPin } from '@lucide/svelte';
+	import { Calendar, Tag, Book, ArrowLeft, ExternalLink, MapPin, Brain } from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
+	import { useConvexClient } from 'convex-svelte';
 
+	const client = useConvexClient();
 	const contentId = $derived(page.params.id as any);
 	const contentQuery = useQuery((api as any).content.getById, () =>
 		contentId ? { id: contentId } : 'skip'
 	);
 	const item = $derived(contentQuery.data);
+
+	const flashcardsQuery = useQuery((api as any).flashcards.listByContent, () =>
+		contentId ? { contentId } : 'skip'
+	);
 
 	const locations = $derived(item?.entities?.filter((e: any) => e.type === 'location') || []);
 </script>
@@ -98,6 +104,29 @@
 					{/if}
 				</div>
 			</header>
+
+			{#if flashcardsQuery.data && flashcardsQuery.data.length > 0}
+				<Card.Root class="border-primary/20 bg-primary/5">
+					<Card.Content class="flex items-center justify-between p-4">
+						<div class="flex items-center gap-4">
+							<div class="rounded-full bg-primary/10 p-2 text-primary">
+								<Brain class="h-5 w-5" />
+							</div>
+							<div>
+								<p class="font-semibold">{flashcardsQuery.data.length} Flashcards Available</p>
+								<p class="text-sm text-muted-foreground">Test your knowledge on this topic.</p>
+							</div>
+						</div>
+						<Button href="/flashcards/study?contentId={item._id}" size="sm" class="gap-2">
+							Study Now
+						</Button>
+					</Card.Content>
+				</Card.Root>
+			{:else if flashcardsQuery.data && flashcardsQuery.data.length === 0}
+				<div class="rounded-lg border border-dashed p-4 text-center">
+					<p class="text-sm text-muted-foreground">No flashcards generated for this content yet.</p>
+				</div>
+			{/if}
 
 			<Card.Root class="border-none bg-transparent shadow-none">
 				<Card.Content class="p-0">

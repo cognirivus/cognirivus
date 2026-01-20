@@ -1,11 +1,24 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Shield, BookOpen, LayoutDashboard, FileText, Newspaper } from '@lucide/svelte';
+	import { Shield, BookOpen, LayoutDashboard, FileText, Newspaper, Brain } from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { cn } from '$lib/utils.js';
+	import { redirect } from '@sveltejs/kit';
 
 	let { children } = $props();
+
+	const user = $derived(page.data.currentUser);
+	const isAdmin = $derived(
+		user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin')
+	);
+
+	// Client-side guard (Server-side should also be implemented in +layout.server.ts for full security)
+	$effect(() => {
+		if (user && !isAdmin) {
+			window.location.href = '/';
+		}
+	});
 
 	const navItems = [
 		{
@@ -27,6 +40,11 @@
 			name: 'News',
 			href: '/admin/news',
 			icon: Newspaper
+		},
+		{
+			name: 'Flashcards',
+			href: '/admin/flashcards',
+			icon: Brain
 		}
 	];
 
