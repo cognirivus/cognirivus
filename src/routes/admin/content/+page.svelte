@@ -35,10 +35,23 @@
 	const urlTopic = $derived(page.url.searchParams.get('topic') || '');
 	const urlSearch = $derived(page.url.searchParams.get('q') || '');
 
-	let searchQuery = $state(urlSearch);
-	let selectedTopic = $state(urlTopic);
-	let currentCursor = $state<string | null>(urlCursor);
-	let cursorHistory = $state<string[]>(urlHistory ? urlHistory.split(',').filter(Boolean) : []);
+	let searchQuery = $state('');
+	let selectedTopic = $state('');
+	let currentCursor = $state<string | null>(null);
+	let cursorHistory = $state<string[]>([]);
+
+	$effect(() => {
+		searchQuery = urlSearch;
+	});
+	$effect(() => {
+		selectedTopic = urlTopic;
+	});
+	$effect(() => {
+		currentCursor = urlCursor;
+	});
+	$effect(() => {
+		cursorHistory = urlHistory ? urlHistory.split(',').filter(Boolean) : [];
+	});
 
 	function updateUrl() {
 		const params = new URLSearchParams();
@@ -95,7 +108,7 @@
 	let isEditing = $state(false);
 	let editingId = $state<Id<'content'> | null>(null);
 	let title = $state('');
-	let text = $state('');
+	let body = $state('');
 	let subjectId = $state<Id<'subjects'> | null>(null);
 	let topic = $state('');
 	let source = $state('');
@@ -119,7 +132,7 @@
 		isEditing = true;
 		editingId = null;
 		title = '';
-		text = '';
+		body = '';
 		subjectId = subjectsQuery.data?.[0]?._id ?? null;
 		topic = 'Current Affairs';
 		source = '';
@@ -131,7 +144,7 @@
 		isEditing = true;
 		editingId = item._id;
 		title = item.title;
-		text = item.text;
+		body = item.body;
 		subjectId = item.subjectId;
 		topic = item.topic;
 		source = item.source || '';
@@ -155,7 +168,7 @@
 				await client.mutation(api.content.update, {
 					id: editingId,
 					title,
-					text,
+					body,
 					subjectId,
 					topic,
 					source: source || undefined,
@@ -164,7 +177,7 @@
 			} else {
 				await client.mutation(api.content.insert, {
 					title,
-					text,
+					body,
 					subjectId,
 					topic,
 					source: source || undefined
@@ -298,10 +311,10 @@
 					</div>
 
 					<div class="space-y-2">
-						<label for="text" class="text-sm font-semibold">Content Text</label>
+						<label for="body" class="text-sm font-semibold">Content Text</label>
 						<Textarea
-							id="text"
-							bind:value={text}
+							id="body"
+							bind:value={body}
 							required
 							rows={10}
 							placeholder="Enter the full content text..."
@@ -465,8 +478,8 @@
 												<span class="font-semibold text-foreground" title={item.title}>
 													{truncateText(item.title, 40)}
 												</span>
-												<span class="text-xs text-muted-foreground" title={item.text}>
-													{truncateText(item.text, 60)}
+												<span class="text-xs text-muted-foreground" title={item.body}>
+													{truncateText(item.body, 60)}
 												</span>
 											</div>
 										</td>

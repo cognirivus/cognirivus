@@ -72,7 +72,7 @@ CRITICAL GUIDELINES:
 							},
 							{
 								role: 'user',
-								content: newsItem.content
+								content: newsItem.body
 							}
 						],
 						response_format: {
@@ -138,7 +138,7 @@ CRITICAL GUIDELINES:
 					if (loc.title && loc.text) {
 						await ctx.runMutation(internal.content.saveExtractedFact as any, {
 							title: loc.title,
-							text: loc.text,
+							body: loc.text,
 							subjectName: loc.subject,
 							topic: topic,
 							entityType: 'location',

@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { internalMutation, mutation, query } from './_generated/server';
 import { authComponent } from './auth';
 
 const checkAdmin = async (ctx: any) => {
@@ -31,29 +31,50 @@ const UPSC_SUBJECTS = [
 	{ name: 'Other', gsPaper: 0 }
 ];
 
+/**
+ * Logic to seed subjects, extracted so it can be used by both
+ * public and internal mutations.
+ */
+async function runSeed(ctx: any) {
+	for (const sub of UPSC_SUBJECTS) {
+		const slug = sub.name
+			.toLowerCase()
+			.replace(/[^\w\s-]/g, '')
+			.replace(/[\s_-]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+
+		const existing = await ctx.db
+			.query('subjects')
+			.withIndex('by_slug', (q: any) => q.eq('slug', slug))
+			.unique();
+
+		if (!existing) {
+			await ctx.db.insert('subjects', {
+				name: sub.name,
+				gsPaper: sub.gsPaper,
+				slug
+			});
+		}
+	}
+}
+
+/**
+ * Seed subjects from the CLI without authentication.
+ * Usage: npx convex run subjects:seedInternal
+ */
+export const seedInternal = internalMutation({
+	handler: async (ctx) => {
+		await runSeed(ctx);
+	}
+});
+
+/**
+ * Seed subjects from the UI (requires admin auth).
+ */
 export const seed = mutation({
 	handler: async (ctx) => {
 		await checkAdmin(ctx);
-		for (const sub of UPSC_SUBJECTS) {
-			const slug = sub.name
-				.toLowerCase()
-				.replace(/[^\w\s-]/g, '')
-				.replace(/[\s_-]+/g, '-')
-				.replace(/^-+|-+$/g, '');
-
-			const existing = await ctx.db
-				.query('subjects')
-				.withIndex('by_slug', (q) => q.eq('slug', slug))
-				.unique();
-
-			if (!existing) {
-				await ctx.db.insert('subjects', {
-					name: sub.name,
-					gsPaper: sub.gsPaper,
-					slug
-				});
-			}
-		}
+		await runSeed(ctx);
 	}
 });
 

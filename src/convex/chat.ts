@@ -80,7 +80,7 @@ export const generate = action({
 			try {
 				const enriched = await ctx.runAction(internal.memories.getEnrichedContext, {
 					userId,
-					history: messages.slice(-5).map((m) => ({
+					history: messages.slice(-5).map((m: { role: string; body: string }) => ({
 						role: m.role,
 						content: m.body
 					})),
@@ -146,7 +146,7 @@ export const generate = action({
 					const blogDocs = await Promise.all(
 						[...uniqueBlogIds].map((id) => ctx.runQuery(api.blogs.get, { id: id as any }))
 					);
-					const blogMap = new Map(blogDocs.filter(Boolean).map((b) => [b!._id, b!]));
+					const blogMap = new Map(blogDocs.filter(Boolean).map((b: any) => [b!._id, b!]));
 
 					// 1. Collect all chunks (Vector + Text)
 					let allContext = '';
@@ -156,7 +156,7 @@ export const generate = action({
 					for (const r of vectorResults) {
 						const entry = entries.find((e) => e.entryId === r.entryId);
 						const blogId = entry?.key as string | undefined;
-						const blog = blogId ? blogMap.get(blogId as any) : undefined;
+						const blog: any = blogId ? blogMap.get(blogId as any) : undefined;
 						const text = r.content[0]?.text || '';
 
 						if (text) {
@@ -172,10 +172,10 @@ export const generate = action({
 
 					// Add Text Results
 					const uniqueTextResults = textResults.filter(
-						(blog) => !entries.some((e) => e.key === blog._id)
+						(blog: any) => !entries.some((e) => e.key === blog._id)
 					);
-					for (const blog of uniqueTextResults) {
-						const text = blog.content.substring(0, 1000);
+					for (const blog of uniqueTextResults as any[]) {
+						const text = blog.body.substring(0, 1000);
 						if (text) {
 							allContext += `\n\n--- Source: ${blog.title} ---\n${text}\n`;
 							contextSources.push({
@@ -289,7 +289,7 @@ export const generate = action({
 				: '';
 
 		// 4. Prepare OpenRouter payload
-		const openRouterMessages: OpenRouterMessage[] = messages.map((m) => ({
+		const openRouterMessages: OpenRouterMessage[] = messages.map((m: any) => ({
 			role: m.role,
 			content: m.isCancelled || m.metadata?.cancelled ? `[CANCELLED BY USER] ${m.body}` : m.body
 		}));

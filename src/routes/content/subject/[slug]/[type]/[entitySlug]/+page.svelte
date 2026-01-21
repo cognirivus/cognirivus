@@ -97,7 +97,7 @@
 						</div>
 						<h1 class="text-4xl font-extrabold tracking-tight">
 							<a
-								href="/content/entity/{type}/{entitySlug}"
+								href="/content/entity/{encodeURIComponent(type)}/{entitySlug}"
 								class="transition-colors hover:text-primary"
 							>
 								{entity.name}
@@ -128,13 +128,15 @@
 					<article class="group relative space-y-4">
 						<header class="flex flex-wrap items-center justify-between gap-3">
 							<div class="flex flex-wrap items-center gap-3">
-								<Badge
-									variant="outline"
-									class="bg-primary/5 text-[10px] font-bold tracking-tight text-primary uppercase"
-								>
-									<Calendar class="mr-1.5 h-3 w-3" />
-									{item.newsDate || 'General Fact'}
-								</Badge>
+								{#if item.newsDate}
+									<Badge
+										variant="outline"
+										class="bg-primary/5 text-[10px] font-bold tracking-tight text-primary uppercase"
+									>
+										<Calendar class="mr-1.5 h-3 w-3" />
+										Date: {item.newsDate}
+									</Badge>
+								{/if}
 								<Badge variant="secondary" class="text-[10px] tracking-wider uppercase"
 									>{item.topic}</Badge
 								>
@@ -156,7 +158,7 @@
 							<div
 								class="font-serif text-lg leading-relaxed whitespace-pre-wrap text-foreground/90"
 							>
-								{item.text}
+								{item.body}
 							</div>
 						</div>
 

@@ -122,13 +122,13 @@ export const getRagEntryId = internalQuery({
  * Stores the returned entryId in the blog for later cleanup.
  */
 export const syncRag = internalAction({
-	args: { blogId: v.id('blogs'), title: v.string(), content: v.string() },
+	args: { blogId: v.id('blogs'), title: v.string(), body: v.string() },
 	handler: async (ctx, args) => {
 		try {
 			const { entryId, replacedEntry } = await rag.add(ctx, {
 				namespace: RAG_CONFIG.namespace,
 				key: args.blogId,
-				text: `${args.title}\n\n${args.content}`
+				text: `${args.title}\n\n${args.body}`
 			});
 
 			// Store the entryId in the blog for later deletion
@@ -163,7 +163,7 @@ export const backfillRag = internalAction({
 				const { entryId } = await rag.add(ctx, {
 					namespace: RAG_CONFIG.namespace,
 					key: blog._id,
-					text: `${blog.title}\n\n${blog.content}`
+					text: `${blog.title}\n\n${blog.body}`
 				});
 
 				// Store the entryId
@@ -215,7 +215,7 @@ export const cleanupRag = internalAction({
 				await ctx.runAction(internal.blogs.syncRag, {
 					blogId: blog._id,
 					title: blog.title,
-					content: blog.content
+					body: blog.body
 				});
 				syncedCount++;
 			}
@@ -237,9 +237,7 @@ export const searchInternal = internalQuery({
 	handler: async (ctx, args) => {
 		return await ctx.db
 			.query('blogs')
-			.withSearchIndex('search_content', (q) =>
-				q.search('content', args.query).eq('published', true)
-			)
+			.withSearchIndex('search_body', (q) => q.search('body', args.query).eq('published', true))
 			.take(args.limit);
 	}
 });
@@ -343,7 +341,7 @@ export const get = query({
 export const create = mutation({
 	args: {
 		title: v.string(),
-		content: v.string(),
+		body: v.string(),
 		published: v.boolean()
 	},
 	handler: async (ctx, args) => {
@@ -361,7 +359,7 @@ export const create = mutation({
 		await ctx.scheduler.runAfter(0, internal.blogs.syncRag, {
 			blogId: id,
 			title: args.title,
-			content: args.content
+			body: args.body
 		});
 
 		return id;
@@ -372,7 +370,7 @@ export const update = mutation({
 	args: {
 		id: v.id('blogs'),
 		title: v.string(),
-		content: v.string(),
+		body: v.string(),
 		published: v.boolean()
 	},
 	handler: async (ctx, args) => {
@@ -387,7 +385,7 @@ export const update = mutation({
 		await ctx.scheduler.runAfter(0, internal.blogs.syncRag, {
 			blogId: id,
 			title: data.title,
-			content: data.content
+			body: data.body
 		});
 	}
 });
@@ -580,7 +578,7 @@ export const toggleDislike = mutation({
 });
 
 export const addComment = mutation({
-	args: { blogId: v.id('blogs'), content: v.string() },
+	args: { blogId: v.id('blogs'), body: v.string() },
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
@@ -588,7 +586,7 @@ export const addComment = mutation({
 		const id = await ctx.db.insert('blog_comments', {
 			blogId: args.blogId,
 			userId: user._id,
-			content: args.content,
+			body: args.body,
 			createdAt: Date.now()
 		});
 		const doc = await ctx.db.get(id);

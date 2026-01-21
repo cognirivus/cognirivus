@@ -38,7 +38,7 @@
 		((contentQuery.data as any[]) || [])?.filter(
 			(item: any) =>
 				item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-				item.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				item.body.toLowerCase().includes(searchQuery.toLowerCase()) ||
 				item.topic.toLowerCase().includes(searchQuery.toLowerCase())
 		)
 	);
@@ -255,7 +255,7 @@
 							<p
 								class="line-clamp-4 text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground"
 							>
-								{item.text}
+								{item.body}
 							</p>
 						</Card.Content>
 						<Card.Footer class="flex items-center justify-between border-t bg-muted/20 px-5 py-3">

@@ -36,7 +36,7 @@
 
 	const typeMeta = $derived.by(() => {
 		const t = type.toLowerCase();
-		if (t === 'location')
+		if (t.includes('location') || t.includes('place'))
 			return {
 				label: 'Geography',
 				plural: 'Locations',
@@ -50,14 +50,14 @@
 				icon: Users,
 				desc: 'key personality'
 			};
-		if (t === 'organization')
+		if (t.includes('organization') || t.includes('office'))
 			return {
 				label: 'Organization',
 				plural: 'Organizations',
 				icon: Building2,
 				desc: 'national/international body'
 			};
-		if (t === 'legislation')
+		if (t.includes('statute') || t.includes('judgment') || t.includes('act') || t.includes('law'))
 			return {
 				label: 'Legislation',
 				plural: 'Legislations',
@@ -65,10 +65,10 @@
 				desc: 'legal/constitutional act'
 			};
 		return {
-			label: type.charAt(0).toUpperCase() + type.slice(1),
-			plural: type + 's',
+			label: type.replace(/-/g, ' '),
+			plural: type.replace(/-/g, ' ') + 's',
 			icon: Tag,
-			desc: `${type} entity`
+			desc: `${type.replace(/-/g, ' ')} entity`
 		};
 	});
 
@@ -90,7 +90,7 @@
 			s[`Ref${index + 1}`] = {
 				title: item.title,
 				url: `/content/${item._id}`,
-				content: item.text
+				content: item.body
 			};
 		});
 		return s;
@@ -150,7 +150,7 @@
 		<Button
 			variant="ghost"
 			size="sm"
-			href="/content/entity/{type}"
+			href="/content/entity/{encodeURIComponent(type)}"
 			class="w-fit gap-2 text-muted-foreground"
 		>
 			<ArrowLeft class="h-4 w-4" />
@@ -192,7 +192,9 @@
 			<p class="text-muted-foreground">
 				We couldn't find any information for this {typeMeta.desc}.
 			</p>
-			<Button href="/content/entity/{type}" class="mt-4">Return to {typeMeta.plural}</Button>
+			<Button href="/content/entity/{encodeURIComponent(type)}" class="mt-4"
+				>Return to {typeMeta.plural}</Button
+			>
 		</div>
 	{:else}
 		<article class="prose prose-zinc dark:prose-invert max-w-none">
@@ -296,10 +298,12 @@
 														<div
 															class="flex flex-wrap items-center gap-3 text-xs font-bold tracking-tight text-muted-foreground uppercase"
 														>
-															<div class="flex items-center gap-1.5 text-primary">
-																<Calendar class="h-3.5 w-3.5" />
-																{item.newsDate || 'Undated'}
-															</div>
+															{#if item.newsDate}
+																<div class="flex items-center gap-1.5 text-primary">
+																	<Calendar class="h-3.5 w-3.5" />
+																	Date: {item.newsDate}
+																</div>
+															{/if}
 															{#if item.newsId}
 																<a
 																	href="/content/{item._id}"
@@ -326,7 +330,7 @@
 													<div
 														class="font-serif text-lg leading-relaxed whitespace-pre-wrap text-foreground/90"
 													>
-														{item.text}
+														{item.body}
 													</div>
 												</div>
 											{/each}

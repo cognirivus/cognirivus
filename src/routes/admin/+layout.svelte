@@ -1,6 +1,14 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Shield, BookOpen, LayoutDashboard, FileText, Newspaper, Brain } from '@lucide/svelte';
+	import {
+		Shield,
+		BookOpen,
+		LayoutDashboard,
+		FileText,
+		Newspaper,
+		Brain,
+		Sparkles
+	} from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
 	import { cn } from '$lib/utils.js';
@@ -8,7 +16,7 @@
 
 	let { children } = $props();
 
-	const user = $derived(page.data.currentUser);
+	const user = $derived(page.data.currentUser as any);
 	const isAdmin = $derived(
 		user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin')
 	);
@@ -42,9 +50,19 @@
 			icon: Newspaper
 		},
 		{
+			name: 'Syllabus',
+			href: '/admin/syllabus',
+			icon: BookOpen
+		},
+		{
 			name: 'Flashcards',
 			href: '/admin/flashcards',
 			icon: Brain
+		},
+		{
+			name: 'Extraction',
+			href: '/admin/extraction',
+			icon: Sparkles
 		}
 	];
 

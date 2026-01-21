@@ -75,7 +75,7 @@
 						</Card.Header>
 						<Card.Content>
 							<Card.Description class="line-clamp-3 text-base">
-								{blog.content.substring(0, 200)}...
+								{blog.body.substring(0, 200)}...
 							</Card.Description>
 						</Card.Content>
 						<Card.Footer class="flex items-center justify-between">

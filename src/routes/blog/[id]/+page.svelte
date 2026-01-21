@@ -68,7 +68,7 @@
 		if (!session.value?.data?.user || !commentText.trim()) return;
 		isSubmitting = true;
 		try {
-			await client.mutation(api.blogs.addComment, { blogId: id, content: commentText.trim() });
+			await client.mutation(api.blogs.addComment, { blogId: id, body: commentText.trim() });
 			commentText = '';
 		} catch (e) {
 			console.error('Failed to add comment:', e);
@@ -193,7 +193,7 @@
 		</header>
 
 		<div class="prose prose-neutral dark:prose-invert max-w-none">
-			<Markdown content={blog.content} />
+			<Markdown content={blog.body} />
 		</div>
 
 		<!-- Comments Section -->
@@ -283,7 +283,7 @@
 									{/if}
 								</div>
 								<p class="text-sm leading-relaxed text-foreground/90">
-									{comment.content}
+									{comment.body}
 								</p>
 								<div class="flex items-center gap-1 pt-1">
 									{#if session.value?.data?.user}

@@ -18,7 +18,7 @@
 	let isEditing = $state(false);
 	let editingId = $state<Id<'blogs'> | null>(null);
 	let title = $state('');
-	let content = $state('');
+	let body = $state('');
 	let published = $state(false);
 	let error = $state('');
 	let isSaving = $state(false);
@@ -27,7 +27,7 @@
 		isEditing = true;
 		editingId = null;
 		title = '';
-		content = '';
+		body = '';
 		published = false;
 		error = '';
 	}
@@ -36,7 +36,7 @@
 		isEditing = true;
 		editingId = blog._id;
 		title = blog.title;
-		content = blog.content;
+		body = blog.body;
 		published = blog.published;
 		error = '';
 	}
@@ -48,9 +48,9 @@
 
 		try {
 			if (editingId) {
-				await client.mutation(api.blogs.update, { id: editingId, title, content, published });
+				await client.mutation(api.blogs.update, { id: editingId, title, body, published });
 			} else {
-				await client.mutation(api.blogs.create, { title, content, published });
+				await client.mutation(api.blogs.create, { title, body, published });
 			}
 			isEditing = false;
 		} catch (e: any) {
@@ -134,7 +134,7 @@
 
 					<div class="space-y-2">
 						<div class="flex items-center justify-between">
-							<label for="content" class="text-sm font-semibold tracking-tight"
+							<label for="body" class="text-sm font-semibold tracking-tight"
 								>Content (Markdown)</label
 							>
 							<span class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
@@ -142,8 +142,8 @@
 							>
 						</div>
 						<Textarea
-							id="content"
-							bind:value={content}
+							id="body"
+							bind:value={body}
 							required
 							rows={15}
 							placeholder="Write your story..."

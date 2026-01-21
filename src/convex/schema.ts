@@ -100,7 +100,7 @@ const schema = defineSchema({
 		.index('by_enabled', ['isEnabled']),
 	blogs: defineTable({
 		title: v.string(),
-		content: v.string(),
+		body: v.string(),
 		authorId: v.string(),
 		createdAt: v.number(),
 		published: v.boolean(),
@@ -109,8 +109,8 @@ const schema = defineSchema({
 	})
 		.index('by_created_at', ['createdAt'])
 		.index('by_published', ['published'])
-		.searchIndex('search_content', {
-			searchField: 'content',
+		.searchIndex('search_body', {
+			searchField: 'body',
 			filterFields: ['published']
 		}),
 	blog_reactions: defineTable({
@@ -123,7 +123,7 @@ const schema = defineSchema({
 	blog_comments: defineTable({
 		blogId: v.id('blogs'),
 		userId: v.string(),
-		content: v.string(),
+		body: v.string(),
 		createdAt: v.number()
 	})
 		.index('by_blog', ['blogId'])
@@ -137,30 +137,38 @@ const schema = defineSchema({
 		.index('by_comment_user', ['commentId', 'userId']),
 	news: defineTable({
 		date: v.string(),
-		content: v.string()
+		body: v.string()
 	})
 		.index('by_date', ['date'])
-		.searchIndex('search_content', {
-			searchField: 'content'
+		.searchIndex('search_body', {
+			searchField: 'body'
 		}),
 	content: defineTable({
 		title: v.string(),
-		text: v.string(),
+		body: v.string(),
 		subjectId: v.id('subjects'),
 		topic: v.string(),
 		source: v.optional(v.string()),
 		newsId: v.optional(v.id('news')),
 		date: v.optional(v.string()),
 		flashcardCount: v.optional(v.number()),
+		// Extraction tracking
+		sourceType: v.optional(v.string()), // 'news' | 'syllabus' | 'blog' | 'content'
+		sourceId: v.optional(v.string()), // Original item ID
+		extractionType: v.optional(v.string()), // Which extraction created this
+		jobId: v.optional(v.id('extraction_jobs')), // Parent job
 		createdAt: v.number()
 	})
 		.index('by_subjectId', ['subjectId'])
 		.index('by_topic', ['topic'])
+		.index('by_date', ['date'])
 		.index('by_topic_date', ['topic', 'date'])
 		.index('by_created_at', ['createdAt'])
 		.index('by_newsId', ['newsId'])
+		.index('by_sourceType', ['sourceType'])
+		.index('by_jobId', ['jobId'])
 		.searchIndex('search_all', {
-			searchField: 'text',
+			searchField: 'body',
 			filterFields: ['topic']
 		}),
 	subjects: defineTable({
@@ -221,7 +229,62 @@ const schema = defineSchema({
 		.index('by_user', ['userId'])
 		.index('by_user_flashcard', ['userId', 'flashcardId'])
 		.index('by_flashcard', ['flashcardId'])
-		.index('by_next_review', ['userId', 'nextReviewAt'])
+		.index('by_next_review', ['userId', 'nextReviewAt']),
+	syllabus: defineTable({
+		title: v.string(),
+		body: v.string(),
+		subjectId: v.id('subjects'),
+		topic: v.string(),
+		exams: v.array(v.string()), // e.g., ['UPSC', 'SSC']
+		createdAt: v.number()
+	})
+		.index('by_subjectId', ['subjectId'])
+		.index('by_topic', ['topic'])
+		.index('by_created_at', ['createdAt']),
+
+	// Extraction system tables
+	extraction_jobs: defineTable({
+		// Source info
+		sourceType: v.string(), // 'news' | 'syllabus' | 'blog' | 'content'
+		sourceIds: v.array(v.string()), // IDs of items being processed
+		selectedFields: v.array(v.string()), // Fields to extract from
+
+		// Extraction info
+		extractionType: v.string(), // 'current_affairs' | 'locations' | 'concepts' | etc.
+
+		// Job status
+		status: v.union(
+			v.literal('pending'),
+			v.literal('running'),
+			v.literal('completed'),
+			v.literal('failed'),
+			v.literal('cancelled')
+		),
+
+		// Progress tracking
+		batchSize: v.number(),
+		totalItems: v.number(),
+		processedItems: v.number(),
+		failedItems: v.number(),
+		extractedCount: v.number(), // Total extracted items created
+
+		// Results
+		resultIds: v.array(v.string()), // IDs of created content/entities
+		error: v.optional(v.string()),
+
+		// Timing
+		startedAt: v.optional(v.number()),
+		completedAt: v.optional(v.number()),
+
+		// Audit
+		createdBy: v.string(), // Admin user ID
+		createdAt: v.number()
+	})
+		.index('by_status', ['status'])
+		.index('by_sourceType', ['sourceType'])
+		.index('by_extractionType', ['extractionType'])
+		.index('by_createdAt', ['createdAt'])
+		.index('by_createdBy', ['createdBy'])
 });
 
 export default schema;

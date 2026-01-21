@@ -40,7 +40,7 @@
 
 	const typeMeta = $derived.by(() => {
 		const t = type.toLowerCase();
-		if (t === 'location')
+		if (t.includes('location') || t.includes('place'))
 			return {
 				label: 'Geography',
 				title: 'Geographical Index',
@@ -54,14 +54,14 @@
 				icon: Users,
 				desc: 'Track key personalities and their impact on current affairs.'
 			};
-		if (t === 'organization')
+		if (t.includes('organization') || t.includes('office'))
 			return {
 				label: 'Organizations',
 				title: 'Organization Index',
 				icon: Building2,
 				desc: 'Analyze roles of national and international bodies.'
 			};
-		if (t === 'legislation')
+		if (t.includes('statute') || t.includes('judgment') || t.includes('act') || t.includes('law'))
 			return {
 				label: 'Legislations',
 				title: 'Bills & Acts',
@@ -69,10 +69,10 @@
 				desc: 'Examine constitutional developments, bills, and legal acts.'
 			};
 		return {
-			label: 'Entities',
-			title: `${type.charAt(0).toUpperCase() + type.slice(1)} Index`,
+			label: type.replace(/-/g, ' '),
+			title: `${type.replace(/-/g, ' ')} Index`,
 			icon: Tag,
-			desc: `Browse and analyze ${type} based intelligence.`
+			desc: `Browse and analyze ${type.replace(/-/g, ' ')} based intelligence.`
 		};
 	});
 
@@ -185,7 +185,7 @@
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
 			{#each filteredEntities as ent}
 				<a
-					href="/content/entity/{type}/{ent.slug}"
+					href="/content/entity/{encodeURIComponent(type)}/{ent.slug}"
 					class="group flex items-center justify-between rounded-xl border bg-card p-5 transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-md"
 				>
 					<div class="flex items-center gap-3">

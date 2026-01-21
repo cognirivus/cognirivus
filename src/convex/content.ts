@@ -7,8 +7,9 @@ async function enrichContentItems(ctx: any, items: any[]) {
 	return await Promise.all(
 		items.map(async (item) => {
 			const subject = await ctx.db.get(item.subjectId);
-			let newsDate;
-			if (item.newsId) {
+			let newsDate = item.date;
+
+			if (!newsDate && item.newsId) {
 				const news = await ctx.db.get(item.newsId);
 				newsDate = news?.date;
 			}
@@ -50,7 +51,7 @@ export const list = query({
 		} else if (topic) {
 			queryBuilder = ctx.db.query('content').withIndex('by_topic', (q) => q.eq('topic', topic));
 		} else {
-			queryBuilder = ctx.db.query('content').order('desc');
+			queryBuilder = ctx.db.query('content').withIndex('by_date').order('desc');
 		}
 
 		let content = await queryBuilder.take(limit ?? 100);
@@ -75,7 +76,7 @@ export const listPaginated = query({
 
 		if (search) {
 			queryBuilder = ctx.db.query('content').withSearchIndex('search_all', (q) => {
-				const searchQ = q.search('text', search);
+				const searchQ = q.search('body', search);
 				return topic ? searchQ.eq('topic', topic) : searchQ;
 			});
 		} else if (topic) {
@@ -84,7 +85,7 @@ export const listPaginated = query({
 				.withIndex('by_topic_date', (q) => q.eq('topic', topic))
 				.order('desc');
 		} else {
-			queryBuilder = ctx.db.query('content').order('desc');
+			queryBuilder = ctx.db.query('content').withIndex('by_date').order('desc');
 		}
 
 		const result = await queryBuilder.paginate(paginationOpts);
@@ -108,7 +109,7 @@ const checkAdmin = async (ctx: any) => {
 export const insert = mutation({
 	args: {
 		title: v.string(),
-		text: v.string(),
+		body: v.string(),
 		subjectId: v.id('subjects'),
 		topic: v.string(),
 		source: v.optional(v.string()),
@@ -128,7 +129,7 @@ export const update = mutation({
 	args: {
 		id: v.id('content'),
 		title: v.string(),
-		text: v.string(),
+		body: v.string(),
 		subjectId: v.id('subjects'),
 		topic: v.string(),
 		source: v.optional(v.string()),
@@ -169,8 +170,8 @@ export const getById = query({
 		const subject = await ctx.db.get(item.subjectId);
 
 		// Fetch news date if linked
-		let newsDate;
-		if (item.newsId) {
+		let newsDate = item.date;
+		if (!newsDate && item.newsId) {
 			const news = await ctx.db.get(item.newsId);
 			newsDate = news?.date;
 		}
@@ -197,7 +198,7 @@ async function saveFactLogic(
 	ctx: any,
 	args: {
 		title: string;
-		text: string;
+		body: string;
 		subjectName: string;
 		topic: string;
 		entityType: string;
@@ -272,7 +273,7 @@ async function saveFactLogic(
 export const saveExtractedFact = internalMutation({
 	args: {
 		title: v.string(), // This is the entity name
-		text: v.string(),
+		body: v.string(),
 		subjectName: v.string(), // Name of the subject to resolve
 		topic: v.string(),
 		entityType: v.string(), // 'location' or 'Current Affairs'
@@ -288,7 +289,7 @@ export const saveExtractedFact = internalMutation({
 export const saveExtractedLocation = internalMutation({
 	args: {
 		title: v.string(), // This is the entity name (Location)
-		text: v.string(),
+		body: v.string(),
 		subjectName: v.string(), // Name of the subject to resolve
 		topic: v.string(),
 		source: v.string(),
@@ -391,11 +392,14 @@ export const listByEntity = query({
 				.filter((item): item is NonNullable<typeof item> => !!item)
 				.map(async (item) => {
 					const subject = await ctx.db.get(item.subjectId);
-					if (item.newsId) {
+					let newsDate = item.date;
+
+					if (!newsDate && item.newsId) {
 						const news = await ctx.db.get(item.newsId);
-						return { ...item, newsDate: news?.date, subject };
+						newsDate = news?.date;
 					}
-					return { ...item, subject };
+
+					return { ...item, newsDate, subject };
 				})
 		);
 

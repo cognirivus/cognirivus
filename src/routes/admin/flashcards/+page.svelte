@@ -38,9 +38,19 @@
 	const urlHistory = $derived(page.url.searchParams.get('history'));
 	const urlSubjectId = $derived(page.url.searchParams.get('subjectId') as Id<'subjects'> | null);
 
-	let currentCursor = $state<string | null>(urlCursor);
-	let cursorHistory = $state<string[]>(urlHistory ? urlHistory.split(',').filter(Boolean) : []);
-	let selectedSubjectId = $state<Id<'subjects'> | null>(urlSubjectId);
+	let currentCursor = $state<string | null>(null);
+	let cursorHistory = $state<string[]>([]);
+	let selectedSubjectId = $state<Id<'subjects'> | null>(null);
+
+	$effect(() => {
+		currentCursor = urlCursor;
+	});
+	$effect(() => {
+		cursorHistory = urlHistory ? urlHistory.split(',').filter(Boolean) : [];
+	});
+	$effect(() => {
+		selectedSubjectId = urlSubjectId;
+	});
 
 	const subjectsQuery = useQuery(api.subjects.list, {});
 
@@ -474,8 +484,8 @@
 												<span class="font-semibold text-foreground" title={item.title}>
 													{truncateText(item.title, 50)}
 												</span>
-												<span class="text-xs text-muted-foreground" title={item.text}>
-													{truncateText(item.text, 80)}
+												<span class="text-xs text-muted-foreground" title={item.body}>
+													{truncateText(item.body, 80)}
 												</span>
 											</div>
 										</td>

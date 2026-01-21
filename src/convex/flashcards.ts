@@ -55,7 +55,7 @@ GUIDELINES:
 						},
 						{
 							role: 'user',
-							content: `Title: ${content.title}\n\nContent:\n${content.text}`
+							content: `Title: ${content.title}\n\nContent:\n${content.body}`
 						}
 					],
 					response_format: {

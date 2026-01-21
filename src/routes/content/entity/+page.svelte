@@ -63,15 +63,20 @@
 
 	function getTypeMeta(type: string) {
 		const t = type.toLowerCase();
-		return (
-			typeMetaMap[t] || {
-				label: type.charAt(0).toUpperCase() + type.slice(1),
-				icon: Tag,
-				color: 'text-slate-500',
-				bgColor: 'bg-slate-500/10',
-				desc: `Explore and analyze intelligence categorized under ${type}.`
-			}
-		);
+		if (typeMetaMap[t]) return typeMetaMap[t];
+
+		if (t.includes('location') || t.includes('place')) return typeMetaMap.location;
+		if (t.includes('organization') || t.includes('office')) return typeMetaMap.organization;
+		if (t.includes('statute') || t.includes('judgment') || t.includes('act') || t.includes('law'))
+			return typeMetaMap.legislation;
+
+		return {
+			label: type.replace(/-/g, ' '),
+			icon: Tag,
+			color: 'text-slate-500',
+			bgColor: 'bg-slate-500/10',
+			desc: `Explore and analyze intelligence categorized under ${type.replace(/-/g, ' ')}.`
+		};
 	}
 </script>
 
@@ -111,7 +116,7 @@
 		<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
 			{#each entityTypes as { type, count }}
 				{@const meta = getTypeMeta(type)}
-				<a href="/content/entity/{type}" class="group block">
+				<a href="/content/entity/{encodeURIComponent(type)}" class="group block">
 					<Card
 						class="h-full transition-all duration-300 group-hover:border-primary/50 group-hover:shadow-lg"
 					>

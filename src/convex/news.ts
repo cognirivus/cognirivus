@@ -14,13 +14,13 @@ const checkAdmin = async (ctx: any) => {
 export const insert = mutation({
 	args: {
 		date: v.string(),
-		content: v.string()
+		body: v.string()
 	},
 	handler: async (ctx, args) => {
 		await checkAdmin(ctx);
 		await ctx.db.insert('news', {
 			date: args.date,
-			content: args.content
+			body: args.body
 		});
 	}
 });
@@ -133,7 +133,7 @@ export const update = mutation({
 	args: {
 		id: v.id('news'),
 		date: v.string(),
-		content: v.string()
+		body: v.string()
 	},
 	handler: async (ctx, args) => {
 		await checkAdmin(ctx);

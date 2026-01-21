@@ -40,7 +40,7 @@ export const generateReport = action({
 			if (!groupedData[gs]) groupedData[gs] = {};
 			if (!groupedData[gs][sub]) groupedData[gs][sub] = [];
 			groupedData[gs][sub].push(
-				`- [${refTag}] [${item.newsDate || 'General'}] ${item.title}: ${item.text}`
+				`- [${refTag}] [${item.newsDate || 'General'}] ${item.title}: ${item.body}`
 			);
 		});
 

@@ -90,14 +90,14 @@
 					{#if item.newsDate}
 						<div class="flex items-center gap-1.5 font-bold text-primary uppercase">
 							<Calendar class="h-4 w-4" />
-							News Date: {item.newsDate}
+							Date: {item.newsDate}
 						</div>
 					{/if}
 
 					{#if item.entities && item.entities.length > 0}
 						{#each item.entities as ent}
 							<a
-								href="/content/entity/{ent.type}/{ent.slug}"
+								href="/content/entity/{encodeURIComponent(ent.type)}/{ent.slug}"
 								class="flex items-center gap-1.5 font-semibold text-primary hover:underline"
 							>
 								<MapPin class="h-4 w-4" />
@@ -156,7 +156,7 @@
 				<Card.Content class="p-0">
 					<div class="prose prose-zinc dark:prose-invert max-w-none">
 						<p class="text-lg leading-relaxed whitespace-pre-wrap text-foreground/90">
-							{item.text}
+							{item.body}
 						</p>
 					</div>
 				</Card.Content>

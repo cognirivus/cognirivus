@@ -182,7 +182,7 @@
 								<p
 									class="line-clamp-3 text-base leading-relaxed whitespace-pre-wrap text-muted-foreground md:text-lg"
 								>
-									{story.text}
+									{story.body}
 								</p>
 							</div>
 

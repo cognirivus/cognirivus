@@ -213,32 +213,32 @@
 										<p
 											class="line-clamp-4 text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground"
 										>
-											{item.text}
+											{item.body}
 										</p>
 									</Card.Content>
 									<Card.Footer
-																		class="flex items-center justify-between border-t bg-muted/30 px-6 py-3"
-																	>
-																		<div class="flex items-center gap-2">
-																			<Badge variant="secondary" class="text-[10px]">{item.topic}</Badge>
-																			{#if progressQuery.data?.[item._id]}
-																				<div
-																					class="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400"
-																				>
-																					<Check class="h-3 w-3" />
-																					Done
-																				</div>
-																			{/if}
-																		</div>
-																		<Button
-																			variant="link"
-																			size="sm"
-																			href="/content/{item._id}"
-																			class="h-auto p-0 text-xs"
-																		>
-																			Details
-																		</Button>
-																	</Card.Footer>
+										class="flex items-center justify-between border-t bg-muted/30 px-6 py-3"
+									>
+										<div class="flex items-center gap-2">
+											<Badge variant="secondary" class="text-[10px]">{item.topic}</Badge>
+											{#if progressQuery.data?.[item._id]}
+												<div
+													class="flex items-center gap-1 text-[10px] font-bold text-green-600 dark:text-green-400"
+												>
+													<Check class="h-3 w-3" />
+													Done
+												</div>
+											{/if}
+										</div>
+										<Button
+											variant="link"
+											size="sm"
+											href="/content/{item._id}"
+											class="h-auto p-0 text-xs"
+										>
+											Details
+										</Button>
+									</Card.Footer>
 								</Card.Root>
 							{/each}
 						</div>

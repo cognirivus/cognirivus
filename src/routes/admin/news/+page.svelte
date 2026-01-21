@@ -34,21 +34,30 @@
 	const urlCursor = $derived(page.url.searchParams.get('cursor'));
 	const urlHistory = $derived(page.url.searchParams.get('history'));
 
-	let currentCursor = $state<string | null>(urlCursor);
-	let cursorHistory = $state<string[]>(urlHistory ? urlHistory.split(',').filter(Boolean) : []);
+	let currentCursor = $state<string | null>(null);
+	let cursorHistory = $state<string[]>([]);
+
+	$effect(() => {
+		currentCursor = urlCursor;
+	});
+	$effect(() => {
+		cursorHistory = urlHistory ? urlHistory.split(',').filter(Boolean) : [];
+	});
 
 	function updateUrl() {
 		const params = new URLSearchParams();
 		if (currentCursor) params.set('cursor', currentCursor);
 		if (cursorHistory.length > 0) params.set('history', cursorHistory.join(','));
 		const queryString = params.toString();
-		goto(`/admin/news${queryString ? '?' + queryString : ''}`, { replaceState: true, keepFocus: true });
+		goto(`/admin/news${queryString ? '?' + queryString : ''}`, {
+			replaceState: true,
+			keepFocus: true
+		});
 	}
 
-	const newsQuery = useQuery(
-		api.news.listPaginated,
-		() => ({ paginationOpts: { numItems: PAGE_SIZE, cursor: currentCursor } })
-	);
+	const newsQuery = useQuery(api.news.listPaginated, () => ({
+		paginationOpts: { numItems: PAGE_SIZE, cursor: currentCursor }
+	}));
 
 	function nextPage() {
 		if (newsQuery.data && !newsQuery.data.isDone) {
@@ -70,21 +79,20 @@
 	let isEditing = $state(false);
 	let editingId = $state<Id<'news'> | null>(null);
 	let date = $state('');
-	let content = $state('');
+	let body = $state('');
 	let error = $state('');
 	let isSaving = $state(false);
 	let expandedNewsId = $state<Id<'news'> | null>(null);
 
-	const expandedNewsQuery = useQuery(
-		api.news.getWithContent,
-		() => (expandedNewsId ? { id: expandedNewsId } : 'skip')
+	const expandedNewsQuery = useQuery(api.news.getWithContent, () =>
+		expandedNewsId ? { id: expandedNewsId } : 'skip'
 	);
 
 	function startCreate() {
 		isEditing = true;
 		editingId = null;
 		date = new Date().toISOString().split('T')[0];
-		content = '';
+		body = '';
 		error = '';
 	}
 
@@ -92,7 +100,7 @@
 		isEditing = true;
 		editingId = item._id;
 		date = item.date;
-		content = item.content;
+		body = item.body;
 		error = '';
 	}
 
@@ -103,9 +111,9 @@
 
 		try {
 			if (editingId) {
-				await client.mutation(api.news.update, { id: editingId, date, content });
+				await client.mutation(api.news.update, { id: editingId, date, body });
 			} else {
-				await client.mutation(api.news.insert, { date, content });
+				await client.mutation(api.news.insert, { date, body });
 			}
 			isEditing = false;
 		} catch (e: any) {
@@ -193,10 +201,10 @@
 					</div>
 
 					<div class="space-y-2">
-						<label for="content" class="text-sm font-semibold">News Content</label>
+						<label for="body" class="text-sm font-semibold">News Content</label>
 						<Textarea
-							id="content"
-							bind:value={content}
+							id="body"
+							bind:value={body}
 							required
 							rows={15}
 							placeholder="Enter the full news content for this date..."
@@ -285,7 +293,7 @@
 									{/if}
 								</div>
 								<p class="text-sm text-muted-foreground">
-									{truncateText(item.content)}
+									{truncateText(item.body)}
 								</p>
 							</div>
 							<div class="flex shrink-0 items-center gap-1">
@@ -351,13 +359,10 @@
 														{/if}
 													</div>
 													<p class="mt-1 text-xs text-muted-foreground">
-														{truncateText(contentItem.text, 100)}
+														{truncateText(contentItem.body, 100)}
 													</p>
 												</div>
-												<a
-													href="/admin/content"
-													class="ml-2 text-xs text-primary hover:underline"
-												>
+												<a href="/admin/content" class="ml-2 text-xs text-primary hover:underline">
 													View
 												</a>
 											</div>

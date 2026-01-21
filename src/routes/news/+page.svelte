@@ -15,7 +15,7 @@
 	const filteredNews = $derived(
 		newsQuery.data?.filter(
 			(item) =>
-				item.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				item.body.toLowerCase().includes(searchQuery.toLowerCase()) ||
 				item.date.includes(searchQuery)
 		) ?? []
 	);
@@ -130,7 +130,7 @@
 					</Card.Header>
 					<Card.Content>
 						<p class="line-clamp-4 whitespace-pre-wrap text-muted-foreground">
-							{item.content}
+							{item.body}
 						</p>
 					</Card.Content>
 					<Card.Footer>
