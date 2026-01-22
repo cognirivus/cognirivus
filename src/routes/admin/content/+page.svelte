@@ -564,19 +564,19 @@
 			</Card.Root>
 
 			{#if contentQuery.data.page.length > 0}
-				<div class="mt-4 flex items-center justify-between">
-					<div class="text-sm text-muted-foreground">
-						Page {cursorHistory.length + 1} · Showing {contentQuery.data.page.length} items
+				<div class="mt-4 flex items-center justify-between px-2">
+					<div class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+						Page {cursorHistory.length + 1} · {contentQuery.data.page.length} items
 					</div>
-					<div class="flex items-center gap-2">
+					<div class="flex items-center gap-1.5">
 						<Button
 							variant="outline"
 							size="sm"
 							onclick={prevPage}
 							disabled={cursorHistory.length === 0}
-							class="gap-1"
+							class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
 						>
-							<ChevronLeft class="h-4 w-4" />
+							<ChevronLeft class="h-3.5 w-3.5" />
 							Previous
 						</Button>
 						<Button
@@ -584,10 +584,10 @@
 							size="sm"
 							onclick={nextPage}
 							disabled={contentQuery.data.isDone}
-							class="gap-1"
+							class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
 						>
 							Next
-							<ChevronRight class="h-4 w-4" />
+							<ChevronRight class="h-3.5 w-3.5" />
 						</Button>
 					</div>
 				</div>

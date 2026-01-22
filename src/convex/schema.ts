@@ -1,15 +1,3 @@
-/**
- * Defines the database schema for the Cognirivus Chat application.
- *
- * Includes tables for:
- * - `messages`: Chat message history with metadata and image associations.
- * - `threads`: Conversation threads.
- * - `usage_logs`: Tracking AI token usage and estimated costs.
- * - `generated_images`: Unified gallery for images generated standalone or in chat.
- * - `cancellations`: Signals for stopping background AI actions.
- * - `user_memories`: Semantic storage for long-term user personalization.
- * - `models`: Available AI models synced from OpenRouter.
- */
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
@@ -100,23 +88,23 @@ const schema = defineSchema({
 		.index('by_enabled', ['isEnabled']),
 	blogs: defineTable({
 		title: v.string(),
-		body: v.string(),
+		snippet: v.string(),
+		r2Key: v.optional(v.string()),
 		authorId: v.string(),
 		createdAt: v.number(),
 		published: v.boolean(),
-		/** RAG entry ID for vector search (used for cleanup on deletion) */
 		ragEntryId: v.optional(v.string())
 	})
 		.index('by_created_at', ['createdAt'])
 		.index('by_published', ['published'])
-		.searchIndex('search_body', {
-			searchField: 'body',
+		.searchIndex('search_snippet', {
+			searchField: 'snippet',
 			filterFields: ['published']
 		}),
 	blog_reactions: defineTable({
 		blogId: v.id('blogs'),
 		userId: v.string(),
-		like_dislike: v.number() // 1 for like, -1 for dislike
+		like_dislike: v.number()
 	})
 		.index('by_blog', ['blogId'])
 		.index('by_blog_user', ['blogId', 'userId']),
@@ -131,17 +119,20 @@ const schema = defineSchema({
 	comment_reactions: defineTable({
 		commentId: v.id('blog_comments'),
 		userId: v.string(),
-		like_dislike: v.number() // 1 for like, -1 for dislike
+		like_dislike: v.number()
 	})
 		.index('by_comment', ['commentId'])
 		.index('by_comment_user', ['commentId', 'userId']),
 	news: defineTable({
 		date: v.string(),
-		body: v.string()
+		snippet: v.string(),
+		r2Key: v.optional(v.string()),
+		bodyHash: v.optional(v.string())
 	})
 		.index('by_date', ['date'])
-		.searchIndex('search_body', {
-			searchField: 'body'
+		.index('by_bodyHash', ['bodyHash'])
+		.searchIndex('search_snippet', {
+			searchField: 'snippet'
 		}),
 	content: defineTable({
 		title: v.string(),
@@ -152,11 +143,10 @@ const schema = defineSchema({
 		newsId: v.optional(v.id('news')),
 		date: v.optional(v.string()),
 		flashcardCount: v.optional(v.number()),
-		// Extraction tracking
-		sourceType: v.optional(v.string()), // 'news' | 'syllabus' | 'blog' | 'content'
-		sourceId: v.optional(v.string()), // Original item ID
-		extractionType: v.optional(v.string()), // Which extraction created this
-		jobId: v.optional(v.id('extraction_jobs')), // Parent job
+		sourceType: v.optional(v.string()),
+		sourceId: v.optional(v.string()),
+		extractionType: v.optional(v.string()),
+		jobId: v.optional(v.id('extraction_jobs')),
 		createdAt: v.number()
 	})
 		.index('by_subjectId', ['subjectId'])
@@ -173,7 +163,7 @@ const schema = defineSchema({
 		}),
 	subjects: defineTable({
 		name: v.string(),
-		gsPaper: v.number(), // 0, 1, 2, 3, 4
+		gsPaper: v.number(),
 		slug: v.string()
 	})
 		.index('by_gsPaper', ['gsPaper'])
@@ -181,7 +171,7 @@ const schema = defineSchema({
 		.index('by_name', ['name']),
 	entities: defineTable({
 		name: v.string(),
-		type: v.string(), // e.g., 'location'
+		type: v.string(),
 		slug: v.string(),
 		report: v.optional(v.string()),
 		reportGeneratedAt: v.optional(v.number())
@@ -211,8 +201,8 @@ const schema = defineSchema({
 		contentId: v.id('content'),
 		front: v.string(),
 		back: v.string(),
-		type: v.string(), // 'basic', 'cloze', 'mcq'
-		difficulty: v.number(), // 1-5
+		type: v.string(),
+		difficulty: v.number(),
 		createdAt: v.number()
 	})
 		.index('by_content', ['contentId'])
@@ -220,8 +210,8 @@ const schema = defineSchema({
 	user_flashcard_progress: defineTable({
 		userId: v.string(),
 		flashcardId: v.id('flashcards'),
-		interval: v.number(), // Days until next review
-		easeFactor: v.number(), // SM-2 ease factor (default 2.5)
+		interval: v.number(),
+		easeFactor: v.number(),
 		repetitions: v.number(),
 		nextReviewAt: v.number(),
 		lastReviewedAt: v.number()
@@ -232,27 +222,21 @@ const schema = defineSchema({
 		.index('by_next_review', ['userId', 'nextReviewAt']),
 	syllabus: defineTable({
 		title: v.string(),
-		body: v.string(),
+		snippet: v.string(),
+		r2Key: v.optional(v.string()),
 		subjectId: v.id('subjects'),
 		topic: v.string(),
-		exams: v.array(v.string()), // e.g., ['UPSC', 'SSC']
+		exams: v.array(v.string()),
 		createdAt: v.number()
 	})
 		.index('by_subjectId', ['subjectId'])
 		.index('by_topic', ['topic'])
 		.index('by_created_at', ['createdAt']),
-
-	// Extraction system tables
 	extraction_jobs: defineTable({
-		// Source info
-		sourceType: v.string(), // 'news' | 'syllabus' | 'blog' | 'content'
-		sourceIds: v.array(v.string()), // IDs of items being processed
-		selectedFields: v.array(v.string()), // Fields to extract from
-
-		// Extraction info
-		extractionType: v.string(), // 'current_affairs' | 'locations' | 'concepts' | etc.
-
-		// Job status
+		sourceType: v.string(),
+		sourceIds: v.array(v.string()),
+		selectedFields: v.array(v.string()),
+		extractionType: v.string(),
 		status: v.union(
 			v.literal('pending'),
 			v.literal('running'),
@@ -260,24 +244,16 @@ const schema = defineSchema({
 			v.literal('failed'),
 			v.literal('cancelled')
 		),
-
-		// Progress tracking
 		batchSize: v.number(),
 		totalItems: v.number(),
 		processedItems: v.number(),
 		failedItems: v.number(),
-		extractedCount: v.number(), // Total extracted items created
-
-		// Results
-		resultIds: v.array(v.string()), // IDs of created content/entities
+		extractedCount: v.number(),
+		resultIds: v.array(v.string()),
 		error: v.optional(v.string()),
-
-		// Timing
 		startedAt: v.optional(v.number()),
 		completedAt: v.optional(v.number()),
-
-		// Audit
-		createdBy: v.string(), // Admin user ID
+		createdBy: v.string(),
 		createdAt: v.number()
 	})
 		.index('by_status', ['status'])

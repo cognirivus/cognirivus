@@ -24,8 +24,13 @@
 		ChevronDown,
 		ChevronUp,
 		ChevronLeft,
-		ChevronRight
+		ChevronRight,
+		Upload,
+		CheckCircle2,
+		AlertCircle,
+		Loader2
 	} from '@lucide/svelte';
+	import { toast } from 'svelte-sonner';
 
 	const client = useConvexClient();
 
@@ -80,9 +85,74 @@
 	let editingId = $state<Id<'news'> | null>(null);
 	let date = $state('');
 	let body = $state('');
+	let bodyUrl = $state<string | null>(null);
+	let isLoadingFullBody = $state(false);
 	let error = $state('');
 	let isSaving = $state(false);
 	let expandedNewsId = $state<Id<'news'> | null>(null);
+
+	// Bulk Upload States
+	let isBulkUploading = $state(false);
+	let bulkProgress = $state(0);
+	let bulkTotal = $state(0);
+	let bulkStats = $state({ success: 0, skipped: 0, failed: 0 });
+	let showBulkSummary = $state(false);
+
+	async function hashBody(text: string) {
+		const msgBuffer = new TextEncoder().encode(text);
+		const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+		const hashArray = Array.from(new Uint8Array(hashBuffer));
+		return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+	}
+
+	async function handleBulkUpload(event: Event) {
+		const input = event.target as HTMLInputElement;
+		if (!input.files || input.files.length === 0) return;
+
+		const file = input.files[0];
+		const text = await file.text();
+		const lines = text.split('\n').filter((l) => l.trim());
+
+		isBulkUploading = true;
+		showBulkSummary = false;
+		bulkTotal = lines.length;
+		bulkProgress = 0;
+		bulkStats = { success: 0, skipped: 0, failed: 0 };
+
+		// Process in batches of 5
+		const batchSize = 5;
+		for (let i = 0; i < lines.length; i += batchSize) {
+			const batch = lines.slice(i, i + batchSize);
+			await Promise.all(
+				batch.map(async (line) => {
+					try {
+						const { date, body } = JSON.parse(line);
+						const bodyHash = await hashBody(body);
+
+						// Check for duplicate
+						const isDuplicate = await client.query(api.news.checkDuplicate, { bodyHash });
+
+						if (isDuplicate) {
+							bulkStats.skipped++;
+						} else {
+							await client.action(api.news.insert, { date, body, bodyHash });
+							bulkStats.success++;
+						}
+					} catch (e) {
+						console.error('Failed to process line:', line, e);
+						bulkStats.failed++;
+					} finally {
+						bulkProgress++;
+					}
+				})
+			);
+		}
+
+		isBulkUploading = false;
+		showBulkSummary = true;
+		input.value = '';
+		toast.success('Bulk upload complete!');
+	}
 
 	const expandedNewsQuery = useQuery(api.news.getWithContent, () =>
 		expandedNewsId ? { id: expandedNewsId } : 'skip'
@@ -93,6 +163,7 @@
 		editingId = null;
 		date = new Date().toISOString().split('T')[0];
 		body = '';
+		bodyUrl = null;
 		error = '';
 	}
 
@@ -101,7 +172,23 @@
 		editingId = item._id;
 		date = item.date;
 		body = item.body;
+		bodyUrl = item.bodyUrl || null;
 		error = '';
+	}
+
+	async function loadFullBody() {
+		if (!bodyUrl) return;
+		isLoadingFullBody = true;
+		try {
+			const res = await fetch(bodyUrl);
+			if (!res.ok) throw new Error('Failed to fetch from storage');
+			body = await res.text();
+			toast.success('Full content loaded from R2');
+		} catch (e: any) {
+			toast.error(e.message || 'Failed to load body');
+		} finally {
+			isLoadingFullBody = false;
+		}
 	}
 
 	async function handleSubmit(event: Event) {
@@ -110,10 +197,11 @@
 		isSaving = true;
 
 		try {
+			const bodyHash = await hashBody(body);
 			if (editingId) {
-				await client.mutation(api.news.update, { id: editingId, date, body });
+				await client.action(api.news.update, { id: editingId, date, body, bodyHash });
 			} else {
-				await client.mutation(api.news.insert, { date, body });
+				await client.action(api.news.insert, { date, body, bodyHash });
 			}
 			isEditing = false;
 		} catch (e: any) {
@@ -164,13 +252,109 @@
 			<h1 class="text-3xl font-bold tracking-tight">News Management</h1>
 			<p class="text-muted-foreground">Manage daily news entries and view linked content.</p>
 		</div>
-		{#if !isEditing}
-			<Button onclick={startCreate} class="gap-2 shadow-md shadow-primary/20">
-				<Plus class="h-4 w-4" />
-				Add News
-			</Button>
-		{/if}
+		<div class="flex items-center gap-3">
+			{#if !isEditing}
+				<div class="relative">
+					<input
+						type="file"
+						accept=".jsonl"
+						onchange={handleBulkUpload}
+						class="absolute inset-0 z-10 cursor-pointer opacity-0"
+						disabled={isBulkUploading}
+					/>
+					<Button
+						variant="outline"
+						class="gap-2 border-primary/20 hover:bg-primary/5"
+						disabled={isBulkUploading}
+					>
+						{#if isBulkUploading}
+							<Loader2 class="h-4 w-4 animate-spin" />
+							Uploading...
+						{:else}
+							<Upload class="h-4 w-4" />
+							Bulk JSONL
+						{/if}
+					</Button>
+				</div>
+				<Button onclick={startCreate} class="gap-2 shadow-md shadow-primary/20">
+					<Plus class="h-4 w-4" />
+					Add News
+				</Button>
+			{/if}
+		</div>
 	</div>
+
+	{#if isBulkUploading}
+		<Card.Root class="mb-8 border-primary/20 bg-primary/5">
+			<Card.Content class="pt-6">
+				<div class="flex flex-col gap-4">
+					<div class="flex items-center justify-between">
+						<div class="flex items-center gap-2">
+							<Loader2 class="h-5 w-5 animate-spin text-primary" />
+							<span class="font-semibold">Ingesting Data... ({bulkProgress} / {bulkTotal})</span>
+						</div>
+						<Badge variant="outline" class="bg-background"
+							>{Math.round((bulkProgress / bulkTotal) * 100)}%</Badge
+						>
+					</div>
+					<div class="h-2 overflow-hidden rounded-full bg-muted">
+						<div
+							class="h-full bg-primary transition-all duration-300"
+							style="width: {(bulkProgress / bulkTotal) * 100}%"
+						></div>
+					</div>
+					<div class="flex items-center gap-4 text-xs text-muted-foreground">
+						<span class="flex items-center gap-1"
+							><span class="h-2 w-2 rounded-full bg-green-500"></span>
+							{bulkStats.success} Success</span
+						>
+						<span class="flex items-center gap-1"
+							><span class="h-2 w-2 rounded-full bg-yellow-500"></span>
+							{bulkStats.skipped} Duplicates</span
+						>
+						<span class="flex items-center gap-1"
+							><span class="h-2 w-2 rounded-full bg-red-500"></span> {bulkStats.failed} Errors</span
+						>
+					</div>
+				</div>
+			</Card.Content>
+		</Card.Root>
+	{/if}
+
+	{#if showBulkSummary}
+		<Card.Root class="mb-8 border-green-500/20 bg-green-500/5">
+			<Card.Header class="pb-2">
+				<div class="flex items-center justify-between">
+					<Card.Title class="flex items-center gap-2 text-green-700 dark:text-green-400">
+						<CheckCircle2 class="h-5 w-5" />
+						Upload Complete
+					</Card.Title>
+					<Button variant="ghost" size="icon-sm" onclick={() => (showBulkSummary = false)}>
+						<X class="h-4 w-4" />
+					</Button>
+				</div>
+			</Card.Header>
+			<Card.Content>
+				<p class="text-sm text-muted-foreground">
+					Successfully processed {bulkTotal} lines from the JSONL file.
+				</p>
+				<div class="mt-4 grid grid-cols-3 gap-4">
+					<div class="rounded-lg bg-background p-3 text-center shadow-sm">
+						<div class="text-2xl font-bold text-green-600">{bulkStats.success}</div>
+						<div class="text-xs text-muted-foreground uppercase">Saved</div>
+					</div>
+					<div class="rounded-lg bg-background p-3 text-center shadow-sm">
+						<div class="text-2xl font-bold text-yellow-600">{bulkStats.skipped}</div>
+						<div class="text-xs text-muted-foreground uppercase">Skipped</div>
+					</div>
+					<div class="rounded-lg bg-background p-3 text-center shadow-sm">
+						<div class="text-2xl font-bold text-red-600">{bulkStats.failed}</div>
+						<div class="text-xs text-muted-foreground uppercase">Errors</div>
+					</div>
+				</div>
+			</Card.Content>
+		</Card.Root>
+	{/if}
 
 	{#if isEditing}
 		<Card.Root class="overflow-hidden border-primary/10 shadow-lg">
@@ -201,7 +385,26 @@
 					</div>
 
 					<div class="space-y-2">
-						<label for="body" class="text-sm font-semibold">News Content</label>
+						<div class="flex items-center justify-between">
+							<label for="body" class="text-sm font-semibold">News Content</label>
+							{#if editingId && bodyUrl && body.length < 600}
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onclick={loadFullBody}
+									disabled={isLoadingFullBody}
+									class="h-7 gap-1 text-xs"
+								>
+									{#if isLoadingFullBody}
+										<Loader2 class="h-3 w-3 animate-spin" />
+									{:else}
+										<Upload class="h-3 w-3" />
+									{/if}
+									Load Full Body from R2
+								</Button>
+							{/if}
+						</div>
 						<Textarea
 							id="body"
 							bind:value={body}
@@ -392,19 +595,19 @@
 		</div>
 
 		{#if newsQuery.data.page.length > 0}
-			<div class="mt-4 flex items-center justify-between">
-				<div class="text-sm text-muted-foreground">
-					Page {cursorHistory.length + 1} · Showing {newsQuery.data.page.length} entries
+			<div class="mt-4 flex items-center justify-between px-2">
+				<div class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+					Page {cursorHistory.length + 1} · {newsQuery.data.page.length} entries
 				</div>
-				<div class="flex items-center gap-2">
+				<div class="flex items-center gap-1.5">
 					<Button
 						variant="outline"
 						size="sm"
 						onclick={prevPage}
 						disabled={cursorHistory.length === 0}
-						class="gap-1"
+						class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
 					>
-						<ChevronLeft class="h-4 w-4" />
+						<ChevronLeft class="h-3.5 w-3.5" />
 						Previous
 					</Button>
 					<Button
@@ -412,10 +615,10 @@
 						size="sm"
 						onclick={nextPage}
 						disabled={newsQuery.data.isDone}
-						class="gap-1"
+						class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
 					>
 						Next
-						<ChevronRight class="h-4 w-4" />
+						<ChevronRight class="h-3.5 w-3.5" />
 					</Button>
 				</div>
 			</div>

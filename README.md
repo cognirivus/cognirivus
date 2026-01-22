@@ -14,6 +14,10 @@ npx sv create
 npx sv create my-app
 ```
 
+## Documentation
+
+- [Large Text Storage (Cloudflare R2)](./docs/R2_STORAGE.md)
+
 ## Developing
 
 Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:

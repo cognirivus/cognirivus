@@ -109,7 +109,7 @@
 	<title>Flashcard Session - Knowledge Base</title>
 </svelte:head>
 
-<div class="container mx-auto max-w-2xl px-4 py-8">
+<div class="container mx-auto max-w-2xl px-4 py-8 sm:px-6">
 	<div class="mb-8 flex items-center justify-between">
 		<Button variant="ghost" size="sm" href="/flashcards" class="gap-2">
 			<ChevronLeft class="h-4 w-4" />

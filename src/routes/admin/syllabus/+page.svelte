@@ -76,7 +76,7 @@
 
 		try {
 			if (editingId) {
-				await client.mutation(api.syllabus.update, {
+				await client.action(api.syllabus.update, {
 					id: editingId,
 					title,
 					body,
@@ -85,7 +85,7 @@
 					exams
 				});
 			} else {
-				await client.mutation(api.syllabus.insert, {
+				await client.action(api.syllabus.insert, {
 					title,
 					body,
 					subjectId,

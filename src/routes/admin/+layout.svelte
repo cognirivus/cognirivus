@@ -69,19 +69,19 @@
 	const activePath = $derived(page.url.pathname);
 </script>
 
-<div class="flex h-[calc(100vh-4rem)] w-full flex-col bg-background">
+<div class="flex h-[calc(100vh-2.5rem)] w-full flex-col bg-background">
 	<!-- Admin Navbar -->
-	<header class="border-b border-border bg-background/80 backdrop-blur-md">
+	<header class="bg-background/80 backdrop-blur-md">
 		<div
-			class="mx-auto flex h-auto min-h-[4rem] max-w-7xl flex-col items-start justify-center gap-2 px-6 py-3 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:py-0"
+			class="mx-auto flex h-auto min-h-[2.5rem] max-w-7xl flex-col items-start justify-center gap-2 px-6 py-2 sm:h-10 sm:flex-row sm:items-center sm:justify-between sm:py-0"
 		>
 			<div class="flex w-full items-center justify-between gap-8 sm:w-auto sm:justify-start">
 				<div class="flex items-center gap-2">
-					<Shield class="h-5 w-5 text-primary" />
-					<h2 class="text-lg font-bold tracking-tight text-foreground sm:text-xl">Admin</h2>
+					<Shield class="h-4 w-4 text-primary" />
+					<h2 class="text-sm font-bold tracking-tight text-foreground uppercase">Admin</h2>
 				</div>
 			</div>
-			<nav class="flex w-full items-center gap-1 overflow-x-auto pb-1 sm:w-auto sm:pb-0">
+			<nav class="flex w-full items-center gap-0.5 overflow-x-auto pb-1 sm:w-auto sm:pb-0">
 				{#each navItems as item}
 					{@const isActive = activePath === item.href}
 					<a
@@ -91,11 +91,11 @@
 								variant: isActive ? 'secondary' : 'ghost',
 								size: 'sm'
 							}),
-							'flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+							'flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-bold tracking-tight uppercase transition-colors',
 							isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground'
 						)}
 					>
-						<item.icon class="h-4 w-4" />
+						<item.icon class="h-3.5 w-3.5" />
 						{item.name}
 					</a>
 				{/each}

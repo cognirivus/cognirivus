@@ -175,7 +175,7 @@ export const generate = action({
 						(blog: any) => !entries.some((e) => e.key === blog._id)
 					);
 					for (const blog of uniqueTextResults as any[]) {
-						const text = blog.body.substring(0, 1000);
+						const text = blog.body.substring(0, 500);
 						if (text) {
 							allContext += `\n\n--- Source: ${blog.title} ---\n${text}\n`;
 							contextSources.push({

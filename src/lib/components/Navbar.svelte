@@ -43,13 +43,6 @@
 
 	const navItems = [
 		{ name: 'Chat', href: '/chat', icon: MessageSquare, authRequired: true },
-		{
-			name: 'Current Affairs',
-			href: '/currentaffairs',
-			icon: Newspaper,
-			authRequired: false,
-			inPrep: true
-		},
 		{ name: 'Knowledge Base', href: '/content', icon: Library, authRequired: false, inPrep: true },
 		{ name: 'Flashcards', href: '/flashcards', icon: Brain, authRequired: true, inPrep: true },
 		{ name: 'Blog', href: '/blog', icon: BookOpen, authRequired: false },
@@ -84,25 +77,27 @@
 
 <nav class="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-md">
 	<div
-		class="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8"
+		class="container mx-auto flex h-10 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8"
 	>
 		<!-- Logo -->
-		<Logo />
+		<div class="origin-left scale-90">
+			<Logo />
+		</div>
 
 		<!-- Desktop Navigation -->
-		<div class="hidden md:flex md:items-center md:gap-1">
+		<div class="hidden md:flex md:items-center md:gap-0.5">
 			{#if auth.isLoading && !user}
 				<div class="flex items-center gap-2">
-					<div class="h-8 w-16 animate-pulse rounded-md bg-muted/60"></div>
-					<div class="h-8 w-16 animate-pulse rounded-md bg-muted/60"></div>
-					<div class="h-8 w-20 animate-pulse rounded-md bg-muted/60"></div>
+					<div class="h-7 w-12 animate-pulse rounded bg-muted/60"></div>
+					<div class="h-7 w-12 animate-pulse rounded bg-muted/60"></div>
+					<div class="h-7 w-16 animate-pulse rounded bg-muted/60"></div>
 				</div>
 			{:else}
 				<!-- Only show content links here, management links go to dropdown -->
 				{#each desktopNavItems as item}
 					<a
 						href={item.href}
-						class="rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground {page
+						class="rounded px-2.5 py-1 text-[11px] font-bold tracking-tight uppercase transition-colors hover:bg-accent hover:text-accent-foreground {page
 							.url.pathname === item.href
 							? 'text-primary'
 							: 'text-muted-foreground'}"
@@ -119,12 +114,14 @@
 								<Button
 									variant="ghost"
 									size="sm"
-									class="gap-2 font-medium {prepItems.some((i) => page.url.pathname === i.href)
+									class="h-7 gap-1.5 px-2.5 text-[11px] font-bold tracking-tight uppercase {prepItems.some(
+										(i) => page.url.pathname === i.href
+									)
 										? 'text-primary'
 										: 'text-muted-foreground'}"
 									{...props}
 								>
-									<GraduationCap class="h-4 w-4" />
+									<GraduationCap class="h-3.5 w-3.5" />
 									Prep
 									<ChevronDown class="h-3 w-3 opacity-50" />
 								</Button>
@@ -135,7 +132,7 @@
 								<DropdownMenu.Item>
 									<a href={item.href} class="flex w-full items-center gap-2">
 										<item.icon class="h-4 w-4" />
-										<span>{item.name}</span>
+										<span class="text-xs">{item.name}</span>
 									</a>
 								</DropdownMenu.Item>
 							{/each}
@@ -144,18 +141,23 @@
 				{/if}
 			{/if}
 
-			<div class="ml-4 flex items-center gap-3">
+			<div class="ml-2 flex items-center gap-2">
 				{#if auth.isLoading && !user}
-					<div class="flex items-center gap-3">
-						<div class="h-8 w-24 animate-pulse rounded-md bg-muted/60"></div>
+					<div class="flex items-center gap-2">
+						<div class="h-7 w-20 animate-pulse rounded bg-muted/60"></div>
 					</div>
 				{:else if user}
 					<!-- User Dropdown Menu -->
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger>
 							{#snippet child({ props })}
-								<Button variant="ghost" size="sm" class="gap-2" {...props}>
-									<User class="h-4 w-4" />
+								<Button
+									variant="ghost"
+									size="sm"
+									class="h-7 gap-1.5 px-2.5 text-[11px] font-bold tracking-tight uppercase"
+									{...props}
+								>
+									<User class="h-3.5 w-3.5" />
 									<span class="max-w-25 truncate">{user.name ?? 'Account'}</span>
 									<ChevronDown class="h-3 w-3 opacity-50" />
 								</Button>
@@ -201,28 +203,38 @@
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
 				{:else}
-					<Button variant="default" size="sm" href="/signin" class="gap-2 shadow-sm">
-						<LogIn class="h-4 w-4" />
+					<Button
+						variant="default"
+						size="sm"
+						href="/signin"
+						class="h-7 gap-1.5 px-3 text-[11px] font-bold tracking-tight uppercase shadow-sm"
+					>
+						<LogIn class="h-3.5 w-3.5" />
 						<span>Sign In</span>
 					</Button>
 				{/if}
-				<ThemeToggle />
+				<div class="origin-right scale-75">
+					<ThemeToggle />
+				</div>
 			</div>
 		</div>
 
 		<!-- Mobile Menu Button -->
-		<div class="flex items-center gap-2 md:hidden">
-			<ThemeToggle />
+		<div class="flex items-center gap-1 md:hidden">
+			<div class="origin-right scale-75">
+				<ThemeToggle />
+			</div>
 			<Button
 				variant="ghost"
 				size="icon"
+				class="h-8 w-8"
 				onclick={() => (isMobileMenuOpen = !isMobileMenuOpen)}
 				aria-label="Toggle menu"
 			>
 				{#if isMobileMenuOpen}
-					<X class="h-5 w-5" />
+					<X class="h-4 w-4" />
 				{:else}
-					<Menu class="h-5 w-5" />
+					<Menu class="h-4 w-4" />
 				{/if}
 			</Button>
 		</div>

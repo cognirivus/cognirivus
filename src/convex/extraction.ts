@@ -1,12 +1,3 @@
-/**
- * Unified Extraction System
- *
- * This module provides a centralized extraction orchestrator that allows admins to:
- * - Run various extraction types on different source data
- * - Track extraction jobs with progress, retry, and history
- * - Configure extraction prompts dynamically
- */
-
 import { v } from 'convex/values';
 import {
 	action,
@@ -27,8 +18,7 @@ import {
 	SOURCE_FIELDS,
 	DEFAULT_MODEL
 } from './lib/extractors/types';
-
-// ============== Auth Helper ==============
+import { r2 } from './lib/r2';
 
 const checkAdmin = async (ctx: any) => {
 	const user = await authComponent.getAuthUser(ctx);
@@ -37,10 +27,6 @@ const checkAdmin = async (ctx: any) => {
 	if (!isAdmin) throw new Error('Unauthorized: Admin access required');
 	return user;
 };
-
-// ============== Extraction Prompts (Default) ==============
-
-// ============== Configuration & Ontology ==============
 
 export const ENTITY_CATEGORIES = [
 	'Place-Landform',
@@ -139,27 +125,9 @@ GUIDELINES:
 3. COMPREHENSIVE: Cover all aspects of the main content.
 4. ENTITY DEDUCTION: Identify the specific "nodes" of knowledge within each sub-topic.
 5. STRUCTURED: Provide clear titles and detailed explanations.`
-	},
-	flashcards: {
-		name: 'Flashcard Generation',
-		description: 'Generate Anki-style flashcards for spaced repetition',
-		prompt: `You are an expert at creating educational flashcards. Generate Anki-style flashcards from the provided content.
-
-GUIDELINES:
-1. VARIETY: Use basic, cloze, and MCQ formats.
-2. ATOMIC: One concept per card.
-3. CLEAR: Front should be a clear question/prompt.
-4. ENTITY DEDUCTION: Tag the entities involved in the flashcard concept.
-5. COMPLETE: Back should be a complete, standalone answer.
-6. DIFFICULTY: Assign difficulty 1-5.`
 	}
 };
 
-// ============== QUERIES ==============
-
-/**
- * List extraction jobs with optional filters
- */
 export const listJobs = query({
 	args: {
 		status: v.optional(v.string()),
@@ -174,7 +142,6 @@ export const listJobs = query({
 
 		const jobs = await queryBuilder.take(args.limit ?? 50);
 
-		// Filter in memory if needed
 		let filtered = jobs;
 		if (args.status) {
 			filtered = filtered.filter((j) => j.status === args.status);
@@ -190,9 +157,6 @@ export const listJobs = query({
 	}
 });
 
-/**
- * Get a single job by ID
- */
 export const getJob = query({
 	args: { jobId: v.id('extraction_jobs') },
 	handler: async (ctx, args) => {
@@ -201,9 +165,6 @@ export const getJob = query({
 	}
 });
 
-/**
- * Get dashboard statistics
- */
 export const getStats = query({
 	args: {},
 	handler: async (ctx) => {
@@ -228,9 +189,6 @@ export const getStats = query({
 	}
 });
 
-/**
- * Get available extraction types with metadata
- */
 export const listExtractionTypes = query({
 	args: {},
 	handler: async (ctx) => {
@@ -243,9 +201,6 @@ export const listExtractionTypes = query({
 	}
 });
 
-/**
- * Get available fields for a source type
- */
 export const getSourceFields = query({
 	args: { sourceType: v.string() },
 	handler: async (ctx, args) => {
@@ -254,39 +209,94 @@ export const getSourceFields = query({
 	}
 });
 
-/**
- * Get count of unprocessed items for a source type
- */
 export const getSourceItemCount = query({
 	args: { sourceType: v.string() },
 	handler: async (ctx, args) => {
 		await checkAdmin(ctx);
 
+		const getCount = async (table: 'news' | 'syllabus' | 'blogs' | 'content') => {
+			const items = await ctx.db.query(table).take(501);
+			return items.length > 500 ? 500 : items.length;
+		};
+
 		switch (args.sourceType) {
 			case 'news':
-				return (await ctx.db.query('news').collect()).length;
+				return await getCount('news');
 			case 'syllabus':
-				return (await ctx.db.query('syllabus').collect()).length;
+				return await getCount('syllabus');
 			case 'blog':
-				return (
-					await ctx.db
-						.query('blogs')
-						.withIndex('by_published', (q) => q.eq('published', true))
-						.collect()
-				).length;
+				return await getCount('blogs');
 			case 'content':
-				return (await ctx.db.query('content').collect()).length;
+				return await getCount('content');
 			default:
 				return 0;
 		}
 	}
 });
 
-// ============== Internal Queries ==============
+export const getSourceItemMetadata = internalQuery({
+	args: {
+		sourceType: v.string(),
+		id: v.string()
+	},
+	handler: async (ctx, args) => {
+		const { sourceType, id } = args;
+		switch (sourceType) {
+			case 'news':
+				return await ctx.db.get(id as Id<'news'>);
+			case 'syllabus':
+				return await ctx.db.get(id as Id<'syllabus'>);
+			case 'blog':
+				return await ctx.db.get(id as Id<'blogs'>);
+			case 'content':
+				return await ctx.db.get(id as Id<'content'>);
+			default:
+				return null;
+		}
+	}
+});
 
-/**
- * Fetch source items for extraction
- */
+export const getSourceItem = internalAction({
+	args: {
+		sourceType: v.string(),
+		id: v.string()
+	},
+	handler: async (ctx, args): Promise<SourceItem | null> => {
+		const { sourceType, id } = args;
+		const item = await ctx.runQuery(internal.extraction.getSourceItemMetadata, { sourceType, id });
+
+		if (!item) return null;
+
+		let body = (item as any).snippet || '';
+		if ((item as any).r2Key) {
+			try {
+				const url = await r2.getUrl((item as any).r2Key);
+				const response = await fetch(url);
+				if (response.ok) {
+					body = await response.text();
+				}
+			} catch (e) {
+				console.error(`Failed to fetch full body from R2 for ${id}:`, e);
+			}
+		} else if ((item as any).body) {
+			body = (item as any).body;
+		}
+
+		return {
+			_id: item._id,
+			title: (item as any).title ?? '',
+			body: body,
+			date:
+				(item as any).date ??
+				((item as any).createdAt
+					? new Date((item as any).createdAt).toISOString().split('T')[0]
+					: undefined),
+			subjectId: (item as any).subjectId,
+			topic: (item as any).topic
+		};
+	}
+});
+
 export const fetchSourceItems = internalQuery({
 	args: {
 		sourceType: v.string(),
@@ -334,13 +344,12 @@ export const fetchSourceItems = internalQuery({
 				break;
 		}
 
-		// Normalize to SourceItem
 		return items
 			.filter((item): item is NonNullable<typeof item> => !!item)
 			.map((item) => ({
 				_id: item._id,
 				title: item.title ?? '',
-				body: item.body ?? '',
+				body: item.body ?? item.snippet ?? '',
 				date:
 					item.date ??
 					(item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : undefined),
@@ -350,11 +359,6 @@ export const fetchSourceItems = internalQuery({
 	}
 });
 
-// ============== Internal Mutations ==============
-
-/**
- * Update job progress
- */
 export const updateJobProgress = internalMutation({
 	args: {
 		jobId: v.id('extraction_jobs'),
@@ -376,9 +380,6 @@ export const updateJobProgress = internalMutation({
 	}
 });
 
-/**
- * Save extracted content item
- */
 export const saveExtractedContent = internalMutation({
 	args: {
 		title: v.string(),
@@ -399,7 +400,7 @@ export const saveExtractedContent = internalMutation({
 		),
 		date: v.optional(v.string())
 	},
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<Id<'content'>> => {
 		const {
 			title,
 			body,
@@ -413,7 +414,6 @@ export const saveExtractedContent = internalMutation({
 			date
 		} = args;
 
-		// Resolve subject
 		let subject = await ctx.db
 			.query('subjects')
 			.withIndex('by_name', (q) => q.eq('name', subjectName))
@@ -430,7 +430,6 @@ export const saveExtractedContent = internalMutation({
 			throw new Error('Subject "Other" not found. Please run seed mutation.');
 		}
 
-		// Insert content
 		const contentId = await ctx.db.insert('content', {
 			title,
 			body,
@@ -445,7 +444,6 @@ export const saveExtractedContent = internalMutation({
 			createdAt: Date.now()
 		});
 
-		// Handle entity linking
 		if (entities && entities.length > 0) {
 			for (const entityInput of entities) {
 				const entityName = entityInput.name.trim();
@@ -485,11 +483,6 @@ export const saveExtractedContent = internalMutation({
 	}
 });
 
-// ============== MUTATIONS ==============
-
-/**
- * Create a new extraction job
- */
 export const createJob = mutation({
 	args: {
 		sourceType: v.string(),
@@ -501,33 +494,35 @@ export const createJob = mutation({
 	handler: async (ctx, args) => {
 		const user = await checkAdmin(ctx);
 
-		// Validate extraction type
 		if (!EXTRACTION_PROMPTS[args.extractionType as ExtractionType]) {
 			throw new Error(`Invalid extraction type: ${args.extractionType}`);
 		}
 
-		// Validate source type
 		if (!['news', 'syllabus', 'blog', 'content'].includes(args.sourceType)) {
 			throw new Error(`Invalid source type: ${args.sourceType}`);
 		}
 
-		// Get total items count
 		let totalItems = 0;
 		if (args.sourceIds && args.sourceIds.length > 0) {
 			totalItems = args.sourceIds.length;
 		} else {
+			const getCount = async (table: 'news' | 'syllabus' | 'blogs' | 'content') => {
+				const items = await ctx.db.query(table).take(501);
+				return items.length > 500 ? 500 : items.length;
+			};
+
 			switch (args.sourceType) {
 				case 'news':
-					totalItems = (await ctx.db.query('news').collect()).length;
+					totalItems = await getCount('news');
 					break;
 				case 'syllabus':
-					totalItems = (await ctx.db.query('syllabus').collect()).length;
+					totalItems = await getCount('syllabus');
 					break;
 				case 'blog':
-					totalItems = (await ctx.db.query('blogs').collect()).length;
+					totalItems = await getCount('blogs');
 					break;
 				case 'content':
-					totalItems = (await ctx.db.query('content').collect()).length;
+					totalItems = await getCount('content');
 					break;
 			}
 		}
@@ -554,9 +549,6 @@ export const createJob = mutation({
 	}
 });
 
-/**
- * Cancel a running job
- */
 export const cancelJob = mutation({
 	args: { jobId: v.id('extraction_jobs') },
 	handler: async (ctx, args) => {
@@ -578,15 +570,9 @@ export const cancelJob = mutation({
 	}
 });
 
-// ============== ACTIONS ==============
-
-/**
- * Run an extraction job
- */
 export const runJob = action({
 	args: { jobId: v.id('extraction_jobs') },
 	handler: async (ctx, args) => {
-		// Get job details
 		const job = await ctx.runQuery(api.extraction.getJob, { jobId: args.jobId });
 		if (!job) throw new Error('Job not found');
 
@@ -594,25 +580,21 @@ export const runJob = action({
 			throw new Error(`Job is not in pending state: ${job.status}`);
 		}
 
-		// Mark as running
 		await ctx.runMutation(internal.extraction.updateJobProgress, {
 			jobId: args.jobId,
 			status: 'running',
 			startedAt: Date.now()
 		});
 
-		// Get subjects
 		const subjects = await ctx.runQuery(api.subjects.list);
 		const subjectNames = subjects.map((s: any) => s.name);
 
-		// Get source items
-		const sourceItems = await ctx.runQuery(internal.extraction.fetchSourceItems, {
+		const sourceItemsToProcess = await ctx.runQuery(internal.extraction.fetchSourceItems, {
 			sourceType: job.sourceType,
 			ids: job.sourceIds.length > 0 ? job.sourceIds : undefined,
 			limit: job.batchSize
 		});
 
-		// Get extraction config
 		const config = EXTRACTION_PROMPTS[job.extractionType as ExtractionType];
 		if (!config) throw new Error(`Invalid extraction type: ${job.extractionType}`);
 
@@ -621,9 +603,19 @@ export const runJob = action({
 		let extractedCount = 0;
 		const resultIds: string[] = [];
 
-		for (const sourceItem of sourceItems) {
+		for (const summary of sourceItemsToProcess) {
 			try {
-				// Build input text from selected fields
+				const sourceItem = await ctx.runAction(internal.extraction.getSourceItem, {
+					sourceType: job.sourceType,
+					id: summary._id
+				});
+
+				if (!sourceItem) {
+					console.warn(`Source item ${summary._id} not found, skipping`);
+					failedItems++;
+					continue;
+				}
+
 				const inputParts: string[] = [];
 				for (const field of job.selectedFields) {
 					const value = (sourceItem as any)[field];
@@ -638,12 +630,11 @@ export const runJob = action({
 				const inputText = inputParts.join('\n\n');
 
 				if (!inputText.trim()) {
-					console.warn(`Empty input for source item ${sourceItem._id}, skipping`);
+					console.warn(`Empty input for source item ${summary._id}, skipping`);
 					failedItems++;
 					continue;
 				}
 
-				// Call OpenRouter
 				const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
 					method: 'POST',
 					headers: {
@@ -721,7 +712,7 @@ ${ENTITY_CATEGORIES.join(', ')}`
 				});
 
 				if (!response.ok) {
-					console.error(`OpenRouter failed for ${sourceItem._id}:`, await response.text());
+					console.error(`OpenRouter failed for ${summary._id}:`, await response.text());
 					failedItems++;
 					continue;
 				}
@@ -739,12 +730,11 @@ ${ENTITY_CATEGORIES.join(', ')}`
 					const parsed = JSON.parse(rawContent);
 					extractedItems = parsed.items || [];
 				} catch (e) {
-					console.error(`Failed to parse AI response for ${sourceItem._id}:`, rawContent);
+					console.error(`Failed to parse AI response for ${summary._id}:`, rawContent);
 					failedItems++;
 					continue;
 				}
 
-				// Determine topic based on extraction type
 				const topicMap: Record<string, string> = {
 					current_affairs: 'Current Affairs',
 					locations: 'Mapping',
@@ -754,7 +744,6 @@ ${ENTITY_CATEGORIES.join(', ')}`
 					topics: 'Topics'
 				};
 
-				// Save extracted items
 				for (const item of extractedItems) {
 					if (item.title && item.body) {
 						const contentId = await ctx.runMutation(internal.extraction.saveExtractedContent, {
@@ -763,7 +752,7 @@ ${ENTITY_CATEGORIES.join(', ')}`
 							subjectName: item.subject,
 							topic: topicMap[job.extractionType] || job.extractionType,
 							sourceType: job.sourceType,
-							sourceId: sourceItem._id,
+							sourceId: summary._id,
 							extractionType: job.extractionType,
 							jobId: args.jobId,
 							entities: item.entities,
@@ -776,7 +765,6 @@ ${ENTITY_CATEGORIES.join(', ')}`
 
 				processedItems++;
 
-				// Update progress periodically
 				if (processedItems % 5 === 0) {
 					await ctx.runMutation(internal.extraction.updateJobProgress, {
 						jobId: args.jobId,
@@ -787,15 +775,14 @@ ${ENTITY_CATEGORIES.join(', ')}`
 					});
 				}
 			} catch (err) {
-				console.error(`Error processing source item ${sourceItem._id}:`, err);
+				console.error(`Error processing source item ${summary._id}:`, err);
 				failedItems++;
 			}
 		}
 
-		// Mark job as completed
 		await ctx.runMutation(internal.extraction.updateJobProgress, {
 			jobId: args.jobId,
-			status: failedItems === sourceItems.length ? 'failed' : 'completed',
+			status: failedItems === sourceItemsToProcess.length ? 'failed' : 'completed',
 			processedItems,
 			failedItems,
 			extractedCount,
@@ -812,9 +799,6 @@ ${ENTITY_CATEGORIES.join(', ')}`
 	}
 });
 
-/**
- * Retry a failed job - resets status and schedules job execution
- */
 export const retryJob = action({
 	args: { jobId: v.id('extraction_jobs') },
 	handler: async (ctx, args): Promise<string> => {
@@ -825,7 +809,6 @@ export const retryJob = action({
 			throw new Error('Can only retry failed or cancelled jobs');
 		}
 
-		// Reset job status
 		await ctx.runMutation(internal.extraction.updateJobProgress, {
 			jobId: args.jobId,
 			status: 'pending',
@@ -838,20 +821,15 @@ export const retryJob = action({
 			completedAt: undefined
 		});
 
-		// Schedule the job to run (avoiding circular reference)
 		await ctx.scheduler.runAfter(0, internal.extraction.executeJob, { jobId: args.jobId });
 
 		return 'Job scheduled for retry';
 	}
 });
 
-/**
- * Internal action to execute a job (avoids circular reference)
- */
 export const executeJob = internalAction({
 	args: { jobId: v.id('extraction_jobs') },
 	handler: async (ctx, args): Promise<{ processed: number; failed: number; extracted: number }> => {
-		// Get job details
 		const job = await ctx.runQuery(api.extraction.getJob, { jobId: args.jobId });
 		if (!job) throw new Error('Job not found');
 
@@ -859,25 +837,21 @@ export const executeJob = internalAction({
 			throw new Error(`Job is not in pending state: ${job.status}`);
 		}
 
-		// Mark as running
 		await ctx.runMutation(internal.extraction.updateJobProgress, {
 			jobId: args.jobId,
 			status: 'running',
 			startedAt: Date.now()
 		});
 
-		// Get subjects
 		const subjects = await ctx.runQuery(api.subjects.list);
 		const subjectNames = subjects.map((s: any) => s.name);
 
-		// Get source items
-		const sourceItems = await ctx.runQuery(internal.extraction.fetchSourceItems, {
+		const sourceItemsToProcess = await ctx.runQuery(internal.extraction.fetchSourceItems, {
 			sourceType: job.sourceType,
 			ids: job.sourceIds.length > 0 ? job.sourceIds : undefined,
 			limit: job.batchSize
 		});
 
-		// Get extraction config
 		const config = EXTRACTION_PROMPTS[job.extractionType as ExtractionType];
 		if (!config) throw new Error(`Invalid extraction type: ${job.extractionType}`);
 
@@ -886,9 +860,19 @@ export const executeJob = internalAction({
 		let extractedCount = 0;
 		const resultIds: string[] = [];
 
-		for (const sourceItem of sourceItems) {
+		for (const summary of sourceItemsToProcess) {
 			try {
-				// Build input text from selected fields
+				const sourceItem = await ctx.runAction(internal.extraction.getSourceItem, {
+					sourceType: job.sourceType,
+					id: summary._id
+				});
+
+				if (!sourceItem) {
+					console.warn(`Source item ${summary._id} not found, skipping`);
+					failedItems++;
+					continue;
+				}
+
 				const inputParts: string[] = [];
 				for (const field of job.selectedFields) {
 					const value = (sourceItem as any)[field];
@@ -903,12 +887,11 @@ export const executeJob = internalAction({
 				const inputText = inputParts.join('\n\n');
 
 				if (!inputText.trim()) {
-					console.warn(`Empty input for source item ${sourceItem._id}, skipping`);
+					console.warn(`Empty input for source item ${summary._id}, skipping`);
 					failedItems++;
 					continue;
 				}
 
-				// Call OpenRouter
 				const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
 					method: 'POST',
 					headers: {
@@ -986,7 +969,7 @@ ${ENTITY_CATEGORIES.join(', ')}`
 				});
 
 				if (!response.ok) {
-					console.error(`OpenRouter failed for ${sourceItem._id}:`, await response.text());
+					console.error(`OpenRouter failed for ${summary._id}:`, await response.text());
 					failedItems++;
 					continue;
 				}
@@ -1004,12 +987,11 @@ ${ENTITY_CATEGORIES.join(', ')}`
 					const parsed = JSON.parse(rawContent);
 					extractedItems = parsed.items || [];
 				} catch (e) {
-					console.error(`Failed to parse AI response for ${sourceItem._id}:`, rawContent);
+					console.error(`Failed to parse AI response for ${summary._id}:`, rawContent);
 					failedItems++;
 					continue;
 				}
 
-				// Determine topic based on extraction type
 				const topicMap: Record<string, string> = {
 					current_affairs: 'Current Affairs',
 					locations: 'Mapping',
@@ -1019,7 +1001,6 @@ ${ENTITY_CATEGORIES.join(', ')}`
 					topics: 'Topics'
 				};
 
-				// Save extracted items
 				for (const item of extractedItems) {
 					if (item.title && item.body) {
 						const contentId = await ctx.runMutation(internal.extraction.saveExtractedContent, {
@@ -1028,7 +1009,7 @@ ${ENTITY_CATEGORIES.join(', ')}`
 							subjectName: item.subject,
 							topic: topicMap[job.extractionType] || job.extractionType,
 							sourceType: job.sourceType,
-							sourceId: sourceItem._id,
+							sourceId: summary._id,
 							extractionType: job.extractionType,
 							jobId: args.jobId,
 							entities: item.entities,
@@ -1041,7 +1022,6 @@ ${ENTITY_CATEGORIES.join(', ')}`
 
 				processedItems++;
 
-				// Update progress periodically
 				if (processedItems % 5 === 0) {
 					await ctx.runMutation(internal.extraction.updateJobProgress, {
 						jobId: args.jobId,
@@ -1052,15 +1032,14 @@ ${ENTITY_CATEGORIES.join(', ')}`
 					});
 				}
 			} catch (err) {
-				console.error(`Error processing source item ${sourceItem._id}:`, err);
+				console.error(`Error processing source item ${summary._id}:`, err);
 				failedItems++;
 			}
 		}
 
-		// Mark job as completed
 		await ctx.runMutation(internal.extraction.updateJobProgress, {
 			jobId: args.jobId,
-			status: failedItems === sourceItems.length ? 'failed' : 'completed',
+			status: failedItems === sourceItemsToProcess.length ? 'failed' : 'completed',
 			processedItems,
 			failedItems,
 			extractedCount,

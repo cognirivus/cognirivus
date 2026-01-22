@@ -5,14 +5,12 @@
 - **Dev server:** `pnpm dev`
 - **Build:** `pnpm build`
 - **Type check:** `pnpm check`
-- **Lint:** `pnpm lint`
-- **Format:** `pnpm format`
-- **Convex dev:** `npx convex dev` (runs backend in watch mode)
+- **Convex dev:** `npx convex dev` (runs backend in watch mode, never run without user's explicit permission)
 
 ## Architecture
 
 - **Frontend:** SvelteKit 2 + Svelte 5 (runes) with TailwindCSS 4, svelte-shadcn bits-ui components
-- **Backend:** Convex (serverless DB + functions) in `src/convex/`
+- **Backend:** Convex (serverless DB + functions) in `src/convex/` with Cloudflare R2 for large text storage.
 - **Auth:** better-auth with Convex adapter (`src/convex/auth.ts`, `src/lib/auth-client.ts`)
 - **AI:** OpenRouter direct API and via Vercel AI SDK (`@openrouter/ai-sdk-provider`, `ai` package)
 - **Schema:** `src/convex/schema.ts` defines tables: messages, threads, usage_logs, generated_images, user_memories, models, blogs, news, content, subjects, entities

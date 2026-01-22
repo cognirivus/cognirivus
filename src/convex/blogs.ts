@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import {
+	action,
 	mutation,
 	query,
 	internalAction,
@@ -11,9 +12,10 @@ import {
 import { authComponent } from './auth';
 
 import { TableAggregate } from '@convex-dev/aggregate';
-import { components, internal } from './_generated/api';
+import { components, internal, api } from './_generated/api';
 import type { DataModel, Id } from './_generated/dataModel';
 import { rag, RAG_CONFIG } from './rag';
+import { r2 } from './lib/r2';
 
 const likesAggregate = new TableAggregate<{
 	Key: Id<'blogs'>;
@@ -66,15 +68,10 @@ async function checkAdmin(ctx: QueryCtx | MutationCtx) {
 	return user;
 }
 
-/**
- * Helper to delete a comment and its associated likes/dislikes.
- * Updates aggregates for consistency.
- */
 async function deleteCommentWithReactions(ctx: MutationCtx, commentId: Id<'blog_comments'>) {
 	const comment = await ctx.db.get(commentId);
 	if (!comment) return;
 
-	// Delete comment reactions
 	const reactions = await ctx.db
 		.query('comment_reactions')
 		.withIndex('by_comment', (q) => q.eq('commentId', commentId))
@@ -88,17 +85,10 @@ async function deleteCommentWithReactions(ctx: MutationCtx, commentId: Id<'blog_
 		}
 	}
 
-	// Delete the comment
 	await ctx.db.delete(commentId);
 	await commentsAggregate.delete(ctx, comment);
 }
 
-// Internal Actions for RAG
-
-/**
- * Internal mutation to update blog with RAG entry ID.
- * Called after RAG entry is created/updated.
- */
 export const updateRagEntryId = internalMutation({
 	args: { blogId: v.id('blogs'), ragEntryId: v.string() },
 	handler: async (ctx, args) => {
@@ -106,9 +96,6 @@ export const updateRagEntryId = internalMutation({
 	}
 });
 
-/**
- * Internal query to get blog's RAG entry ID for deletion.
- */
 export const getRagEntryId = internalQuery({
 	args: { blogId: v.id('blogs') },
 	handler: async (ctx, args) => {
@@ -117,10 +104,6 @@ export const getRagEntryId = internalQuery({
 	}
 });
 
-/**
- * Syncs blog content to RAG for vector search.
- * Stores the returned entryId in the blog for later cleanup.
- */
 export const syncRag = internalAction({
 	args: { blogId: v.id('blogs'), title: v.string(), body: v.string() },
 	handler: async (ctx, args) => {
@@ -131,48 +114,42 @@ export const syncRag = internalAction({
 				text: `${args.title}\n\n${args.body}`
 			});
 
-			// Store the entryId in the blog for later deletion
 			await ctx.runMutation(internal.blogs.updateRagEntryId, {
 				blogId: args.blogId,
 				ragEntryId: entryId
 			});
 
-			// Clean up replaced entry if any
 			if (replacedEntry) {
 				await rag.delete(ctx, { entryId: replacedEntry.entryId });
-				console.log(`Deleted replaced RAG entry ${replacedEntry.entryId} for blog ${args.blogId}`);
 			}
-
-			console.log(`Synced RAG entry ${entryId} for blog ${args.blogId}`);
 		} catch (e) {
 			console.error(`Failed to sync RAG for blog ${args.blogId}:`, e);
 		}
 	}
 });
 
-/**
- * Backfills all existing blogs to RAG.
- * Run this once after enabling RAG to index existing content.
- */
 export const backfillRag = internalAction({
 	args: {},
 	handler: async (ctx) => {
 		const blogs = await ctx.runQuery(internal.blogs.listInternal);
 		for (const blog of blogs) {
 			try {
+				let body = blog.snippet;
+				if (blog.r2Key) {
+					const url = await r2.getUrl(blog.r2Key);
+					body = await (await fetch(url)).text();
+				}
+
 				const { entryId } = await rag.add(ctx, {
 					namespace: RAG_CONFIG.namespace,
 					key: blog._id,
-					text: `${blog.title}\n\n${blog.body}`
+					text: `${blog.title}\n\n${body}`
 				});
 
-				// Store the entryId
 				await ctx.runMutation(internal.blogs.updateRagEntryId, {
 					blogId: blog._id,
 					ragEntryId: entryId
 				});
-
-				console.log(`Backfilled RAG entry ${entryId} for blog ${blog._id}`);
 			} catch (e) {
 				console.error(`Failed to backfill RAG for blog ${blog._id}:`, e);
 			}
@@ -180,27 +157,17 @@ export const backfillRag = internalAction({
 	}
 });
 
-/**
- * Deletes RAG entry for a blog when it's removed.
- * Uses the stored ragEntryId for direct deletion.
- */
 export const deleteRag = internalAction({
 	args: { ragEntryId: v.string() },
 	handler: async (ctx, args) => {
 		try {
 			await rag.delete(ctx, { entryId: args.ragEntryId as any });
-			console.log(`Deleted RAG entry ${args.ragEntryId}`);
 		} catch (e) {
 			console.error(`Failed to delete RAG entry ${args.ragEntryId}:`, e);
-			// Don't throw - blog deletion should still succeed even if RAG cleanup fails
 		}
 	}
 });
 
-/**
- * Periodically ensures all blogs are synced to RAG.
- * Can be called by a cron job.
- */
 export const cleanupRag = internalAction({
 	args: {},
 	handler: async (ctx) => {
@@ -208,20 +175,21 @@ export const cleanupRag = internalAction({
 		let syncedCount = 0;
 
 		for (const blog of blogs) {
-			// If blog is published and missing RAG entry, or just to ensure it's up to date
-			// We can be more selective, but for cleanup, we ensure consistency
 			if (!blog.ragEntryId) {
-				console.log(`Cleanup: Syncing missing RAG entry for blog ${blog._id}`);
+				let body = blog.snippet;
+				if (blog.r2Key) {
+					const url = await r2.getUrl(blog.r2Key);
+					body = await (await fetch(url)).text();
+				}
+
 				await ctx.runAction(internal.blogs.syncRag, {
 					blogId: blog._id,
 					title: blog.title,
-					body: blog.body
+					body
 				});
 				syncedCount++;
 			}
 		}
-
-		console.log(`RAG Cleanup finished. Synced ${syncedCount} blogs.`);
 	}
 });
 
@@ -237,7 +205,9 @@ export const searchInternal = internalQuery({
 	handler: async (ctx, args) => {
 		return await ctx.db
 			.query('blogs')
-			.withSearchIndex('search_body', (q) => q.search('body', args.query).eq('published', true))
+			.withSearchIndex('search_snippet', (q) =>
+				q.search('snippet', args.query).eq('published', true)
+			)
 			.take(args.limit);
 	}
 });
@@ -278,7 +248,19 @@ export const list = query({
 						}
 					})
 				]);
-				return { ...blog, likes, dislikes, commentCount };
+				let bodyUrl = null;
+				if (blog.r2Key) {
+					bodyUrl = await r2.getUrl(blog.r2Key);
+				}
+
+				return {
+					...blog,
+					body: blog.snippet,
+					bodyUrl,
+					likes,
+					dislikes,
+					commentCount
+				};
 			})
 		);
 
@@ -313,6 +295,11 @@ export const get = query({
 			})
 		]);
 
+		let bodyUrl = null;
+		if (blog.r2Key) {
+			bodyUrl = await r2.getUrl(blog.r2Key);
+		}
+
 		const identity = await ctx.auth.getUserIdentity();
 		const user = identity ? await authComponent.getAuthUser(ctx) : null;
 
@@ -330,6 +317,8 @@ export const get = query({
 
 		return {
 			...blog,
+			bodyUrl,
+			body: blog.snippet,
 			likes,
 			dislikes,
 			commentCount,
@@ -338,64 +327,141 @@ export const get = query({
 	}
 });
 
-export const create = mutation({
+export const insertMetadata = mutation({
+	args: {
+		title: v.string(),
+		snippet: v.string(),
+		published: v.boolean(),
+		r2Key: v.optional(v.string())
+	},
+	handler: async (ctx, args) => {
+		const user = await checkAdmin(ctx);
+		if (!user) throw new Error('Unauthorized');
+
+		return await ctx.db.insert('blogs', {
+			...args,
+			authorId: user._id,
+			createdAt: Date.now()
+		});
+	}
+});
+
+export const create = action({
 	args: {
 		title: v.string(),
 		body: v.string(),
 		published: v.boolean()
 	},
-	handler: async (ctx, args) => {
-		const user = await checkAdmin(ctx);
-		if (!user) {
-			throw new Error('Unauthorized: Admin access required');
-		}
+	handler: async (ctx, args): Promise<Id<'blogs'>> => {
+		const r2Key = `blogs/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.txt`;
 
-		const id = await ctx.db.insert('blogs', {
-			...args,
-			authorId: user._id,
-			createdAt: Date.now()
+		await r2.store(ctx, new Blob([args.body], { type: 'text/plain' }), {
+			key: r2Key,
+			type: 'text/plain'
+		});
+
+		const blogId = await ctx.runMutation(api.blogs.insertMetadata, {
+			title: args.title,
+			snippet: args.body.substring(0, 500),
+			published: args.published,
+			r2Key
 		});
 
 		await ctx.scheduler.runAfter(0, internal.blogs.syncRag, {
-			blogId: id,
+			blogId,
 			title: args.title,
 			body: args.body
 		});
 
+		return blogId;
+	}
+});
+
+export const updateMetadata = mutation({
+	args: {
+		id: v.id('blogs'),
+		title: v.string(),
+		snippet: v.string(),
+		published: v.boolean(),
+		r2Key: v.optional(v.string())
+	},
+	handler: async (ctx, args) => {
+		const user = await checkAdmin(ctx);
+		if (!user) throw new Error('Unauthorized');
+
+		const { id, ...updates } = args;
+		await ctx.db.patch(id, updates);
 		return id;
 	}
 });
 
-export const update = mutation({
+export const update = action({
 	args: {
 		id: v.id('blogs'),
 		title: v.string(),
 		body: v.string(),
 		published: v.boolean()
 	},
+	handler: async (ctx, args): Promise<void> => {
+		const blog = await ctx.runQuery(api.blogs.get, { id: args.id });
+		if (!blog) throw new Error('Blog not found');
+
+		let r2Key = blog.r2Key;
+		if (!r2Key) {
+			r2Key = `blogs/${args.id}-${Date.now()}.txt`;
+		}
+
+		await r2.store(ctx, new Blob([args.body], { type: 'text/plain' }), {
+			key: r2Key,
+			type: 'text/plain'
+		});
+
+		await ctx.runMutation(api.blogs.updateMetadata, {
+			id: args.id,
+			title: args.title,
+			snippet: args.body.substring(0, 500),
+			published: args.published,
+			r2Key
+		});
+
+		await ctx.scheduler.runAfter(0, internal.blogs.syncRag, {
+			blogId: args.id,
+			title: args.title,
+			body: args.body
+		});
+	}
+});
+
+export const remove = mutation({
+	args: { id: v.id('blogs') },
 	handler: async (ctx, args) => {
 		const user = await checkAdmin(ctx);
 		if (!user) {
 			throw new Error('Unauthorized: Admin access required');
 		}
 
-		const { id, ...data } = args;
-		await ctx.db.patch(id, data);
+		const blog = await ctx.db.get(args.id);
+		if (!blog) {
+			throw new Error('Blog not found');
+		}
 
-		await ctx.scheduler.runAfter(0, internal.blogs.syncRag, {
-			blogId: id,
-			title: data.title,
-			body: data.body
-		});
+		if (blog.r2Key) {
+			await r2.deleteObject(ctx, blog.r2Key);
+		}
+
+		await deleteBlogReactionsAndComments(ctx, args.id);
+
+		await ctx.db.delete(args.id);
+
+		if (blog.ragEntryId) {
+			await ctx.scheduler.runAfter(0, internal.blogs.deleteRag, {
+				ragEntryId: blog.ragEntryId
+			});
+		}
 	}
 });
 
-/**
- * Helper to delete all blog-level reactions and comments.
- * Recursively deletes comment reactions as well.
- */
 async function deleteBlogReactionsAndComments(ctx: MutationCtx, blogId: Id<'blogs'>) {
-	// Delete blog reactions
 	const reactions = await ctx.db
 		.query('blog_reactions')
 		.withIndex('by_blog', (q) => q.eq('blogId', blogId))
@@ -409,7 +475,6 @@ async function deleteBlogReactionsAndComments(ctx: MutationCtx, blogId: Id<'blog
 		}
 	}
 
-	// Delete comments and their reactions
 	const comments = await ctx.db
 		.query('blog_comments')
 		.withIndex('by_blog', (q) => q.eq('blogId', blogId))
@@ -418,35 +483,6 @@ async function deleteBlogReactionsAndComments(ctx: MutationCtx, blogId: Id<'blog
 		await deleteCommentWithReactions(ctx, comment._id);
 	}
 }
-
-export const remove = mutation({
-	args: { id: v.id('blogs') },
-	handler: async (ctx, args) => {
-		const user = await checkAdmin(ctx);
-		if (!user) {
-			throw new Error('Unauthorized: Admin access required');
-		}
-
-		// Get the blog to retrieve ragEntryId before deletion
-		const blog = await ctx.db.get(args.id);
-		if (!blog) {
-			throw new Error('Blog not found');
-		}
-
-		// Delete all associated content first
-		await deleteBlogReactionsAndComments(ctx, args.id);
-
-		// Delete the blog
-		await ctx.db.delete(args.id);
-
-		// Schedule RAG entry deletion if we have the entryId
-		if (blog.ragEntryId) {
-			await ctx.scheduler.runAfter(0, internal.blogs.deleteRag, {
-				ragEntryId: blog.ragEntryId
-			});
-		}
-	}
-});
 
 export const getComments = query({
 	args: { blogId: v.id('blogs') },

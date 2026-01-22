@@ -1,6 +1,8 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query } from './_generated/server';
+import { api, internal } from './_generated/api';
+import type { Id } from './_generated/dataModel';
 import { authComponent } from './auth';
 
 async function enrichContentItems(ctx: any, items: any[]) {
@@ -67,11 +69,27 @@ export const list = query({
 export const listPaginated = query({
 	args: {
 		topic: v.optional(v.string()),
+		includeNews: v.optional(v.boolean()),
+		subjectIds: v.optional(v.array(v.id('subjects'))),
+		gsPapers: v.optional(v.array(v.number())),
+		entityTypes: v.optional(v.array(v.string())),
+		entityIds: v.optional(v.array(v.id('entities'))),
+		status: v.optional(v.union(v.literal('all'), v.literal('completed'), v.literal('incomplete'))),
 		search: v.optional(v.string()),
 		paginationOpts: paginationOptsValidator
 	},
 	handler: async (ctx, args) => {
-		const { topic, search, paginationOpts } = args;
+		const {
+			topic,
+			includeNews,
+			subjectIds,
+			gsPapers,
+			entityTypes,
+			entityIds,
+			status,
+			search,
+			paginationOpts
+		} = args;
 		let queryBuilder;
 
 		if (search) {
@@ -88,7 +106,108 @@ export const listPaginated = query({
 			queryBuilder = ctx.db.query('content').withIndex('by_date').order('desc');
 		}
 
+		// Filter out Current Affairs if explicitly requested (Knowledge Base Library Mode)
+		if (!topic && includeNews === false) {
+			// Note: filter() doesn't work on SearchQuery, we handle it after pagination for search
+			if (!search) {
+				queryBuilder = queryBuilder.filter((q) => q.neq(q.field('topic'), 'Current Affairs'));
+			}
+		}
+
+		if (subjectIds && subjectIds.length > 0) {
+			queryBuilder = queryBuilder.filter((q) =>
+				q.or(...subjectIds.map((id) => q.eq(q.field('subjectId'), id)))
+			);
+		}
+
+		if (gsPapers && gsPapers.length > 0) {
+			// Get all subject IDs for these GS papers
+			const subjects = await ctx.db.query('subjects').collect();
+			const filteredSubjectIds = subjects
+				.filter((s) => gsPapers.includes(s.gsPaper))
+				.map((s) => s._id);
+
+			if (filteredSubjectIds.length > 0) {
+				queryBuilder = queryBuilder.filter((q) =>
+					q.or(...filteredSubjectIds.map((id) => q.eq(q.field('subjectId'), id)))
+				);
+			} else {
+				queryBuilder = queryBuilder.filter((q) => q.eq(q.field('_id'), 'non-existent' as any));
+			}
+		}
+
+		if (entityTypes && entityTypes.length > 0) {
+			const entities = await ctx.db.query('entities').collect();
+			const selectedEntityIds = new Set(
+				entities.filter((e) => entityTypes.includes(e.type)).map((e) => e._id)
+			);
+
+			const links = await ctx.db.query('content_entities').collect();
+			const allowedContentIds = Array.from(
+				new Set(links.filter((l) => selectedEntityIds.has(l.entityId)).map((l) => l.contentId))
+			);
+
+			if (allowedContentIds.length > 0) {
+				queryBuilder = queryBuilder.filter((q) =>
+					q.or(...allowedContentIds.map((id) => q.eq(q.field('_id'), id)))
+				);
+			} else {
+				queryBuilder = queryBuilder.filter((q) => q.eq(q.field('_id'), 'non-existent' as any));
+			}
+		}
+
+		// Filter by specific entity IDs
+		if (entityIds && entityIds.length > 0) {
+			const links = await ctx.db.query('content_entities').collect();
+			const allowedContentIds = Array.from(
+				new Set(links.filter((l) => entityIds.includes(l.entityId)).map((l) => l.contentId))
+			);
+
+			if (allowedContentIds.length > 0) {
+				queryBuilder = queryBuilder.filter((q) =>
+					q.or(...allowedContentIds.map((id) => q.eq(q.field('_id'), id)))
+				);
+			} else {
+				queryBuilder = queryBuilder.filter((q) => q.eq(q.field('_id'), 'non-existent' as any));
+			}
+		}
+
+		// Filter by completion status
+		if (status && status !== 'all') {
+			const user = await authComponent.getAuthUser(ctx);
+			if (user) {
+				const progress = await ctx.db
+					.query('user_content_progress')
+					.withIndex('by_user', (q) => q.eq('userId', user._id))
+					.collect();
+				const completedIds = new Set(progress.map((p) => p.contentId));
+
+				if (status === 'completed') {
+					if (completedIds.size > 0) {
+						queryBuilder = queryBuilder.filter((q) =>
+							q.or(...Array.from(completedIds).map((id) => q.eq(q.field('_id'), id)))
+						);
+					} else {
+						queryBuilder = queryBuilder.filter((q) => q.eq(q.field('_id'), 'non-existent' as any));
+					}
+				} else if (status === 'incomplete') {
+					if (completedIds.size > 0) {
+						queryBuilder = queryBuilder.filter((q) =>
+							q.and(...Array.from(completedIds).map((id) => q.neq(q.field('_id'), id)))
+						);
+					}
+				}
+			}
+		}
+
 		const result = await queryBuilder.paginate(paginationOpts);
+
+		// Manual filter for search results when news should be excluded
+		// Since search index doesn't support 'neq'
+		if (search && !topic && includeNews === false) {
+			result.page = result.page.filter((item) => item.topic !== 'Current Affairs');
+		}
+
 		const enrichedPage = await enrichContentItems(ctx, result.page);
 
 		return {
@@ -117,8 +236,10 @@ export const insert = mutation({
 	},
 	handler: async (ctx, args) => {
 		await checkAdmin(ctx);
+		const { body, ...rest } = args;
 		return await ctx.db.insert('content', {
-			...args,
+			...rest,
+			body,
 			flashcardCount: 0,
 			createdAt: Date.now()
 		});
@@ -137,8 +258,11 @@ export const update = mutation({
 	},
 	handler: async (ctx, args) => {
 		await checkAdmin(ctx);
-		const { id, ...updates } = args;
-		await ctx.db.patch(id, updates);
+		const { id, body, ...updates } = args;
+		await ctx.db.patch(id, {
+			...updates,
+			body
+		});
 		return id;
 	}
 });
@@ -147,6 +271,7 @@ export const remove = mutation({
 	args: { id: v.id('content') },
 	handler: async (ctx, args) => {
 		await checkAdmin(ctx);
+
 		const links = await ctx.db
 			.query('content_entities')
 			.withIndex('by_content', (q) => q.eq('contentId', args.id))
@@ -167,203 +292,8 @@ export const getById = query({
 		const item = await ctx.db.get(args.id);
 		if (!item) return null;
 
-		const subject = await ctx.db.get(item.subjectId);
-
-		// Fetch news date if linked
-		let newsDate = item.date;
-		if (!newsDate && item.newsId) {
-			const news = await ctx.db.get(item.newsId);
-			newsDate = news?.date;
-		}
-
-		// Fetch linked entities
-		const links = await ctx.db
-			.query('content_entities')
-			.withIndex('by_content', (q) => q.eq('contentId', item._id))
-			.collect();
-
-		const entities = await Promise.all(links.map(async (l) => await ctx.db.get(l.entityId)));
-
-		return {
-			...item,
-			newsDate,
-			subject,
-			entities: entities.filter((e): e is NonNullable<typeof e> => !!e)
-		};
-	}
-});
-
-// Helper logic for saving extracted facts
-async function saveFactLogic(
-	ctx: any,
-	args: {
-		title: string;
-		body: string;
-		subjectName: string;
-		topic: string;
-		entityType: string;
-		source: string;
-		newsId: any;
-		date?: string;
-	}
-) {
-	const { title, subjectName, entityType, ...rest } = args;
-
-	// 1. Resolve Subject
-	let subject = await ctx.db
-		.query('subjects')
-		.withIndex('by_name', (q: any) => q.eq('name', subjectName))
-		.unique();
-
-	if (!subject) {
-		subject = await ctx.db
-			.query('subjects')
-			.withIndex('by_name', (q: any) => q.eq('name', 'Other'))
-			.unique();
-	}
-
-	if (!subject) {
-		throw new Error('Subject "Other" not found. Please run seed mutation.');
-	}
-
-	// 2. Create the content entry
-	const contentId = await ctx.db.insert('content', {
-		title,
-		subjectId: subject._id,
-		...rest,
-		flashcardCount: 0,
-		createdAt: Date.now()
-	});
-
-	// 3. Handle Entity Linking
-	const entityName = title.trim();
-
-	let entity = await ctx.db
-		.query('entities')
-		.withIndex('by_name', (q: any) => q.eq('name', entityName))
-		.filter((q: any) => q.eq(q.field('type'), entityType))
-		.first();
-
-	if (!entity) {
-		const slug = entityName
-			.toLowerCase()
-			.replace(/[^\w\s-]/g, '')
-			.replace(/[\s_-]+/g, '-')
-			.replace(/^-+|-+$/g, '');
-
-		const entityId = await ctx.db.insert('entities', {
-			name: entityName,
-			type: entityType,
-			slug
-		});
-		entity = await ctx.db.get(entityId);
-	}
-
-	// 4. Create the junction entry
-	if (entity) {
-		await ctx.db.insert('content_entities', {
-			contentId,
-			entityId: entity._id
-		});
-	}
-
-	return contentId;
-}
-
-export const saveExtractedFact = internalMutation({
-	args: {
-		title: v.string(), // This is the entity name
-		body: v.string(),
-		subjectName: v.string(), // Name of the subject to resolve
-		topic: v.string(),
-		entityType: v.string(), // 'location' or 'Current Affairs'
-		source: v.string(),
-		newsId: v.id('news'),
-		date: v.optional(v.string())
-	},
-	handler: async (ctx, args) => {
-		return await saveFactLogic(ctx, args);
-	}
-});
-
-export const saveExtractedLocation = internalMutation({
-	args: {
-		title: v.string(), // This is the entity name (Location)
-		body: v.string(),
-		subjectName: v.string(), // Name of the subject to resolve
-		topic: v.string(),
-		source: v.string(),
-		newsId: v.id('news'),
-		date: v.optional(v.string())
-	},
-	handler: async (ctx, args) => {
-		return await saveFactLogic(ctx, {
-			...args,
-			entityType: 'location'
-		});
-	}
-});
-
-export const listEntityTypes = query({
-	args: {
-		excludeType: v.optional(v.string())
-	},
-	handler: async (ctx, args) => {
-		let query = ctx.db.query('entities');
-		const entities = await query.collect();
-
-		const filteredEntities = args.excludeType
-			? entities.filter((e) => e.type !== args.excludeType)
-			: entities;
-
-		const types = new Set(filteredEntities.map((e) => e.type));
-
-		// Return types with some basic metadata
-		return Array.from(types)
-			.sort()
-			.map((type) => ({
-				type,
-				count: filteredEntities.filter((e) => e.type === type).length
-			}));
-	}
-});
-
-export const listEntities = query({
-	args: { type: v.string() },
-	handler: async (ctx, args) => {
-		const entities = await ctx.db
-			.query('entities')
-			.withIndex('by_type', (q) => q.eq('type', args.type))
-			.collect();
-
-		// Add counts for each entity
-		return await Promise.all(
-			entities.map(async (entity) => {
-				const links = await ctx.db
-					.query('content_entities')
-					.withIndex('by_entity', (q) => q.eq('entityId', entity._id))
-					.collect();
-				return { ...entity, count: links.length };
-			})
-		);
-	}
-});
-
-export const getEntityBySlug = query({
-	args: { slug: v.string(), type: v.string() },
-	handler: async (ctx, args) => {
-		return await ctx.db
-			.query('entities')
-			.withIndex('by_slug', (q) => q.eq('slug', args.slug))
-			.filter((q) => q.eq(q.field('type'), args.type))
-			.unique();
-	}
-});
-
-export const getEntity = query({
-	args: { id: v.id('entities') },
-	handler: async (ctx, args) => {
-		return await ctx.db.get(args.id);
+		const enriched = await enrichContentItems(ctx, [item]);
+		return enriched[0];
 	}
 });
 
@@ -386,24 +316,9 @@ export const listByEntity = query({
 			items = items.filter((item) => item && item.subjectId === args.subjectId);
 		}
 
-		// Filter out any nulls and enrich with news date
-		const enriched = await Promise.all(
-			items
-				.filter((item): item is NonNullable<typeof item> => !!item)
-				.map(async (item) => {
-					const subject = await ctx.db.get(item.subjectId);
-					let newsDate = item.date;
+		const cleanedItems = items.filter((item): item is NonNullable<typeof item> => !!item);
+		const enriched = await enrichContentItems(ctx, cleanedItems);
 
-					if (!newsDate && item.newsId) {
-						const news = await ctx.db.get(item.newsId);
-						newsDate = news?.date;
-					}
-
-					return { ...item, newsDate, subject };
-				})
-		);
-
-		// Sort by news date desc, then by creation time
 		return (enriched as any[]).sort((a, b) => {
 			const dateA = a.newsDate || '0000-00-00';
 			const dateB = b.newsDate || '0000-00-00';
@@ -438,7 +353,6 @@ export const saveReport = internalMutation({
 	handler: async (ctx, args) => {
 		const entity = await ctx.db.get(args.entityId);
 		if (entity?.report) {
-			// Move current report to archive
 			await ctx.db.insert('report_archive', {
 				entityId: args.entityId,
 				report: entity.report,
@@ -464,9 +378,6 @@ export const listReportArchive = query({
 	}
 });
 
-/**
- * Internal mutation to backfill the 'date' field in the 'content' table.
- */
 export const backfillDates = internalMutation({
 	args: {},
 	handler: async (ctx) => {
@@ -486,8 +397,6 @@ export const backfillDates = internalMutation({
 		return { total: items.length, updated: updatedCount };
 	}
 });
-
-// ============== User Content Progress ==============
 
 export const toggleComplete = mutation({
 	args: { contentId: v.id('content') },
@@ -567,21 +476,17 @@ export const getProgressAnalytics = query({
 
 		const subjectMap = new Map(allSubjects.map((s) => [s._id, s]));
 
-		// Group by subject
 		const bySubject: Record<
 			string,
 			{ name: string; slug: string; gsPaper: number; total: number; completed: number }
 		> = {};
-		// Group by topic
 		const byTopic: Record<string, { total: number; completed: number }> = {};
-		// Group by GS Paper
 		const byGsPaper: Record<number, { total: number; completed: number }> = {};
 
 		for (const content of allContent) {
 			const isCompleted = completedIds.has(content._id);
 			const subject = subjectMap.get(content.subjectId);
 
-			// By subject
 			const subjectKey = content.subjectId;
 			if (!bySubject[subjectKey]) {
 				bySubject[subjectKey] = {
@@ -595,14 +500,12 @@ export const getProgressAnalytics = query({
 			bySubject[subjectKey].total++;
 			if (isCompleted) bySubject[subjectKey].completed++;
 
-			// By topic
 			if (!byTopic[content.topic]) {
 				byTopic[content.topic] = { total: 0, completed: 0 };
 			}
 			byTopic[content.topic].total++;
 			if (isCompleted) byTopic[content.topic].completed++;
 
-			// By GS Paper
 			const gs = subject?.gsPaper ?? 0;
 			if (!byGsPaper[gs]) {
 				byGsPaper[gs] = { total: 0, completed: 0 };
@@ -659,5 +562,207 @@ export const getRecentlyCompleted = query({
 			...result,
 			page: enrichedPage.filter((p): p is NonNullable<typeof p> => p !== null)
 		};
+	}
+});
+
+async function saveFactLogic(
+	ctx: any,
+	args: {
+		title: string;
+		body: string;
+		subjectName: string;
+		topic: string;
+		entityType: string;
+		source: string;
+		newsId: any;
+		date?: string;
+	}
+) {
+	const { title, subjectName, entityType, body, ...rest } = args;
+
+	let subject = await ctx.db
+		.query('subjects')
+		.withIndex('by_name', (q: any) => q.eq('name', subjectName))
+		.unique();
+
+	if (!subject) {
+		subject = await ctx.db
+			.query('subjects')
+			.withIndex('by_name', (q: any) => q.eq('name', 'Other'))
+			.unique();
+	}
+
+	if (!subject) {
+		throw new Error('Subject "Other" not found. Please run seed mutation.');
+	}
+
+	const contentId = await ctx.db.insert('content', {
+		title,
+		body,
+		subjectId: subject._id,
+		...rest,
+		flashcardCount: 0,
+		createdAt: Date.now()
+	});
+
+	const entityName = title.trim();
+
+	let entity = await ctx.db
+		.query('entities')
+		.withIndex('by_name', (q: any) => q.eq('name', entityName))
+		.filter((q: any) => q.eq(q.field('type'), entityType))
+		.first();
+
+	if (!entity) {
+		const slug = entityName
+			.toLowerCase()
+			.replace(/[^\w\s-]/g, '')
+			.replace(/[\s_-]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+
+		const entityId = await ctx.db.insert('entities', {
+			name: entityName,
+			type: entityType,
+			slug
+		});
+		entity = await ctx.db.get(entityId);
+	}
+
+	if (entity) {
+		await ctx.db.insert('content_entities', {
+			contentId,
+			entityId: entity._id
+		});
+	}
+
+	return contentId;
+}
+
+export const saveExtractedFact = internalMutation({
+	args: {
+		title: v.string(),
+		body: v.string(),
+		subjectName: v.string(),
+		topic: v.string(),
+		entityType: v.string(),
+		source: v.string(),
+		newsId: v.id('news'),
+		date: v.optional(v.string())
+	},
+	handler: async (ctx, args) => {
+		return await saveFactLogic(ctx, args);
+	}
+});
+
+export const saveExtractedLocation = internalMutation({
+	args: {
+		title: v.string(),
+		body: v.string(),
+		subjectName: v.string(),
+		topic: v.string(),
+		source: v.string(),
+		newsId: v.id('news'),
+		date: v.optional(v.string())
+	},
+	handler: async (ctx, args) => {
+		return await saveFactLogic(ctx, {
+			...args,
+			entityType: 'location'
+		});
+	}
+});
+
+export const listEntityTypes = query({
+	args: {
+		excludeType: v.optional(v.string()),
+		subjectId: v.optional(v.id('subjects'))
+	},
+	handler: async (ctx, args) => {
+		let entities = await ctx.db.query('entities').collect();
+
+		if (args.subjectId) {
+			const contentItems = await ctx.db
+				.query('content')
+				.withIndex('by_subjectId', (q) => q.eq('subjectId', args.subjectId!))
+				.collect();
+			const contentIds = new Set(contentItems.map((c) => c._id));
+
+			const allLinks = await ctx.db.query('content_entities').collect();
+			const entityIdsForSubject = new Set(
+				allLinks.filter((l) => contentIds.has(l.contentId)).map((l) => l.entityId)
+			);
+
+			entities = entities.filter((e) => entityIdsForSubject.has(e._id));
+		}
+
+		const filteredEntities = args.excludeType
+			? entities.filter((e) => e.type !== args.excludeType)
+			: entities;
+
+		const types = new Set(filteredEntities.map((e) => e.type));
+
+		return Array.from(types)
+			.sort()
+			.map((type) => ({
+				type,
+				count: filteredEntities.filter((e) => e.type === type).length
+			}));
+	}
+});
+
+export const listEntities = query({
+	args: {
+		type: v.string(),
+		subjectId: v.optional(v.id('subjects'))
+	},
+	handler: async (ctx, args) => {
+		let entities = await ctx.db
+			.query('entities')
+			.withIndex('by_type', (q) => q.eq('type', args.type))
+			.collect();
+
+		let contentIdsForSubject: Set<string> | null = null;
+		if (args.subjectId) {
+			const contentItems = await ctx.db
+				.query('content')
+				.withIndex('by_subjectId', (q) => q.eq('subjectId', args.subjectId!))
+				.collect();
+			contentIdsForSubject = new Set(contentItems.map((c) => c._id));
+		}
+
+		const results = await Promise.all(
+			entities.map(async (entity) => {
+				let links = await ctx.db
+					.query('content_entities')
+					.withIndex('by_entity', (q) => q.eq('entityId', entity._id))
+					.collect();
+
+				if (contentIdsForSubject) {
+					links = links.filter((l) => contentIdsForSubject!.has(l.contentId));
+				}
+
+				return { ...entity, count: links.length };
+			})
+		);
+
+		return args.subjectId ? results.filter((e) => e.count > 0) : results;
+	}
+});
+
+export const getEntityBySlug = query({
+	args: { slug: v.string(), type: v.string() },
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query('entities')
+			.withIndex('by_slug', (q) => q.eq('slug', args.slug))
+			.filter((q) => q.eq(q.field('type'), args.type))
+			.unique();
+	}
+});
+
+export const getEntity = query({
+	args: { id: v.id('entities') },
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.id);
 	}
 });

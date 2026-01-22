@@ -21,6 +21,7 @@ import type * as http from "../http.js";
 import type * as image from "../image.js";
 import type * as lib_extractors_types from "../lib/extractors/types.js";
 import type * as lib_openrouter from "../lib/openrouter.js";
+import type * as lib_r2 from "../lib/r2.js";
 import type * as lib_semantic from "../lib/semantic.js";
 import type * as location from "../location.js";
 import type * as memories from "../memories.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   image: typeof image;
   "lib/extractors/types": typeof lib_extractors_types;
   "lib/openrouter": typeof lib_openrouter;
+  "lib/r2": typeof lib_r2;
   "lib/semantic": typeof lib_semantic;
   location: typeof location;
   memories: typeof memories;
@@ -2429,6 +2431,130 @@ export declare const components: {
             startOrder: number;
           }>;
         }
+      >;
+    };
+  };
+  r2: {
+    lib: {
+      deleteMetadata: FunctionReference<
+        "mutation",
+        "internal",
+        { bucket: string; key: string },
+        null
+      >;
+      deleteObject: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          endpoint: string;
+          key: string;
+          secretAccessKey: string;
+        },
+        null
+      >;
+      deleteR2Object: FunctionReference<
+        "action",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          endpoint: string;
+          key: string;
+          secretAccessKey: string;
+        },
+        null
+      >;
+      getMetadata: FunctionReference<
+        "query",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          endpoint: string;
+          key: string;
+          secretAccessKey: string;
+        },
+        {
+          bucket: string;
+          bucketLink: string;
+          contentType?: string;
+          key: string;
+          lastModified: string;
+          link: string;
+          sha256?: string;
+          size?: number;
+          url: string;
+        } | null
+      >;
+      listMetadata: FunctionReference<
+        "query",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          cursor?: string;
+          endpoint: string;
+          limit?: number;
+          secretAccessKey: string;
+        },
+        {
+          continueCursor: string;
+          isDone: boolean;
+          page: Array<{
+            bucket: string;
+            bucketLink: string;
+            contentType?: string;
+            key: string;
+            lastModified: string;
+            link: string;
+            sha256?: string;
+            size?: number;
+            url: string;
+          }>;
+          pageStatus?: null | "SplitRecommended" | "SplitRequired";
+          splitCursor?: null | string;
+        }
+      >;
+      store: FunctionReference<
+        "action",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          endpoint: string;
+          secretAccessKey: string;
+          url: string;
+        },
+        any
+      >;
+      syncMetadata: FunctionReference<
+        "action",
+        "internal",
+        {
+          accessKeyId: string;
+          bucket: string;
+          endpoint: string;
+          key: string;
+          onComplete?: string;
+          secretAccessKey: string;
+        },
+        null
+      >;
+      upsertMetadata: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          bucket: string;
+          contentType?: string;
+          key: string;
+          lastModified: string;
+          link: string;
+          sha256?: string;
+          size?: number;
+        },
+        { isNew: boolean }
       >;
     };
   };

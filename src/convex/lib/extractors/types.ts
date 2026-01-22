@@ -8,14 +8,14 @@ import type { Id } from '../../_generated/dataModel';
 export type SourceType = 'news' | 'syllabus' | 'blog' | 'content';
 
 // Available extraction types
+// Note: Flashcards are generated separately via flashcards.generateFromContent
 export type ExtractionType =
 	| 'current_affairs'
 	| 'locations'
 	| 'concepts'
 	| 'questions'
 	| 'entities'
-	| 'topics'
-	| 'flashcards';
+	| 'topics';
 
 // Job status
 export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -57,11 +57,6 @@ export interface ExtractedItem {
 	subject?: string;
 	entityName?: string;
 	entityType?: string;
-	// For flashcards
-	front?: string;
-	back?: string;
-	type?: 'basic' | 'cloze' | 'mcq';
-	difficulty?: number;
 }
 
 // Result from a single extraction

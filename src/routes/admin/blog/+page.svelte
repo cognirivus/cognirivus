@@ -48,9 +48,9 @@
 
 		try {
 			if (editingId) {
-				await client.mutation(api.blogs.update, { id: editingId, title, body, published });
+				await client.action(api.blogs.update, { id: editingId, title, body, published });
 			} else {
-				await client.mutation(api.blogs.create, { title, body, published });
+				await client.action(api.blogs.create, { title, body, published });
 			}
 			isEditing = false;
 		} catch (e: any) {

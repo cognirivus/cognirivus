@@ -1,7 +1,10 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
-import { internalQuery, mutation, query } from './_generated/server';
+import { action, internalQuery, mutation, query } from './_generated/server';
+import { api, internal } from './_generated/api';
+import type { Id } from './_generated/dataModel';
 import { authComponent } from './auth';
+import { r2 } from './lib/r2';
 
 const checkAdmin = async (ctx: any) => {
 	const user = await authComponent.getAuthUser(ctx);
@@ -11,16 +14,45 @@ const checkAdmin = async (ctx: any) => {
 	return user;
 };
 
-export const insert = mutation({
+/**
+ * Mutation to save news metadata.
+ */
+export const insertMetadata = mutation({
 	args: {
 		date: v.string(),
-		body: v.string()
+		snippet: v.string(),
+		r2Key: v.optional(v.string()),
+		bodyHash: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
 		await checkAdmin(ctx);
-		await ctx.db.insert('news', {
+		return await ctx.db.insert('news', args);
+	}
+});
+
+/**
+ * Action to store news with body in R2.
+ */
+export const insert = action({
+	args: {
+		date: v.string(),
+		body: v.string(),
+		bodyHash: v.optional(v.string())
+	},
+	handler: async (ctx, args): Promise<Id<'news'>> => {
+		const snippet = args.body.substring(0, 500);
+		const r2Key = `news/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.txt`;
+
+		await r2.store(ctx, new Blob([args.body], { type: 'text/plain' }), {
+			key: r2Key,
+			type: 'text/plain'
+		});
+
+		return await ctx.runMutation(api.news.insertMetadata, {
 			date: args.date,
-			body: args.body
+			snippet,
+			r2Key,
+			bodyHash: args.bodyHash
 		});
 	}
 });
@@ -30,10 +62,15 @@ export const list = query({
 		limit: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
-		return await ctx.db
+		const items = await ctx.db
 			.query('news')
 			.order('desc')
 			.take(args.limit ?? 50);
+
+		return items.map((item) => ({
+			...item,
+			body: item.snippet // Client expects 'body' field
+		}));
 	}
 });
 
@@ -44,27 +81,63 @@ export const listInternal = internalQuery({
 	handler: async (ctx, args) => {
 		return await ctx.db
 			.query('news')
-			.order('asc') // Start from the oldest (first) as requested
+			.order('asc')
 			.take(args.limit ?? 1);
-	}
-});
-
-export const getByDate = query({
-	args: {
-		date: v.string()
-	},
-	handler: async (ctx, args) => {
-		return await ctx.db
-			.query('news')
-			.withIndex('by_date', (q) => q.eq('date', args.date))
-			.unique();
 	}
 });
 
 export const getById = query({
 	args: { id: v.id('news') },
 	handler: async (ctx, args) => {
-		return await ctx.db.get(args.id);
+		const news = await ctx.db.get(args.id);
+		if (!news) return null;
+
+		let bodyUrl = null;
+		if (news.r2Key) {
+			bodyUrl = await r2.getUrl(news.r2Key);
+		}
+
+		return {
+			...news,
+			bodyUrl,
+			body: news.snippet // Fallback
+		};
+	}
+});
+
+export const getWithContent = query({
+	args: { id: v.id('news') },
+	handler: async (ctx, args) => {
+		const news = await ctx.db.get(args.id);
+		if (!news) return null;
+
+		const content = await ctx.db
+			.query('content')
+			.withIndex('by_newsId', (q) => q.eq('newsId', args.id))
+			.collect();
+
+		const enrichedContent = await Promise.all(
+			content.map(async (c) => {
+				const subject = await ctx.db.get(c.subjectId);
+				return { ...c, subject, body: c.body };
+			})
+		);
+
+		return {
+			...news,
+			content: enrichedContent
+		};
+	}
+});
+
+export const checkDuplicate = query({
+	args: { bodyHash: v.string() },
+	handler: async (ctx, args) => {
+		const existing = await ctx.db
+			.query('news')
+			.withIndex('by_bodyHash', (q) => q.eq('bodyHash', args.bodyHash))
+			.first();
+		return !!existing;
 	}
 });
 
@@ -82,7 +155,18 @@ export const listWithContentCount = query({
 					.query('content')
 					.withIndex('by_newsId', (q) => q.eq('newsId', item._id))
 					.collect();
-				return { ...item, contentCount: contentItems.length };
+
+				let bodyUrl = null;
+				if (item.r2Key) {
+					bodyUrl = await r2.getUrl(item.r2Key);
+				}
+
+				return {
+					...item,
+					body: item.snippet,
+					bodyUrl,
+					contentCount: contentItems.length
+				};
 			})
 		);
 	}
@@ -99,7 +183,18 @@ export const listPaginated = query({
 					.query('content')
 					.withIndex('by_newsId', (q) => q.eq('newsId', item._id))
 					.collect();
-				return { ...item, contentCount: contentItems.length };
+
+				let bodyUrl = null;
+				if (item.r2Key) {
+					bodyUrl = await r2.getUrl(item.r2Key);
+				}
+
+				return {
+					...item,
+					body: item.snippet,
+					bodyUrl,
+					contentCount: contentItems.length
+				};
 			})
 		);
 
@@ -107,33 +202,13 @@ export const listPaginated = query({
 	}
 });
 
-export const getWithContent = query({
-	args: { id: v.id('news') },
-	handler: async (ctx, args) => {
-		const news = await ctx.db.get(args.id);
-		if (!news) return null;
-
-		const contentItems = await ctx.db
-			.query('content')
-			.withIndex('by_newsId', (q) => q.eq('newsId', args.id))
-			.collect();
-
-		const enrichedContent = await Promise.all(
-			contentItems.map(async (item) => {
-				const subject = await ctx.db.get(item.subjectId);
-				return { ...item, subject };
-			})
-		);
-
-		return { ...news, content: enrichedContent };
-	}
-});
-
-export const update = mutation({
+export const updateMetadata = mutation({
 	args: {
 		id: v.id('news'),
 		date: v.string(),
-		body: v.string()
+		snippet: v.string(),
+		r2Key: v.optional(v.string()),
+		bodyHash: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
 		await checkAdmin(ctx);
@@ -143,10 +218,47 @@ export const update = mutation({
 	}
 });
 
+export const update = action({
+	args: {
+		id: v.id('news'),
+		date: v.string(),
+		body: v.string(),
+		bodyHash: v.optional(v.string())
+	},
+	handler: async (ctx, args): Promise<Id<'news'>> => {
+		const news = await ctx.runQuery(api.news.getById, { id: args.id });
+		if (!news) throw new Error('News not found');
+
+		let r2Key = news.r2Key;
+		if (!r2Key) {
+			r2Key = `news/${args.id}-${Date.now()}.txt`;
+		}
+
+		await r2.store(ctx, new Blob([args.body], { type: 'text/plain' }), {
+			key: r2Key,
+			type: 'text/plain'
+		});
+
+		return await ctx.runMutation(api.news.updateMetadata, {
+			id: args.id,
+			date: args.date,
+			snippet: args.body.substring(0, 500),
+			r2Key,
+			bodyHash: args.bodyHash
+		});
+	}
+});
+
 export const remove = mutation({
 	args: { id: v.id('news') },
 	handler: async (ctx, args) => {
 		await checkAdmin(ctx);
+
+		const news = await ctx.db.get(args.id);
+		if (news?.r2Key) {
+			await r2.deleteObject(ctx, news.r2Key);
+		}
+
 		const linkedContent = await ctx.db
 			.query('content')
 			.withIndex('by_newsId', (q) => q.eq('newsId', args.id))

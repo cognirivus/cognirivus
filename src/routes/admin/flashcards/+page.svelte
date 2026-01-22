@@ -459,6 +459,7 @@
 			<Card.Root class="border-destructive/20 bg-destructive/10">
 				<Card.Content class="pt-6 text-center text-destructive">
 					<p class="font-medium">Failed to load content</p>
+					<p class="mt-2 text-sm opacity-70">{contentQuery.error.message || 'Unknown error'}</p>
 				</Card.Content>
 			</Card.Root>
 		{:else if contentQuery.data}
@@ -600,6 +601,7 @@
 		<Card.Root class="border-destructive/20 bg-destructive/10">
 			<Card.Content class="pt-6 text-center text-destructive">
 				<p class="font-medium">Failed to load flashcards</p>
+				<p class="mt-2 text-sm opacity-70">{flashcardsQuery.error.message || 'Unknown error'}</p>
 			</Card.Content>
 		</Card.Root>
 	{:else if flashcardsQuery.data}
@@ -686,19 +688,19 @@
 		</Card.Root>
 
 		{#if flashcardsQuery.data.page.length > 0}
-			<div class="mt-4 flex items-center justify-between">
-				<div class="text-sm text-muted-foreground">
-					Page {cursorHistory.length + 1} · Showing {flashcardsQuery.data.page.length} items
+			<div class="mt-4 flex items-center justify-between px-2">
+				<div class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+					Page {cursorHistory.length + 1} · {flashcardsQuery.data.page.length} items
 				</div>
-				<div class="flex items-center gap-2">
+				<div class="flex items-center gap-1.5">
 					<Button
 						variant="outline"
 						size="sm"
 						onclick={prevPage}
 						disabled={cursorHistory.length === 0}
-						class="gap-1"
+						class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
 					>
-						<ChevronLeft class="h-4 w-4" />
+						<ChevronLeft class="h-3.5 w-3.5" />
 						Previous
 					</Button>
 					<Button
@@ -706,10 +708,10 @@
 						size="sm"
 						onclick={nextPage}
 						disabled={flashcardsQuery.data.isDone}
-						class="gap-1"
+						class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
 					>
 						Next
-						<ChevronRight class="h-4 w-4" />
+						<ChevronRight class="h-3.5 w-3.5" />
 					</Button>
 				</div>
 			</div>

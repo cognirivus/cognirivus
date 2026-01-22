@@ -99,7 +99,9 @@
 				{/each}
 			</div>
 		{:else if !analyticsQuery.data}
-			<Card.Root class="border-amber-200/50 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20">
+			<Card.Root
+				class="border-amber-200/50 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20"
+			>
 				<Card.Content class="pt-6 text-amber-800 dark:text-amber-200">
 					Please sign in to view your progress analytics.
 				</Card.Content>
@@ -313,18 +315,30 @@
 				</div>
 
 				<!-- Pagination -->
-				<div class="flex items-center justify-between border-t pt-4">
-					<div class="text-sm text-muted-foreground">
-						Page <span class="font-bold text-foreground">{currentCursorIndex + 1}</span>
+				<div class="flex items-center justify-between border-t px-2 pt-4">
+					<div class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+						Page <span class="text-foreground">{currentCursorIndex + 1}</span>
 					</div>
-					<div class="flex items-center gap-2">
-						<Button variant="outline" size="sm" onclick={prevPage} disabled={!hasPrevPage}>
-							<ChevronLeft class="mr-1 h-4 w-4" />
+					<div class="flex items-center gap-1.5">
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={prevPage}
+							disabled={!hasPrevPage}
+							class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
+						>
+							<ChevronLeft class="h-3.5 w-3.5" />
 							Previous
 						</Button>
-						<Button variant="outline" size="sm" onclick={nextPage} disabled={!hasNextPage}>
+						<Button
+							variant="outline"
+							size="sm"
+							onclick={nextPage}
+							disabled={!hasNextPage}
+							class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
+						>
 							Next
-							<ChevronRight class="ml-1 h-4 w-4" />
+							<ChevronRight class="h-3.5 w-3.5" />
 						</Button>
 					</div>
 				</div>

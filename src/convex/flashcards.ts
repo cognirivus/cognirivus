@@ -2,6 +2,7 @@ import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { action, internalMutation, mutation, query } from './_generated/server';
 import { api, internal } from './_generated/api';
+import type { Id } from './_generated/dataModel';
 import { authComponent } from './auth';
 
 const checkAdmin = async (ctx: any) => {
@@ -12,10 +13,193 @@ const checkAdmin = async (ctx: any) => {
 	return user;
 };
 
-export const generateFromContent = action({
+export const listPaginated = query({
 	args: {
-		contentId: v.id('content')
+		contentId: v.optional(v.id('content')),
+		subjectId: v.optional(v.id('subjects')),
+		paginationOpts: paginationOptsValidator
 	},
+	handler: async (ctx, args) => {
+		const { contentId, subjectId, paginationOpts } = args;
+
+		let queryBuilder;
+		if (contentId) {
+			queryBuilder = ctx.db
+				.query('flashcards')
+				.withIndex('by_content', (q) => q.eq('contentId', contentId));
+		} else {
+			queryBuilder = ctx.db.query('flashcards').withIndex('by_created_at').order('desc');
+		}
+
+		const result = await queryBuilder.paginate(paginationOpts);
+
+		const enrichedPage = await Promise.all(
+			result.page.map(async (card) => {
+				const content = (await ctx.db.get(card.contentId)) as any;
+
+				if (subjectId && content?.subjectId !== subjectId) {
+					return null;
+				}
+
+				return {
+					...card,
+					content: content
+						? {
+								_id: content._id,
+								title: content.title,
+								topic: content.topic,
+								subjectId: content.subjectId
+							}
+						: null
+				};
+			})
+		);
+
+		return {
+			...result,
+			page: enrichedPage.filter((p): p is NonNullable<typeof p> => p !== null)
+		};
+	}
+});
+
+export const getById = query({
+	args: { id: v.id('flashcards') },
+	handler: async (ctx, args) => {
+		const card = await ctx.db.get(args.id);
+		if (!card) return null;
+
+		const content = await ctx.db.get(card.contentId);
+		return {
+			...card,
+			content
+		};
+	}
+});
+
+export const insert = mutation({
+	args: {
+		contentId: v.id('content'),
+		front: v.string(),
+		back: v.string(),
+		type: v.string(),
+		difficulty: v.number()
+	},
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		const id = await ctx.db.insert('flashcards', {
+			...args,
+			createdAt: Date.now()
+		});
+
+		const content = await ctx.db.get(args.contentId);
+		if (content) {
+			await ctx.db.patch(args.contentId, {
+				flashcardCount: (content.flashcardCount ?? 0) + 1
+			});
+		}
+
+		return id;
+	}
+});
+
+export const insertInternal = internalMutation({
+	args: {
+		contentId: v.id('content'),
+		front: v.string(),
+		back: v.string(),
+		type: v.string(),
+		difficulty: v.number()
+	},
+	handler: async (ctx, args) => {
+		const id = await ctx.db.insert('flashcards', {
+			...args,
+			createdAt: Date.now()
+		});
+
+		const content = await ctx.db.get(args.contentId);
+		if (content) {
+			await ctx.db.patch(args.contentId, {
+				flashcardCount: (content.flashcardCount ?? 0) + 1
+			});
+		}
+		return id;
+	}
+});
+
+export const update = mutation({
+	args: {
+		id: v.id('flashcards'),
+		front: v.string(),
+		back: v.string(),
+		type: v.string(),
+		difficulty: v.number()
+	},
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+		const { id, ...updates } = args;
+		await ctx.db.patch(id, updates);
+		return id;
+	}
+});
+
+export const remove = mutation({
+	args: { id: v.id('flashcards') },
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		const card = await ctx.db.get(args.id);
+		if (card) {
+			const content = await ctx.db.get(card.contentId);
+			if (content) {
+				await ctx.db.patch(card.contentId, {
+					flashcardCount: Math.max(0, (content.flashcardCount ?? 1) - 1)
+				});
+			}
+
+			const progress = await ctx.db
+				.query('user_flashcard_progress')
+				.withIndex('by_flashcard', (q) => q.eq('flashcardId', args.id))
+				.collect();
+			for (const p of progress) {
+				await ctx.db.delete(p._id);
+			}
+		}
+
+		await ctx.db.delete(args.id);
+		return args.id;
+	}
+});
+
+export const removeByContent = mutation({
+	args: { contentId: v.id('content') },
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+		const cards = await ctx.db
+			.query('flashcards')
+			.withIndex('by_content', (q) => q.eq('contentId', args.contentId))
+			.collect();
+
+		for (const card of cards) {
+			await ctx.db.delete(card._id);
+
+			const progress = await ctx.db
+				.query('user_flashcard_progress')
+				.withIndex('by_flashcard', (q) => q.eq('flashcardId', card._id))
+				.collect();
+			for (const p of progress) {
+				await ctx.db.delete(p._id);
+			}
+		}
+
+		await ctx.db.patch(args.contentId, { flashcardCount: 0 });
+
+		return cards.length;
+	}
+});
+
+export const generateFromContent = action({
+	args: { contentId: v.id('content') },
 	handler: async (ctx, args): Promise<{ success: boolean; count: number; error?: string }> => {
 		await checkAdmin(ctx);
 		const content = await ctx.runQuery(api.content.getById, { id: args.contentId });
@@ -38,7 +222,7 @@ export const generateFromContent = action({
 					messages: [
 						{
 							role: 'system',
-							content: `You are an expert educational content creator specializing in UPSC exam preparation. Your task is to generate high-quality Anki-style flashcards from the provided content.
+							content: `You are an expert educational content creator. Your task is to generate high-quality flashcards from the provided content.
 
 GUIDELINES:
 1. Create flashcards that test key facts, concepts, dates, and relationships
@@ -123,8 +307,7 @@ GUIDELINES:
 			let savedCount = 0;
 			for (const card of generatedCards) {
 				if (card.front && card.back) {
-					const internalAny = internal as any;
-					await ctx.runMutation(internalAny.flashcards.insertInternal, {
+					await ctx.runMutation(internal.flashcards.insertInternal, {
 						contentId: args.contentId,
 						front: card.front,
 						back: card.back,
@@ -140,202 +323,6 @@ GUIDELINES:
 			console.error('Error generating flashcards:', err);
 			return { success: false, count: 0, error: 'Generation failed' };
 		}
-	}
-});
-
-export const insertInternal = internalMutation({
-	args: {
-		contentId: v.id('content'),
-		front: v.string(),
-		back: v.string(),
-		type: v.string(),
-		difficulty: v.number()
-	},
-	handler: async (ctx, args) => {
-		const id = await ctx.db.insert('flashcards', {
-			...args,
-			createdAt: Date.now()
-		});
-
-		const content = await ctx.db.get(args.contentId);
-		if (content) {
-			await ctx.db.patch(args.contentId, {
-				flashcardCount: (content.flashcardCount || 0) + 1
-			});
-		}
-		return id;
-	}
-});
-
-export const insert = mutation({
-	args: {
-		contentId: v.id('content'),
-		front: v.string(),
-		back: v.string(),
-		type: v.string(),
-		difficulty: v.number()
-	},
-	handler: async (ctx, args) => {
-		await checkAdmin(ctx);
-		const id = await ctx.db.insert('flashcards', {
-			...args,
-			createdAt: Date.now()
-		});
-
-		const content = await ctx.db.get(args.contentId);
-		if (content) {
-			await ctx.db.patch(args.contentId, {
-				flashcardCount: (content.flashcardCount || 0) + 1
-			});
-		}
-		return id;
-	}
-});
-
-export const update = mutation({
-	args: {
-		id: v.id('flashcards'),
-		front: v.string(),
-		back: v.string(),
-		type: v.string(),
-		difficulty: v.number()
-	},
-	handler: async (ctx, args) => {
-		await checkAdmin(ctx);
-		const { id, ...updates } = args;
-		await ctx.db.patch(id, updates);
-		return id;
-	}
-});
-
-export const remove = mutation({
-	args: { id: v.id('flashcards') },
-	handler: async (ctx, args) => {
-		await checkAdmin(ctx);
-		const card = await ctx.db.get(args.id);
-		if (!card) return args.id;
-
-		await ctx.db.delete(args.id);
-
-		const content = await ctx.db.get(card.contentId);
-		if (content) {
-			await ctx.db.patch(card.contentId, {
-				flashcardCount: Math.max(0, (content.flashcardCount || 0) - 1)
-			});
-		}
-
-		// Also clean up progress
-		const progress = await ctx.db
-			.query('user_flashcard_progress')
-			.withIndex('by_flashcard', (q) => q.eq('flashcardId', args.id))
-			.collect();
-		for (const p of progress) {
-			await ctx.db.delete(p._id);
-		}
-
-		return args.id;
-	}
-});
-
-export const removeByContent = mutation({
-	args: { contentId: v.id('content') },
-	handler: async (ctx, args) => {
-		await checkAdmin(ctx);
-		const cards = await ctx.db
-			.query('flashcards')
-			.withIndex('by_content', (q) => q.eq('contentId', args.contentId))
-			.collect();
-
-		for (const card of cards) {
-			await ctx.db.delete(card._id);
-
-			// Clean up progress
-			const progress = await ctx.db
-				.query('user_flashcard_progress')
-				.withIndex('by_flashcard', (q) => q.eq('flashcardId', card._id))
-				.collect();
-			for (const p of progress) {
-				await ctx.db.delete(p._id);
-			}
-		}
-
-		await ctx.db.patch(args.contentId, { flashcardCount: 0 });
-
-		return cards.length;
-	}
-});
-
-export const listByContent = query({
-	args: { contentId: v.id('content') },
-	handler: async (ctx, args) => {
-		return await ctx.db
-			.query('flashcards')
-			.withIndex('by_content', (q) => q.eq('contentId', args.contentId))
-			.collect();
-	}
-});
-
-export const listPaginated = query({
-	args: {
-		contentId: v.optional(v.id('content')),
-		subjectId: v.optional(v.id('subjects')),
-		paginationOpts: paginationOptsValidator
-	},
-	handler: async (ctx, args) => {
-		const { contentId, subjectId, paginationOpts } = args;
-
-		let queryBuilder;
-		if (contentId) {
-			queryBuilder = ctx.db
-				.query('flashcards')
-				.withIndex('by_content', (q) => q.eq('contentId', contentId));
-		} else {
-			queryBuilder = ctx.db.query('flashcards').withIndex('by_created_at').order('desc');
-		}
-
-		const result = await queryBuilder.paginate(paginationOpts);
-
-		const enrichedPage = await Promise.all(
-			result.page.map(async (card) => {
-				const content = await ctx.db.get(card.contentId);
-
-				// Filter by subject if provided (this is a client-side filter in the pagination loop, which is fine for small sets but we should try to avoid it if possible. However, there's no cross-table index.)
-				if (subjectId && content?.subjectId !== subjectId) {
-					return null;
-				}
-
-				return {
-					...card,
-					content: content
-						? {
-								_id: content._id,
-								title: content.title,
-								topic: content.topic,
-								subjectId: content.subjectId
-							}
-						: null
-				};
-			})
-		);
-
-		return {
-			...result,
-			page: enrichedPage.filter((p): p is NonNullable<typeof p> => p !== null)
-		};
-	}
-});
-
-export const getById = query({
-	args: { id: v.id('flashcards') },
-	handler: async (ctx, args) => {
-		const card = await ctx.db.get(args.id);
-		if (!card) return null;
-
-		const content = await ctx.db.get(card.contentId);
-		return {
-			...card,
-			content
-		};
 	}
 });
 
@@ -389,14 +376,13 @@ export const listDue = query({
 		const now = Date.now();
 		const maxCards = args.limit || 30;
 
-		// If contentId is provided, we want to study specifically THAT set
 		if (args.contentId) {
 			const cards = await ctx.db
 				.query('flashcards')
 				.withIndex('by_content', (q) => q.eq('contentId', args.contentId!))
 				.collect();
 
-			const results = await Promise.all(
+			return await Promise.all(
 				cards.map(async (card) => {
 					const progress = await ctx.db
 						.query('user_flashcard_progress')
@@ -407,10 +393,8 @@ export const listDue = query({
 					return { ...card, progress };
 				})
 			);
-			return results;
 		}
 
-		// 1. Get user progress
 		const allUserProgress = await ctx.db
 			.query('user_flashcard_progress')
 			.withIndex('by_user', (q) => q.eq('userId', user._id))
@@ -418,7 +402,6 @@ export const listDue = query({
 
 		const progressMap = new Map(allUserProgress.map((p) => [p.flashcardId, p]));
 
-		// 2. Filter for Due cards
 		const dueCards: any[] = [];
 		for (const p of allUserProgress) {
 			if (p.nextReviewAt < now) {
@@ -428,8 +411,6 @@ export const listDue = query({
 			if (dueCards.length >= maxCards) break;
 		}
 
-		// 3. Get all flashcards to find New ones
-		// We use collect here because the table is small (as reported by user)
 		const allFlashcards = await ctx.db.query('flashcards').collect();
 		const sessionCards = [...dueCards];
 
@@ -455,7 +436,7 @@ export const getContentWithFlashcardCounts = query({
 				.query('content')
 				.withIndex('by_subjectId', (q) => q.eq('subjectId', args.subjectId!));
 		} else {
-			queryBuilder = ctx.db.query('content').order('desc');
+			queryBuilder = ctx.db.query('content').withIndex('by_created_at').order('desc');
 		}
 
 		const result = await queryBuilder.paginate(args.paginationOpts);
@@ -483,7 +464,7 @@ export const getContentWithFlashcardCounts = query({
 				return {
 					...content,
 					subject,
-					flashcardCount: content.flashcardCount || 0,
+					flashcardCount: content.flashcardCount ?? 0,
 					attemptedCount
 				};
 			})
@@ -496,8 +477,6 @@ export const getContentWithFlashcardCounts = query({
 	}
 });
 
-// Spaced Repetition Logic
-
 export const review = mutation({
 	args: {
 		flashcardId: v.id('flashcards'),
@@ -509,7 +488,6 @@ export const review = mutation({
 
 		const { flashcardId, quality } = args;
 
-		// Data integrity: Verify card exists
 		const card = await ctx.db.get(flashcardId);
 		if (!card) throw new Error('Flashcard not found');
 
@@ -520,24 +498,15 @@ export const review = mutation({
 			)
 			.unique();
 
-		let progressData: any;
+		let interval = 0;
+		let easeFactor = 2.5;
+		let repetitions = 0;
 
-		if (!existing) {
-			progressData = {
-				userId: user._id,
-				flashcardId,
-				interval: 0,
-				easeFactor: 2.5,
-				repetitions: 0,
-				nextReviewAt: 0,
-				lastReviewedAt: 0
-			};
-		} else {
-			progressData = { ...existing };
+		if (existing) {
+			interval = existing.interval;
+			easeFactor = existing.easeFactor;
+			repetitions = existing.repetitions;
 		}
-
-		// SM-2 Algorithm
-		let { interval, easeFactor, repetitions } = progressData;
 
 		if (quality >= 3) {
 			if (repetitions === 0) {
@@ -553,12 +522,11 @@ export const review = mutation({
 			interval = 1;
 		}
 
-		easeFactor = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-		if (easeFactor < 1.3) easeFactor = 1.3;
+		easeFactor = Math.max(1.3, easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)));
 
 		const nextReviewAt = Date.now() + interval * 24 * 60 * 60 * 1000;
 
-		const finalData = {
+		const progressData = {
 			userId: user._id,
 			flashcardId,
 			interval,
@@ -569,12 +537,11 @@ export const review = mutation({
 		};
 
 		if (existing) {
-			await ctx.db.patch(existing._id, finalData);
-			return { ...finalData, _id: existing._id, _creationTime: existing._creationTime };
+			await ctx.db.patch(existing._id, progressData);
 		} else {
-			const id = await ctx.db.insert('user_flashcard_progress', finalData);
-			const doc = await ctx.db.get(id);
-			return doc!;
+			await ctx.db.insert('user_flashcard_progress', progressData);
 		}
+
+		return { nextReviewAt };
 	}
 });
