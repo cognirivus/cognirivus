@@ -11,6 +11,11 @@ app.use(aggregate, { name: 'aggregateDislikes' });
 app.use(aggregate, { name: 'aggregateComments' });
 app.use(aggregate, { name: 'aggregateCommentLikes' });
 app.use(aggregate, { name: 'aggregateCommentDislikes' });
+app.use(aggregate, { name: 'aggregateContentLikes' });
+app.use(aggregate, { name: 'aggregateContentDislikes' });
+app.use(aggregate, { name: 'aggregateContentComments' });
+app.use(aggregate, { name: 'aggregateContentCommentLikes' });
+app.use(aggregate, { name: 'aggregateContentCommentDislikes' });
 app.use(rag);
 app.use(r2);
 

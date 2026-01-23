@@ -17,7 +17,10 @@
 		FileText,
 		X,
 		Search,
-		Zap
+		Zap,
+		ThumbsUp,
+		ThumbsDown,
+		MessageCircle
 	} from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -263,6 +266,21 @@
 				<p class="line-clamp-2 text-sm leading-relaxed break-words text-muted-foreground">
 					{item.body}
 				</p>
+
+				<div class="flex items-center gap-4 pt-1 text-[10px] text-muted-foreground uppercase">
+					<div class="flex items-center gap-1">
+						<ThumbsUp class="h-3 w-3" />
+						{item.likes}
+					</div>
+					<div class="flex items-center gap-1">
+						<ThumbsDown class="h-3 w-3" />
+						{item.dislikes}
+					</div>
+					<div class="flex items-center gap-1">
+						<MessageCircle class="h-3 w-3" />
+						{item.commentCount}
+					</div>
+				</div>
 			</div>
 
 			<Button

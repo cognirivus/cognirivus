@@ -72,6 +72,15 @@ async function deleteCommentWithReactions(ctx: MutationCtx, commentId: Id<'blog_
 	const comment = await ctx.db.get(commentId);
 	if (!comment) return;
 
+	// Delete all child comments recursively
+	const childComments = await ctx.db
+		.query('blog_comments')
+		.withIndex('by_parent', (q) => q.eq('parentId', commentId))
+		.collect();
+	for (const child of childComments) {
+		await deleteCommentWithReactions(ctx, child._id);
+	}
+
 	const reactions = await ctx.db
 		.query('comment_reactions')
 		.withIndex('by_comment', (q) => q.eq('commentId', commentId))
@@ -490,7 +499,7 @@ export const getComments = query({
 		const comments = await ctx.db
 			.query('blog_comments')
 			.withIndex('by_blog_created_at', (q) => q.eq('blogId', args.blogId))
-			.order('desc')
+			.order('asc')
 			.collect();
 
 		const identity = await ctx.auth.getUserIdentity();
@@ -614,7 +623,11 @@ export const toggleDislike = mutation({
 });
 
 export const addComment = mutation({
-	args: { blogId: v.id('blogs'), body: v.string() },
+	args: {
+		blogId: v.id('blogs'),
+		body: v.string(),
+		parentId: v.optional(v.id('blog_comments'))
+	},
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
@@ -622,7 +635,9 @@ export const addComment = mutation({
 		const id = await ctx.db.insert('blog_comments', {
 			blogId: args.blogId,
 			userId: user._id,
+			userName: user.name,
 			body: args.body,
+			parentId: args.parentId,
 			createdAt: Date.now()
 		});
 		const doc = await ctx.db.get(id);
@@ -645,7 +660,22 @@ export const removeComment = mutation({
 			throw new Error('Forbidden');
 		}
 
-		await deleteCommentWithReactions(ctx, args.id);
+		// Check if it has child comments
+		const childComments = await ctx.db
+			.query('blog_comments')
+			.withIndex('by_parent', (q) => q.eq('parentId', args.id))
+			.first();
+
+		if (childComments) {
+			// Soft delete: keep node but mask content
+			await ctx.db.patch(args.id, {
+				userName: 'Deleted',
+				body: 'This message was deleted by the user'
+			});
+		} else {
+			// Hard delete: remove normally
+			await deleteCommentWithReactions(ctx, args.id);
+		}
 	}
 });
 

@@ -1,9 +1,91 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
-import { internalMutation, internalQuery, mutation, query } from './_generated/server';
-import { api, internal } from './_generated/api';
-import type { Id } from './_generated/dataModel';
+import {
+	internalMutation,
+	internalQuery,
+	mutation,
+	query,
+	type MutationCtx
+} from './_generated/server';
+import { api, internal, components } from './_generated/api';
+import type { Id, DataModel } from './_generated/dataModel';
 import { authComponent } from './auth';
+import { TableAggregate } from '@convex-dev/aggregate';
+
+// Content reactions aggregates
+const contentLikesAggregate = new TableAggregate<{
+	Key: Id<'content'>;
+	DataModel: DataModel;
+	TableName: 'content_reactions';
+}>(components.aggregateContentLikes, {
+	sortKey: (doc) => doc.contentId
+});
+
+const contentDislikesAggregate = new TableAggregate<{
+	Key: Id<'content'>;
+	DataModel: DataModel;
+	TableName: 'content_reactions';
+}>(components.aggregateContentDislikes, {
+	sortKey: (doc) => doc.contentId
+});
+
+const contentCommentsAggregate = new TableAggregate<{
+	Key: Id<'content'>;
+	DataModel: DataModel;
+	TableName: 'content_comments';
+}>(components.aggregateContentComments, {
+	sortKey: (doc) => doc.contentId
+});
+
+const contentCommentLikesAggregate = new TableAggregate<{
+	Key: Id<'content_comments'>;
+	DataModel: DataModel;
+	TableName: 'content_comment_reactions';
+}>(components.aggregateContentCommentLikes, {
+	sortKey: (doc) => doc.commentId
+});
+
+const contentCommentDislikesAggregate = new TableAggregate<{
+	Key: Id<'content_comments'>;
+	DataModel: DataModel;
+	TableName: 'content_comment_reactions';
+}>(components.aggregateContentCommentDislikes, {
+	sortKey: (doc) => doc.commentId
+});
+
+async function deleteContentCommentWithReactions(
+	ctx: MutationCtx,
+	commentId: Id<'content_comments'>
+) {
+	const comment = await ctx.db.get(commentId);
+	if (!comment) return;
+
+	// Delete all child comments recursively
+	const childComments = await ctx.db
+		.query('content_comments')
+		.withIndex('by_parent', (q) => q.eq('parentId', commentId))
+		.collect();
+	for (const child of childComments) {
+		await deleteContentCommentWithReactions(ctx, child._id);
+	}
+
+	// Delete reactions
+	const reactions = await ctx.db
+		.query('content_comment_reactions')
+		.withIndex('by_comment', (q) => q.eq('commentId', commentId))
+		.collect();
+	for (const reaction of reactions) {
+		await ctx.db.delete(reaction._id);
+		if (reaction.like_dislike === 1) {
+			await contentCommentLikesAggregate.delete(ctx, reaction);
+		} else {
+			await contentCommentDislikesAggregate.delete(ctx, reaction);
+		}
+	}
+
+	await ctx.db.delete(commentId);
+	await contentCommentsAggregate.delete(ctx, comment);
+}
 
 async function enrichContentItems(ctx: any, items: any[]) {
 	return await Promise.all(
@@ -24,11 +106,36 @@ async function enrichContentItems(ctx: any, items: any[]) {
 
 			const entities = await Promise.all(links.map(async (l: any) => await ctx.db.get(l.entityId)));
 
+			// Fetch reactions and comments counts
+			const [likes, dislikes, commentCount] = await Promise.all([
+				contentLikesAggregate.count(ctx, {
+					bounds: {
+						lower: { key: item._id, inclusive: true },
+						upper: { key: item._id, inclusive: true }
+					}
+				}),
+				contentDislikesAggregate.count(ctx, {
+					bounds: {
+						lower: { key: item._id, inclusive: true },
+						upper: { key: item._id, inclusive: true }
+					}
+				}),
+				contentCommentsAggregate.count(ctx, {
+					bounds: {
+						lower: { key: item._id, inclusive: true },
+						upper: { key: item._id, inclusive: true }
+					}
+				})
+			]);
+
 			return {
 				...item,
 				newsDate,
 				subject,
-				entities: entities.filter((e: any): e is NonNullable<typeof e> => !!e)
+				entities: entities.filter((e: any): e is NonNullable<typeof e> => !!e),
+				likes,
+				dislikes,
+				commentCount
 			};
 		})
 	);
@@ -764,5 +871,311 @@ export const getEntity = query({
 	args: { id: v.id('entities') },
 	handler: async (ctx, args) => {
 		return await ctx.db.get(args.id);
+	}
+});
+
+// ===== Content Reactions & Comments =====
+
+export const toggleLike = mutation({
+	args: { contentId: v.id('content') },
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
+
+		const existing = await ctx.db
+			.query('content_reactions')
+			.withIndex('by_content_user', (q) => q.eq('contentId', args.contentId).eq('userId', user._id))
+			.unique();
+
+		if (existing) {
+			await ctx.db.delete(existing._id);
+			if (existing.like_dislike === 1) {
+				await contentLikesAggregate.delete(ctx, existing);
+			} else {
+				await contentDislikesAggregate.delete(ctx, existing);
+				const id = await ctx.db.insert('content_reactions', {
+					contentId: args.contentId,
+					userId: user._id,
+					like_dislike: 1
+				});
+				const doc = await ctx.db.get(id);
+				await contentLikesAggregate.insert(ctx, doc!);
+			}
+		} else {
+			const id = await ctx.db.insert('content_reactions', {
+				contentId: args.contentId,
+				userId: user._id,
+				like_dislike: 1
+			});
+			const doc = await ctx.db.get(id);
+			await contentLikesAggregate.insert(ctx, doc!);
+		}
+	}
+});
+
+export const toggleDislike = mutation({
+	args: { contentId: v.id('content') },
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
+
+		const existing = await ctx.db
+			.query('content_reactions')
+			.withIndex('by_content_user', (q) => q.eq('contentId', args.contentId).eq('userId', user._id))
+			.unique();
+
+		if (existing) {
+			await ctx.db.delete(existing._id);
+			if (existing.like_dislike === -1) {
+				await contentDislikesAggregate.delete(ctx, existing);
+			} else {
+				await contentLikesAggregate.delete(ctx, existing);
+				const id = await ctx.db.insert('content_reactions', {
+					contentId: args.contentId,
+					userId: user._id,
+					like_dislike: -1
+				});
+				const doc = await ctx.db.get(id);
+				await contentDislikesAggregate.insert(ctx, doc!);
+			}
+		} else {
+			const id = await ctx.db.insert('content_reactions', {
+				contentId: args.contentId,
+				userId: user._id,
+				like_dislike: -1
+			});
+			const doc = await ctx.db.get(id);
+			await contentDislikesAggregate.insert(ctx, doc!);
+		}
+	}
+});
+
+export const addComment = mutation({
+	args: {
+		contentId: v.id('content'),
+		body: v.string(),
+		parentId: v.optional(v.id('content_comments'))
+	},
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
+
+		const id = await ctx.db.insert('content_comments', {
+			contentId: args.contentId,
+			userId: user._id,
+			userName: user.name,
+			body: args.body,
+			parentId: args.parentId,
+			createdAt: Date.now()
+		});
+		const doc = await ctx.db.get(id);
+		await contentCommentsAggregate.insert(ctx, doc!);
+		return id;
+	}
+});
+
+export const removeComment = mutation({
+	args: { id: v.id('content_comments') },
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
+
+		const comment = await ctx.db.get(args.id);
+		if (!comment) throw new Error('Comment not found');
+
+		const isAdmin = Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin';
+		if (comment.userId !== user._id && !isAdmin) {
+			throw new Error('Forbidden');
+		}
+
+		// Check if it has child comments
+		const childComments = await ctx.db
+			.query('content_comments')
+			.withIndex('by_parent', (q) => q.eq('parentId', args.id))
+			.first();
+
+		if (childComments) {
+			// Soft delete: keep node but mask content
+			await ctx.db.patch(args.id, {
+				userName: 'Deleted',
+				body: 'This message was deleted by the user'
+			});
+		} else {
+			// Hard delete: remove normally
+			await deleteContentCommentWithReactions(ctx, args.id);
+		}
+	}
+});
+
+export const toggleCommentLike = mutation({
+	args: { commentId: v.id('content_comments') },
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
+
+		const existing = await ctx.db
+			.query('content_comment_reactions')
+			.withIndex('by_comment_user', (q) => q.eq('commentId', args.commentId).eq('userId', user._id))
+			.unique();
+
+		if (existing) {
+			await ctx.db.delete(existing._id);
+			if (existing.like_dislike === 1) {
+				await contentCommentLikesAggregate.delete(ctx, existing);
+			} else {
+				await contentCommentDislikesAggregate.delete(ctx, existing);
+				const id = await ctx.db.insert('content_comment_reactions', {
+					commentId: args.commentId,
+					userId: user._id,
+					like_dislike: 1
+				});
+				const doc = await ctx.db.get(id);
+				await contentCommentLikesAggregate.insert(ctx, doc!);
+			}
+		} else {
+			const id = await ctx.db.insert('content_comment_reactions', {
+				commentId: args.commentId,
+				userId: user._id,
+				like_dislike: 1
+			});
+			const doc = await ctx.db.get(id);
+			await contentCommentLikesAggregate.insert(ctx, doc!);
+		}
+	}
+});
+
+export const toggleCommentDislike = mutation({
+	args: { commentId: v.id('content_comments') },
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Unauthorized');
+
+		const existing = await ctx.db
+			.query('content_comment_reactions')
+			.withIndex('by_comment_user', (q) => q.eq('commentId', args.commentId).eq('userId', user._id))
+			.unique();
+
+		if (existing) {
+			await ctx.db.delete(existing._id);
+			if (existing.like_dislike === -1) {
+				await contentCommentDislikesAggregate.delete(ctx, existing);
+			} else {
+				await contentCommentLikesAggregate.delete(ctx, existing);
+				const id = await ctx.db.insert('content_comment_reactions', {
+					commentId: args.commentId,
+					userId: user._id,
+					like_dislike: -1
+				});
+				const doc = await ctx.db.get(id);
+				await contentCommentDislikesAggregate.insert(ctx, doc!);
+			}
+		} else {
+			const id = await ctx.db.insert('content_comment_reactions', {
+				commentId: args.commentId,
+				userId: user._id,
+				like_dislike: -1
+			});
+			const doc = await ctx.db.get(id);
+			await contentCommentDislikesAggregate.insert(ctx, doc!);
+		}
+	}
+});
+
+export const getComments = query({
+	args: { contentId: v.id('content') },
+	handler: async (ctx, args) => {
+		const comments = await ctx.db
+			.query('content_comments')
+			.withIndex('by_content_created_at', (q) => q.eq('contentId', args.contentId))
+			.order('asc')
+			.collect();
+
+		const identity = await ctx.auth.getUserIdentity();
+		const user = identity ? await authComponent.getAuthUser(ctx) : null;
+
+		const enrichedComments = await Promise.all(
+			comments.map(async (comment) => {
+				const [likes, dislikes] = await Promise.all([
+					contentCommentLikesAggregate.count(ctx, {
+						bounds: {
+							lower: { key: comment._id, inclusive: true },
+							upper: { key: comment._id, inclusive: true }
+						}
+					}),
+					contentCommentDislikesAggregate.count(ctx, {
+						bounds: {
+							lower: { key: comment._id, inclusive: true },
+							upper: { key: comment._id, inclusive: true }
+						}
+					})
+				]);
+
+				let userReaction: 'like' | 'dislike' | null = null;
+				if (user) {
+					const reaction = await ctx.db
+						.query('content_comment_reactions')
+						.withIndex('by_comment_user', (q) =>
+							q.eq('commentId', comment._id).eq('userId', user._id)
+						)
+						.unique();
+					if (reaction) {
+						userReaction = reaction.like_dislike === 1 ? 'like' : 'dislike';
+					}
+				}
+
+				return {
+					...comment,
+					likes,
+					dislikes,
+					userReaction
+				};
+			})
+		);
+
+		return enrichedComments;
+	}
+});
+
+export const getReactionCounts = query({
+	args: { contentId: v.id('content') },
+	handler: async (ctx, args) => {
+		const [likes, dislikes, commentCount] = await Promise.all([
+			contentLikesAggregate.count(ctx, {
+				bounds: {
+					lower: { key: args.contentId, inclusive: true },
+					upper: { key: args.contentId, inclusive: true }
+				}
+			}),
+			contentDislikesAggregate.count(ctx, {
+				bounds: {
+					lower: { key: args.contentId, inclusive: true },
+					upper: { key: args.contentId, inclusive: true }
+				}
+			}),
+			contentCommentsAggregate.count(ctx, {
+				bounds: {
+					lower: { key: args.contentId, inclusive: true },
+					upper: { key: args.contentId, inclusive: true }
+				}
+			})
+		]);
+
+		const identity = await ctx.auth.getUserIdentity();
+		const user = identity ? await authComponent.getAuthUser(ctx) : null;
+
+		let userReaction: 'like' | 'dislike' | null = null;
+		if (user) {
+			const reaction = await ctx.db
+				.query('content_reactions')
+				.withIndex('by_content_user', (q) =>
+					q.eq('contentId', args.contentId).eq('userId', user._id)
+				)
+				.unique();
+			if (reaction) {
+				userReaction = reaction.like_dislike === 1 ? 'like' : 'dislike';
+			}
+		}
+
+		return { likes, dislikes, commentCount, userReaction };
 	}
 });

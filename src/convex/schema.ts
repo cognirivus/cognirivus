@@ -111,11 +111,14 @@ const schema = defineSchema({
 	blog_comments: defineTable({
 		blogId: v.id('blogs'),
 		userId: v.string(),
+		userName: v.optional(v.string()),
 		body: v.string(),
+		parentId: v.optional(v.id('blog_comments')),
 		createdAt: v.number()
 	})
 		.index('by_blog', ['blogId'])
-		.index('by_blog_created_at', ['blogId', 'createdAt']),
+		.index('by_blog_created_at', ['blogId', 'createdAt'])
+		.index('by_parent', ['parentId']),
 	comment_reactions: defineTable({
 		commentId: v.id('blog_comments'),
 		userId: v.string(),
@@ -232,6 +235,31 @@ const schema = defineSchema({
 		.index('by_subjectId', ['subjectId'])
 		.index('by_topic', ['topic'])
 		.index('by_created_at', ['createdAt']),
+	content_reactions: defineTable({
+		contentId: v.id('content'),
+		userId: v.string(),
+		like_dislike: v.number()
+	})
+		.index('by_content', ['contentId'])
+		.index('by_content_user', ['contentId', 'userId']),
+	content_comments: defineTable({
+		contentId: v.id('content'),
+		userId: v.string(),
+		userName: v.optional(v.string()),
+		body: v.string(),
+		parentId: v.optional(v.id('content_comments')),
+		createdAt: v.number()
+	})
+		.index('by_content', ['contentId'])
+		.index('by_content_created_at', ['contentId', 'createdAt'])
+		.index('by_parent', ['parentId']),
+	content_comment_reactions: defineTable({
+		commentId: v.id('content_comments'),
+		userId: v.string(),
+		like_dislike: v.number()
+	})
+		.index('by_comment', ['commentId'])
+		.index('by_comment_user', ['commentId', 'userId']),
 	extraction_jobs: defineTable({
 		sourceType: v.string(),
 		sourceIds: v.array(v.string()),

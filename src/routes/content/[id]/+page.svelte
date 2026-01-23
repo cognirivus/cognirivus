@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { useQuery } from 'convex-svelte';
+	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import { page } from '$app/state';
 	import { Badge } from '$lib/components/ui/badge';
@@ -20,9 +20,14 @@
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { Markdown } from '$lib/components/prompt-kit/markdown/index.js';
 	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
-	import { goto } from '$app/navigation';
+	import { ReactionsBar, CommentsSection } from '$lib/components/interactions/index.js';
+	import { authClient } from '$lib/auth-client';
+	import type { Id } from '$convex/_generated/dataModel';
 
-	const contentId = $derived(page.params.id as any);
+	const contentId = $derived(page.params.id as Id<'content'>);
+	const client = useConvexClient();
+	const session = authClient.useSession();
+
 	const contentQuery = useQuery((api as any).content.getById, () =>
 		contentId ? { id: contentId } : 'skip'
 	);
@@ -34,6 +39,24 @@
 
 	const progressQuery = useQuery(api.content.getUserProgress, {});
 
+	const reactionsQuery = useQuery(api.content.getReactionCounts, () =>
+		contentId ? { contentId } : 'skip'
+	);
+	const reactions = $derived(
+		reactionsQuery.data ?? { likes: 0, dislikes: 0, commentCount: 0, userReaction: null }
+	);
+
+	const commentsQuery = useQuery(api.content.getComments, () =>
+		contentId ? { contentId } : 'skip'
+	);
+	const comments = $derived(commentsQuery.data ?? []);
+
+	const isAuthenticated = $derived(!!session.value?.data?.user);
+	const currentUserId = $derived(session.value?.data?.user?.id);
+	const currentUserInitial = $derived(
+		session.value?.data?.user?.name?.charAt(0).toUpperCase() ?? 'U'
+	);
+
 	function getEntityIcon(type: string) {
 		const t = type.toLowerCase();
 		if (t === 'location' || t.includes('place')) return MapPin;
@@ -41,6 +64,67 @@
 		if (t.includes('organization') || t.includes('office')) return Building2;
 		if (t.includes('legislation') || t.includes('act') || t.includes('law')) return Briefcase;
 		return Tag;
+	}
+
+	async function handleLike() {
+		if (!isAuthenticated) return;
+		try {
+			await client.mutation(api.content.toggleLike, { contentId });
+		} catch (e) {
+			console.error('Failed to toggle like:', e);
+		}
+	}
+
+	async function handleDislike() {
+		if (!isAuthenticated) return;
+		try {
+			await client.mutation(api.content.toggleDislike, { contentId });
+		} catch (e) {
+			console.error('Failed to toggle dislike:', e);
+		}
+	}
+
+	async function handleAddComment(body: string, parentId?: string) {
+		await client.mutation(api.content.addComment, {
+			contentId,
+			body,
+			parentId: parentId as Id<'content_comments'> | undefined
+		});
+	}
+
+	async function handleDeleteComment(commentId: string) {
+		if (!confirm('Are you sure you want to delete this comment?')) return;
+		try {
+			await client.mutation(api.content.removeComment, { id: commentId as Id<'content_comments'> });
+		} catch (e) {
+			console.error('Failed to delete comment:', e);
+		}
+	}
+
+	async function handleCommentLike(commentId: string) {
+		if (!isAuthenticated) return;
+		try {
+			await client.mutation(api.content.toggleCommentLike, {
+				commentId: commentId as Id<'content_comments'>
+			});
+		} catch (e) {
+			console.error('Failed to toggle comment like:', e);
+		}
+	}
+
+	async function handleCommentDislike(commentId: string) {
+		if (!isAuthenticated) return;
+		try {
+			await client.mutation(api.content.toggleCommentDislike, {
+				commentId: commentId as Id<'content_comments'>
+			});
+		} catch (e) {
+			console.error('Failed to toggle comment dislike:', e);
+		}
+	}
+
+	function scrollToComments() {
+		document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth' });
 	}
 </script>
 
@@ -144,6 +228,20 @@
 							{/if}
 						</div>
 
+						<!-- Reactions Bar -->
+						<div class="border-t border-b border-border py-4">
+							<ReactionsBar
+								likes={reactions.likes}
+								dislikes={reactions.dislikes}
+								commentCount={reactions.commentCount}
+								userReaction={reactions.userReaction}
+								{isAuthenticated}
+								onLike={handleLike}
+								onDislike={handleDislike}
+								onScrollToComments={scrollToComments}
+							/>
+						</div>
+
 						<!-- Entities -->
 						{#if item.entities && item.entities.length > 0}
 							<div class="flex flex-wrap items-center gap-2 border-t pt-4">
@@ -216,6 +314,19 @@
 							</Button>
 						</footer>
 					{/if}
+
+					<!-- Comments Section -->
+					<CommentsSection
+						{comments}
+						isLoading={commentsQuery.isLoading}
+						{isAuthenticated}
+						{currentUserId}
+						{currentUserInitial}
+						onAddComment={handleAddComment}
+						onDeleteComment={handleDeleteComment}
+						onCommentLike={handleCommentLike}
+						onCommentDislike={handleCommentDislike}
+					/>
 				</article>
 			{/if}
 		</div>
