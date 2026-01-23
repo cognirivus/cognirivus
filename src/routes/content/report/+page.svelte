@@ -302,8 +302,8 @@
 											<h3 class="text-xs font-bold tracking-tight uppercase">{subjectName}</h3>
 										</div>
 
-										<div class="overflow-hidden rounded-lg border shadow-sm">
-											<table class="w-full text-sm">
+										<div class="overflow-x-auto rounded-lg border shadow-sm">
+											<table class="w-full min-w-[600px] text-sm lg:min-w-0">
 												<thead>
 													<tr class="border-b bg-muted/50">
 														<th

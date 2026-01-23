@@ -18,6 +18,7 @@
 		FileText
 	} from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
+	import { Markdown } from '$lib/components/prompt-kit/markdown/index.js';
 	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 	import { goto } from '$app/navigation';
 
@@ -192,9 +193,7 @@
 					<!-- Content Body -->
 					<div class="rounded-lg border bg-card p-6 shadow-sm">
 						<div class="prose prose-zinc dark:prose-invert max-w-none">
-							<p class="text-base leading-relaxed whitespace-pre-wrap text-foreground/90">
-								{item.body}
-							</p>
+							<Markdown content={item.body} />
 						</div>
 					</div>
 
@@ -221,9 +220,4 @@
 			{/if}
 		</div>
 	</div>
-
-	<!-- Right Sidebar -->
-	<aside class="hidden w-80 shrink-0 flex-col border-l bg-muted/5 lg:flex">
-		<!-- Empty for now, reserved for metadata/related items -->
-	</aside>
 </div>

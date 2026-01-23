@@ -20,6 +20,8 @@
 		FileText,
 		BookOpen,
 		PanelLeft,
+		PanelRight,
+		Info,
 		Zap,
 		Library
 	} from '@lucide/svelte';
@@ -36,14 +38,22 @@
 
 	// Sidebar state
 	let isSidebarOpen = $state(true);
+	let isRightSidebarOpen = $state(false);
 	let isMobile = $state(false);
 
 	$effect(() => {
 		if (browser) {
 			const checkMobile = () => {
-				isMobile = window.innerWidth < 1024;
-				if (isMobile) isSidebarOpen = false;
-				else isSidebarOpen = true;
+				const mobile = window.innerWidth < 1024;
+				if (mobile !== isMobile) {
+					isMobile = mobile;
+					isSidebarOpen = !mobile;
+					if (!mobile) {
+						isRightSidebarOpen = true;
+					} else {
+						isRightSidebarOpen = false;
+					}
+				}
 			};
 			checkMobile();
 			window.addEventListener('resize', checkMobile);
@@ -53,6 +63,10 @@
 
 	function toggleSidebar() {
 		isSidebarOpen = !isSidebarOpen;
+	}
+
+	function toggleRightSidebar() {
+		isRightSidebarOpen = !isRightSidebarOpen;
 	}
 
 	// Read state from URL search params
@@ -72,10 +86,10 @@
 	});
 
 	const subjectsQuery = useQuery(api.subjects.list, {});
-	const entityTypesQuery = useQuery((api as any).content.listEntityTypes, {});
+	const entityTypesQuery = useQuery(api.content.listEntityTypes, {});
 
 	const allSubjects = $derived(subjectsQuery.data || []);
-	const allEntityTypes = $derived((entityTypesQuery.data as any[]) || []);
+	const allEntityTypes = $derived(entityTypesQuery.data || []);
 
 	const subjects = $derived(
 		selectedGsPapers.length > 0
@@ -174,13 +188,16 @@
 	<title>Intelligence Center - Cognirivus</title>
 </svelte:head>
 
-<div class="flex h-[calc(100vh-40px)] w-full overflow-hidden bg-background">
+<div class="flex h-[calc(100vh-40px)] w-full max-w-full overflow-hidden bg-background">
 	<!-- Mobile Overlay -->
-	{#if isSidebarOpen && isMobile}
+	{#if (isSidebarOpen || isRightSidebarOpen) && isMobile}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			onclick={() => (isSidebarOpen = false)}
+			onclick={() => {
+				isSidebarOpen = false;
+				isRightSidebarOpen = false;
+			}}
 			class="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm transition-opacity duration-300 lg:hidden"
 		></div>
 	{/if}
@@ -371,55 +388,66 @@
 			</button>
 		{/if}
 
+		{#if !isRightSidebarOpen && isMobile}
+			<button
+				onclick={toggleRightSidebar}
+				class="absolute top-0 right-0 z-50 flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				title="Open Analysis"
+			>
+				<PanelRight class="h-4 w-4" />
+			</button>
+		{/if}
+
 		<!-- Main Header / Search -->
 		<header
-			class="flex h-10 shrink-0 items-center justify-between bg-background px-4 {isSidebarOpen
+			class="flex h-12 shrink-0 items-center justify-center gap-4 bg-background px-4 lg:h-10 {isSidebarOpen
 				? ''
-				: 'pl-12'}"
+				: 'pl-12'} {isRightSidebarOpen || !isMobile ? '' : 'pr-12'}"
 		>
-			<div class="flex w-full max-w-2xl items-center gap-2 sm:gap-4">
-				<div class="relative flex-1">
-					<Search
-						class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-					/>
-					<Input
-						type="text"
-						placeholder="Search knowledge center..."
-						bind:value={searchInput}
-						onkeydown={(e) => e.key === 'Enter' && handleSearch()}
-						class="h-8 border-none bg-muted/30 pr-10 pl-9 text-xs ring-offset-background transition-all focus-visible:ring-primary/20"
-					/>
-					{#if searchInput}
-						<button
-							onclick={() => {
-								searchInput = '';
-								handleSearch();
-							}}
-							class="absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-						>
-							<X class="h-3 w-3" />
-						</button>
-					{/if}
+			<div class="flex min-w-0 items-center gap-4 sm:gap-8">
+				<div class="flex min-w-0 items-center gap-2 sm:max-w-xl sm:gap-4">
+					<div class="relative min-w-0 flex-1">
+						<Search
+							class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+						/>
+						<Input
+							type="text"
+							placeholder={isMobile ? 'Search...' : 'Search knowledge center...'}
+							bind:value={searchInput}
+							onkeydown={(e) => e.key === 'Enter' && handleSearch()}
+							class="h-8 w-full border-none bg-muted/30 pr-10 pl-9 text-xs ring-offset-background transition-all focus-visible:ring-primary/20"
+						/>
+						{#if searchInput}
+							<button
+								onclick={() => {
+									searchInput = '';
+									handleSearch();
+								}}
+								class="absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+							>
+								<X class="h-3 w-3" />
+							</button>
+						{/if}
+					</div>
+					<Button
+						onclick={handleSearch}
+						size="sm"
+						class="h-8 px-2 text-xs font-bold tracking-tight uppercase sm:px-4"
+					>
+						<Search class="h-3.5 w-3.5 sm:mr-2" />
+						<span class="hidden sm:inline">Search</span>
+					</Button>
 				</div>
-				<Button
-					onclick={handleSearch}
-					size="sm"
-					class="h-8 px-4 text-xs font-bold tracking-tight uppercase">Search</Button
-				>
-			</div>
 
-			<div class="flex items-center gap-4">
-				<div class="flex items-center space-x-2">
+				<div class="flex shrink-0 items-center space-x-1.5 border-l pl-4 sm:space-x-2 sm:pl-8">
 					<Label
 						for="news-toggle"
 						class="flex cursor-pointer items-center gap-1.5 text-[10px] font-bold tracking-tight text-muted-foreground uppercase"
 					>
-						{#if includeNews}
-							<Zap class="h-3 w-3 fill-orange-500 text-orange-500" />
-							<span class="text-orange-500">Current Affairs</span>
-						{:else}
-							<span>Current Affairs</span>
-						{/if}
+						<Zap class="h-3.5 w-3.5 {includeNews ? 'fill-orange-500/20 text-orange-500' : ''}" />
+						<span class="hidden sm:inline {includeNews ? 'text-orange-500' : ''}">
+							Current Affairs
+						</span>
 					</Label>
 					<Switch id="news-toggle" checked={includeNews} onCheckedChange={toggleNews} />
 				</div>
@@ -430,7 +458,58 @@
 		<div class="relative flex-1 overflow-hidden">
 			{@render children()}
 		</div>
+
+		<!-- Right Sidebar FAB for Mobile -->
+		{#if isMobile}
+			<button
+				onclick={() => (isRightSidebarOpen = true)}
+				class="fixed right-6 bottom-12 z-40 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:scale-105 active:scale-95 lg:hidden {isRightSidebarOpen
+					? 'pointer-events-none scale-0 opacity-0'
+					: 'scale-100 opacity-100'}"
+				aria-label="View Details"
+			>
+				<Info class="size-4" />
+			</button>
+		{/if}
 	</main>
+
+	<!-- Right Sidebar -->
+	<aside
+		class="fixed inset-y-0 right-0 z-50 flex h-full flex-col border-l bg-sidebar transition-[transform,opacity,width] duration-300 ease-in-out lg:relative
+        {isRightSidebarOpen || !isMobile
+			? 'translate-x-0 opacity-100'
+			: 'translate-x-full opacity-0'}
+        {isRightSidebarOpen || !isMobile
+			? 'w-72'
+			: 'lg:w-0 lg:overflow-hidden lg:border-transparent'}"
+	>
+		<div class="flex h-10 items-center justify-between gap-2 border-b px-4">
+			{#if isMobile}
+				<button
+					class="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					onclick={() => (isRightSidebarOpen = false)}
+				>
+					<PanelRight class="h-4 w-4" />
+				</button>
+			{/if}
+			<div class="flex flex-1 items-center justify-end gap-2">
+				<h2 class="text-[11px] font-bold tracking-tight text-foreground/80 uppercase">
+					Analysis & Details
+				</h2>
+				<Info class="h-3.5 w-3.5 text-primary" />
+			</div>
+		</div>
+
+		<div class="flex-1 space-y-6 overflow-y-auto p-6">
+			<div class="flex h-full flex-col items-center justify-center text-center">
+				<div class="rounded-full bg-muted p-5">
+					<Info class="size-10 text-muted-foreground" />
+				</div>
+				<h3 class="mt-5 text-base font-medium text-foreground">No selection</h3>
+				<p class="mt-1 text-sm text-muted-foreground">Select an item to see detailed analysis.</p>
+			</div>
+		</div>
+	</aside>
 </div>
 
 <style>

@@ -243,7 +243,7 @@
 	<!-- Mobile Navigation -->
 	{#if isMobileMenuOpen}
 		<div class="border-b border-border bg-background/95 backdrop-blur-md md:hidden">
-			<div class="space-y-1 px-4 py-4">
+			<div class="space-y-0.5 px-4 py-3">
 				{#if auth.isLoading && !user}
 					<div class="space-y-2 py-2">
 						<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
@@ -255,18 +255,18 @@
 					{#each filteredNavItems.filter((item) => !item.inPrep) as item}
 						<a
 							href={item.href}
-							class="flex items-center gap-3 rounded-lg px-3 py-3 text-base font-medium transition-colors hover:bg-accent {page
+							class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent {page
 								.url.pathname === item.href
 								? 'bg-accent/50 text-primary'
 								: 'text-muted-foreground'}"
 							onclick={() => (isMobileMenuOpen = false)}
 						>
-							<item.icon class="h-5 w-5" />
+							<item.icon class="h-4 w-4" />
 							{item.name}
 						</a>
 					{/each}
 
-					<div class="mt-4 mb-2 px-3">
+					<div class="mt-4 mb-1 px-3">
 						<p class="text-[10px] font-bold tracking-widest text-muted-foreground/60 uppercase">
 							Prep Tools
 						</p>
@@ -275,13 +275,13 @@
 					{#each prepItems as item}
 						<a
 							href={item.href}
-							class="flex items-center gap-3 rounded-lg px-3 py-3 text-base font-medium transition-colors hover:bg-accent {page
+							class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent {page
 								.url.pathname === item.href
 								? 'bg-accent/50 text-primary'
 								: 'text-muted-foreground'}"
 							onclick={() => (isMobileMenuOpen = false)}
 						>
-							<item.icon class="h-5 w-5" />
+							<item.icon class="h-4 w-4" />
 							{item.name}
 						</a>
 					{/each}
@@ -297,10 +297,10 @@
 					{:else if user}
 						<a
 							href="/profile"
-							class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-base font-medium text-muted-foreground transition-colors hover:bg-accent"
+							class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent"
 							onclick={() => (isMobileMenuOpen = false)}
 						>
-							<User class="h-5 w-5" />
+							<User class="h-4 w-4" />
 							Profile
 						</a>
 						<button
@@ -308,18 +308,18 @@
 								signOut();
 								isMobileMenuOpen = false;
 							}}
-							class="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-base font-medium text-destructive transition-colors hover:bg-destructive/10"
+							class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
 						>
-							<LogOut class="h-5 w-5" />
+							<LogOut class="h-4 w-4" />
 							Sign Out
 						</button>
 					{:else}
 						<a
 							href="/signin"
-							class="flex items-center gap-3 rounded-lg px-3 py-3 text-base font-medium transition-colors hover:bg-accent"
+							class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
 							onclick={() => (isMobileMenuOpen = false)}
 						>
-							<LogIn class="h-5 w-5" />
+							<LogIn class="h-4 w-4" />
 							Sign In
 						</a>
 					{/if}

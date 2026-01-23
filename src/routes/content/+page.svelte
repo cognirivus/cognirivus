@@ -213,18 +213,21 @@
 
 {#snippet contentCard(item: any)}
 	<article
-		class="group relative flex flex-col gap-2 rounded-lg border-b border-border/40 px-4 py-6 transition-colors last:border-0 hover:bg-muted/30"
+		class="group relative flex w-full min-w-0 flex-col gap-2 rounded-lg border-b border-border/40 px-3 py-6 transition-colors last:border-0 hover:bg-muted/30 sm:px-4"
 	>
-		<div class="flex flex-wrap items-center gap-3">
+		<div class="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
 			{#if item.subject}
 				<Badge
 					variant="outline"
-					class="border-primary/20 bg-primary/5 text-[10px] font-bold tracking-wider text-primary uppercase"
+					class="h-auto border-primary/20 bg-primary/5 text-[10px] font-bold tracking-wider whitespace-normal text-primary uppercase"
 				>
 					GS {item.subject.gsPaper} | {item.subject.name}
 				</Badge>
 			{/if}
-			<Badge variant="secondary" class="flex items-center gap-1 text-[10px] uppercase">
+			<Badge
+				variant="secondary"
+				class="flex h-auto items-center gap-1 text-[10px] whitespace-normal uppercase"
+			>
 				<Tag class="h-2.5 w-2.5" />
 				{item.topic}
 			</Badge>
@@ -250,14 +253,14 @@
 		</div>
 
 		<div class="flex items-start justify-between gap-4">
-			<div class="space-y-2">
+			<div class="min-w-0 flex-1 space-y-2">
 				<a
 					href="/content/{item._id}"
-					class="block text-lg leading-snug font-bold tracking-tight text-foreground/90 transition-colors group-hover:text-primary sm:text-xl"
+					class="block text-lg leading-snug font-bold tracking-tight break-words text-foreground/90 transition-colors group-hover:text-primary sm:text-xl"
 				>
 					{item.title}
 				</a>
-				<p class="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+				<p class="line-clamp-2 text-sm leading-relaxed break-words text-muted-foreground">
 					{item.body}
 				</p>
 			</div>
@@ -275,7 +278,7 @@
 {/snippet}
 
 <div class="flex h-full flex-col">
-	<div class="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+	<div class="flex-1 overflow-x-hidden overflow-y-auto px-3 py-6 sm:px-6">
 		<!-- Active Filters Header -->
 		{#if hasActiveFilters}
 			<div class="mb-6 rounded-lg border bg-muted/30 p-4">
@@ -311,7 +314,7 @@
 
 					{#each selectedSubjectNames as name}
 						{@const subjectId = allSubjects.find((s: any) => s.name === name)?._id}
-						<Badge variant="secondary" class="gap-1.5 pr-1">
+						<Badge variant="secondary" class="gap-1.5 pr-1 whitespace-normal">
 							{name}
 							<button
 								onclick={() => removeFilter('subject', subjectId)}
@@ -396,7 +399,10 @@
 								{#each selectedEntityIds as id}
 									{@const ent = availableEntities.find((e) => e._id === id)}
 									{#if ent}
-										<Badge variant="secondary" class="h-6 gap-1 px-2 text-[10px]">
+										<Badge
+											variant="secondary"
+											class="h-auto gap-1 px-2 text-[10px] whitespace-normal"
+										>
 											{ent.name}
 											<button
 												onclick={() => removeFilter('entity', id)}
@@ -473,8 +479,8 @@
 		{/if}
 
 		{#if contentQuery.isLoading}
-			<div class="overflow-hidden rounded-lg border">
-				<table class="w-full">
+			<div class="overflow-x-auto rounded-lg border">
+				<table class="w-full min-w-[600px] sm:min-w-0">
 					<thead class="bg-muted/50">
 						<tr>
 							<th class="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase"
@@ -542,15 +548,15 @@
 							onclick={() => toggleGroup(entity._id)}
 							class="flex w-full items-center justify-between bg-muted/50 px-4 py-3 transition-colors hover:bg-muted/70"
 						>
-							<div class="flex items-center gap-3">
+							<div class="flex min-w-0 items-center gap-3">
 								<div
-									class="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary"
+									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
 								>
 									<Icon class="h-4 w-4" />
 								</div>
-								<div class="text-left">
-									<h3 class="font-bold text-foreground">{entity.name}</h3>
-									<p class="text-[10px] font-medium text-muted-foreground uppercase">
+								<div class="min-w-0 text-left">
+									<h3 class="truncate font-bold text-foreground">{entity.name}</h3>
+									<p class="truncate text-[10px] font-medium text-muted-foreground uppercase">
 										{items.length} item{items.length !== 1 ? 's' : ''}
 										{#if !isOther}
 											<span class="mx-1">•</span>
@@ -559,7 +565,7 @@
 									</p>
 								</div>
 							</div>
-							<div class="flex items-center gap-2">
+							<div class="flex shrink-0 items-center gap-2">
 								{#if !isOther && entity.slug}
 									<Button
 										variant="ghost"
@@ -633,11 +639,11 @@
 		<footer
 			class="mt-auto border-t bg-background px-4 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.02)] sm:px-6"
 		>
-			<div class="flex items-center justify-between">
-				<div class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+			<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+				<div class="min-w-0 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
 					Page <span class="text-foreground">{currentIndex + 1}</span>
 					{#if shouldGroupByEntity && groupedByEntity}
-						<span class="ml-2 font-normal normal-case">
+						<span class="ml-2 hidden font-normal normal-case sm:inline">
 							({groupedByEntity.length} group{groupedByEntity.length !== 1 ? 's' : ''})
 						</span>
 					{/if}

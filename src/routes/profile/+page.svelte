@@ -72,10 +72,12 @@
 	};
 </script>
 
-<div class="container mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-	<div class="mb-10">
-		<h1 class="text-4xl font-extrabold tracking-tight">Your Profile</h1>
-		<p class="mt-2 text-muted-foreground">Manage your account details and preferences.</p>
+<div class="container mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+	<div class="mb-8 sm:mb-10">
+		<h1 class="text-3xl font-extrabold tracking-tight sm:text-4xl">Your Profile</h1>
+		<p class="mt-2 text-sm text-muted-foreground sm:text-base">
+			Manage your account details and preferences.
+		</p>
 	</div>
 
 	{#if user}
@@ -93,9 +95,11 @@
 								</Avatar.Fallback>
 							</Avatar.Root>
 						</div>
-						<div class="mt-20">
-							<h2 class="text-2xl font-bold tracking-tight">{user.name}</h2>
-							<p class="text-sm text-muted-foreground">{user.email}</p>
+						<div class="mt-20 px-2">
+							<h2 class="truncate text-2xl font-bold tracking-tight" title={user.name}>
+								{user.name}
+							</h2>
+							<p class="truncate text-sm text-muted-foreground" title={user.email}>{user.email}</p>
 
 							<div class="mt-4 flex flex-wrap justify-center gap-2">
 								<Badge
@@ -138,14 +142,14 @@
 					<Card.Content class="space-y-4">
 						{#if user.role === 'admin'}
 							<div
-								class="flex items-center gap-4 rounded-xl border bg-muted/20 p-4 transition-colors hover:bg-muted/30"
+								class="flex items-center gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:p-4"
 							>
 								<div
-									class="flex h-10 w-10 items-center justify-center rounded-full bg-background shadow-sm"
+									class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background shadow-sm"
 								>
 									<Shield class="h-5 w-5 text-primary" />
 								</div>
-								<div class="flex-1 overflow-hidden">
+								<div class="min-w-0 flex-1">
 									<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
 										System Identifier
 									</p>
@@ -155,69 +159,69 @@
 						{/if}
 
 						<div
-							class="flex items-center gap-4 rounded-xl border bg-muted/20 p-4 transition-colors hover:bg-muted/30"
+							class="flex items-center gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:p-4"
 						>
 							<div
-								class="flex h-10 w-10 items-center justify-center rounded-full bg-background shadow-sm"
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background shadow-sm"
 							>
 								<User class="h-5 w-5 text-primary" />
 							</div>
-							<div class="flex-1">
+							<div class="min-w-0 flex-1">
 								<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
 									Display Name
 								</p>
-								<p class="font-medium">{user.name || 'Not provided'}</p>
+								<p class="truncate font-medium">{user.name || 'Not provided'}</p>
 							</div>
 						</div>
 
 						<div
-							class="flex items-center gap-4 rounded-xl border bg-muted/20 p-4 transition-colors hover:bg-muted/30"
+							class="flex items-center gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:p-4"
 						>
 							<div
-								class="flex h-10 w-10 items-center justify-center rounded-full bg-background shadow-sm"
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background shadow-sm"
 							>
 								<Mail class="h-5 w-5 text-primary" />
 							</div>
-							<div class="flex-1">
+							<div class="min-w-0 flex-1">
 								<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
 									Verified Email
 								</p>
-								<p class="font-medium">{user.email}</p>
+								<p class="truncate font-medium">{user.email}</p>
 							</div>
 						</div>
 
 						<Separator class="my-2" />
 
-						<div class="grid gap-4 sm:grid-cols-2">
+						<div class="grid gap-3 sm:grid-cols-2 sm:gap-4">
 							<div
-								class="flex items-center gap-4 rounded-xl border bg-muted/20 p-4 transition-colors hover:bg-muted/30"
+								class="flex items-center gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:p-4"
 							>
 								<div
-									class="flex h-10 w-10 items-center justify-center rounded-full bg-background shadow-sm"
+									class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background shadow-sm"
 								>
 									<Calendar class="h-5 w-5 text-primary" />
 								</div>
-								<div class="flex-1">
+								<div class="min-w-0 flex-1">
 									<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
 										Member Since
 									</p>
-									<p class="font-medium">{formatDate(user.createdAt)}</p>
+									<p class="truncate font-medium">{formatDate(user.createdAt)}</p>
 								</div>
 							</div>
 
 							<div
-								class="flex items-center gap-4 rounded-xl border bg-muted/20 p-4 transition-colors hover:bg-muted/30"
+								class="flex items-center gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:p-4"
 							>
 								<div
-									class="flex h-10 w-10 items-center justify-center rounded-full bg-background shadow-sm"
+									class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background shadow-sm"
 								>
 									<Clock class="h-5 w-5 text-primary" />
 								</div>
-								<div class="flex-1">
+								<div class="min-w-0 flex-1">
 									<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
 										Last Modified
 									</p>
-									<p class="font-medium">{formatDate(user.updatedAt)}</p>
+									<p class="truncate font-medium">{formatDate(user.updatedAt)}</p>
 								</div>
 							</div>
 						</div>
@@ -226,8 +230,10 @@
 
 				{#if user.role === 'admin'}
 					<Card.Root class="border-primary/20 bg-primary/5">
-						<Card.Header class="flex flex-row items-center gap-4 space-y-0">
-							<div class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20">
+						<Card.Header class="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-center">
+							<div
+								class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/20"
+							>
 								<ShieldCheck class="h-6 w-6 text-primary" />
 							</div>
 							<div class="flex-1">
@@ -248,8 +254,10 @@
 
 				<!-- Danger Zone -->
 				<Card.Root class="border-destructive/30 bg-destructive/5">
-					<Card.Header class="flex flex-row items-center gap-4 space-y-0">
-						<div class="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+					<Card.Header class="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-center">
+						<div
+							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-destructive/10"
+						>
 							<AlertTriangle class="h-6 w-6 text-destructive" />
 						</div>
 						<div class="flex-1">
@@ -287,12 +295,14 @@
 					<Skeleton class="h-32 w-full" />
 					<Card.Content class="relative px-6 pb-6 text-center">
 						<div class="absolute -top-16 left-1/2 -translate-x-1/2">
-							<Skeleton class="h-32 w-32 rounded-full" />
+							<Skeleton class="h-32 w-32 rounded-full border-4 border-background shadow-xl" />
 						</div>
-						<div class="mt-20 flex flex-col items-center space-y-2">
-							<Skeleton class="h-6 w-32" />
+						<div class="mt-20 flex flex-col items-center space-y-2 px-2">
+							<Skeleton class="h-7 w-32" />
 							<Skeleton class="h-4 w-48" />
-							<Skeleton class="mt-2 h-6 w-20 rounded-full" />
+							<div class="mt-2">
+								<Skeleton class="h-6 w-20 rounded-full" />
+							</div>
 						</div>
 					</Card.Content>
 				</Card.Root>
