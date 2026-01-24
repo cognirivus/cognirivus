@@ -396,6 +396,7 @@ export const remove = mutation({
 export const getById = query({
 	args: { id: v.id('content') },
 	handler: async (ctx, args) => {
+		console.log('Fetching content by ID:', args.id);
 		const item = await ctx.db.get(args.id);
 		if (!item) return null;
 
@@ -877,7 +878,7 @@ export const getEntity = query({
 // ===== Content Reactions & Comments =====
 
 export const toggleLike = mutation({
-	args: { contentId: v.id('content') },
+	args: { contentId: v.id('content'), groupId: v.optional(v.id('groups')) },
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
@@ -885,36 +886,43 @@ export const toggleLike = mutation({
 		const existing = await ctx.db
 			.query('content_reactions')
 			.withIndex('by_content_user', (q) => q.eq('contentId', args.contentId).eq('userId', user._id))
+			.filter((q) => q.eq(q.field('groupId'), args.groupId))
 			.unique();
 
 		if (existing) {
 			await ctx.db.delete(existing._id);
 			if (existing.like_dislike === 1) {
-				await contentLikesAggregate.delete(ctx, existing);
+				if (!args.groupId) await contentLikesAggregate.delete(ctx, existing);
 			} else {
-				await contentDislikesAggregate.delete(ctx, existing);
+				if (!args.groupId) await contentDislikesAggregate.delete(ctx, existing);
 				const id = await ctx.db.insert('content_reactions', {
 					contentId: args.contentId,
 					userId: user._id,
-					like_dislike: 1
+					like_dislike: 1,
+					groupId: args.groupId
 				});
-				const doc = await ctx.db.get(id);
-				await contentLikesAggregate.insert(ctx, doc!);
+				if (!args.groupId) {
+					const doc = await ctx.db.get(id);
+					await contentLikesAggregate.insert(ctx, doc!);
+				}
 			}
 		} else {
 			const id = await ctx.db.insert('content_reactions', {
 				contentId: args.contentId,
 				userId: user._id,
-				like_dislike: 1
+				like_dislike: 1,
+				groupId: args.groupId
 			});
-			const doc = await ctx.db.get(id);
-			await contentLikesAggregate.insert(ctx, doc!);
+			if (!args.groupId) {
+				const doc = await ctx.db.get(id);
+				await contentLikesAggregate.insert(ctx, doc!);
+			}
 		}
 	}
 });
 
 export const toggleDislike = mutation({
-	args: { contentId: v.id('content') },
+	args: { contentId: v.id('content'), groupId: v.optional(v.id('groups')) },
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
@@ -922,30 +930,37 @@ export const toggleDislike = mutation({
 		const existing = await ctx.db
 			.query('content_reactions')
 			.withIndex('by_content_user', (q) => q.eq('contentId', args.contentId).eq('userId', user._id))
+			.filter((q) => q.eq(q.field('groupId'), args.groupId))
 			.unique();
 
 		if (existing) {
 			await ctx.db.delete(existing._id);
 			if (existing.like_dislike === -1) {
-				await contentDislikesAggregate.delete(ctx, existing);
+				if (!args.groupId) await contentDislikesAggregate.delete(ctx, existing);
 			} else {
-				await contentLikesAggregate.delete(ctx, existing);
+				if (!args.groupId) await contentLikesAggregate.delete(ctx, existing);
 				const id = await ctx.db.insert('content_reactions', {
 					contentId: args.contentId,
 					userId: user._id,
-					like_dislike: -1
+					like_dislike: -1,
+					groupId: args.groupId
 				});
-				const doc = await ctx.db.get(id);
-				await contentDislikesAggregate.insert(ctx, doc!);
+				if (!args.groupId) {
+					const doc = await ctx.db.get(id);
+					await contentDislikesAggregate.insert(ctx, doc!);
+				}
 			}
 		} else {
 			const id = await ctx.db.insert('content_reactions', {
 				contentId: args.contentId,
 				userId: user._id,
-				like_dislike: -1
+				like_dislike: -1,
+				groupId: args.groupId
 			});
-			const doc = await ctx.db.get(id);
-			await contentDislikesAggregate.insert(ctx, doc!);
+			if (!args.groupId) {
+				const doc = await ctx.db.get(id);
+				await contentDislikesAggregate.insert(ctx, doc!);
+			}
 		}
 	}
 });
@@ -954,7 +969,8 @@ export const addComment = mutation({
 	args: {
 		contentId: v.id('content'),
 		body: v.string(),
-		parentId: v.optional(v.id('content_comments'))
+		parentId: v.optional(v.id('content_comments')),
+		groupId: v.optional(v.id('groups'))
 	},
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
@@ -966,10 +982,13 @@ export const addComment = mutation({
 			userName: user.name,
 			body: args.body,
 			parentId: args.parentId,
-			createdAt: Date.now()
+			createdAt: Date.now(),
+			groupId: args.groupId
 		});
-		const doc = await ctx.db.get(id);
-		await contentCommentsAggregate.insert(ctx, doc!);
+		if (!args.groupId) {
+			const doc = await ctx.db.get(id);
+			await contentCommentsAggregate.insert(ctx, doc!);
+		}
 		return id;
 	}
 });
@@ -1082,11 +1101,12 @@ export const toggleCommentDislike = mutation({
 });
 
 export const getComments = query({
-	args: { contentId: v.id('content') },
+	args: { contentId: v.id('content'), groupId: v.optional(v.id('groups')) },
 	handler: async (ctx, args) => {
 		const comments = await ctx.db
 			.query('content_comments')
 			.withIndex('by_content_created_at', (q) => q.eq('contentId', args.contentId))
+			.filter((q) => q.eq(q.field('groupId'), args.groupId))
 			.order('asc')
 			.collect();
 
@@ -1095,20 +1115,34 @@ export const getComments = query({
 
 		const enrichedComments = await Promise.all(
 			comments.map(async (comment) => {
-				const [likes, dislikes] = await Promise.all([
-					contentCommentLikesAggregate.count(ctx, {
-						bounds: {
-							lower: { key: comment._id, inclusive: true },
-							upper: { key: comment._id, inclusive: true }
-						}
-					}),
-					contentCommentDislikesAggregate.count(ctx, {
-						bounds: {
-							lower: { key: comment._id, inclusive: true },
-							upper: { key: comment._id, inclusive: true }
-						}
-					})
-				]);
+				let likes, dislikes;
+				// Fetch the latest user info to avoid 'Unknown' names
+				const userDoc = await authComponent.getAnyUserById(ctx, comment.userId);
+				const currentUserName = userDoc?.name || comment.userName || 'Anonymous';
+				if (args.groupId) {
+					const reactions = await ctx.db
+						.query('content_comment_reactions')
+						.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
+						.filter((q) => q.eq(q.field('commentId'), comment._id))
+						.collect();
+					likes = reactions.filter((r) => r.like_dislike === 1).length;
+					dislikes = reactions.filter((r) => r.like_dislike === -1).length;
+				} else {
+					[likes, dislikes] = await Promise.all([
+						contentCommentLikesAggregate.count(ctx, {
+							bounds: {
+								lower: { key: comment._id, inclusive: true },
+								upper: { key: comment._id, inclusive: true }
+							}
+						}),
+						contentCommentDislikesAggregate.count(ctx, {
+							bounds: {
+								lower: { key: comment._id, inclusive: true },
+								upper: { key: comment._id, inclusive: true }
+							}
+						})
+					]);
+				}
 
 				let userReaction: 'like' | 'dislike' | null = null;
 				if (user) {
@@ -1117,6 +1151,7 @@ export const getComments = query({
 						.withIndex('by_comment_user', (q) =>
 							q.eq('commentId', comment._id).eq('userId', user._id)
 						)
+						.filter((q) => q.eq(q.field('groupId'), args.groupId))
 						.unique();
 					if (reaction) {
 						userReaction = reaction.like_dislike === 1 ? 'like' : 'dislike';
@@ -1125,6 +1160,7 @@ export const getComments = query({
 
 				return {
 					...comment,
+					userName: currentUserName,
 					likes,
 					dislikes,
 					userReaction
@@ -1137,28 +1173,47 @@ export const getComments = query({
 });
 
 export const getReactionCounts = query({
-	args: { contentId: v.id('content') },
+	args: { contentId: v.id('content'), groupId: v.optional(v.id('groups')) },
 	handler: async (ctx, args) => {
-		const [likes, dislikes, commentCount] = await Promise.all([
-			contentLikesAggregate.count(ctx, {
-				bounds: {
-					lower: { key: args.contentId, inclusive: true },
-					upper: { key: args.contentId, inclusive: true }
-				}
-			}),
-			contentDislikesAggregate.count(ctx, {
-				bounds: {
-					lower: { key: args.contentId, inclusive: true },
-					upper: { key: args.contentId, inclusive: true }
-				}
-			}),
-			contentCommentsAggregate.count(ctx, {
-				bounds: {
-					lower: { key: args.contentId, inclusive: true },
-					upper: { key: args.contentId, inclusive: true }
-				}
-			})
-		]);
+		let likes, dislikes, commentCount;
+
+		if (args.groupId) {
+			const reactions = await ctx.db
+				.query('content_reactions')
+				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
+				.filter((q) => q.eq(q.field('contentId'), args.contentId))
+				.collect();
+			likes = reactions.filter((r) => r.like_dislike === 1).length;
+			dislikes = reactions.filter((r) => r.like_dislike === -1).length;
+
+			const comments = await ctx.db
+				.query('content_comments')
+				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
+				.filter((q) => q.eq(q.field('contentId'), args.contentId))
+				.collect();
+			commentCount = comments.length;
+		} else {
+			[likes, dislikes, commentCount] = await Promise.all([
+				contentLikesAggregate.count(ctx, {
+					bounds: {
+						lower: { key: args.contentId, inclusive: true },
+						upper: { key: args.contentId, inclusive: true }
+					}
+				}),
+				contentDislikesAggregate.count(ctx, {
+					bounds: {
+						lower: { key: args.contentId, inclusive: true },
+						upper: { key: args.contentId, inclusive: true }
+					}
+				}),
+				contentCommentsAggregate.count(ctx, {
+					bounds: {
+						lower: { key: args.contentId, inclusive: true },
+						upper: { key: args.contentId, inclusive: true }
+					}
+				})
+			]);
+		}
 
 		const identity = await ctx.auth.getUserIdentity();
 		const user = identity ? await authComponent.getAuthUser(ctx) : null;
@@ -1170,6 +1225,7 @@ export const getReactionCounts = query({
 				.withIndex('by_content_user', (q) =>
 					q.eq('contentId', args.contentId).eq('userId', user._id)
 				)
+				.filter((q) => q.eq(q.field('groupId'), args.groupId))
 				.unique();
 			if (reaction) {
 				userReaction = reaction.like_dislike === 1 ? 'like' : 'dislike';

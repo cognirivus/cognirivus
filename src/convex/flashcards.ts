@@ -367,6 +367,16 @@ export const getStats = query({
 	}
 });
 
+export const listByContent = query({
+	args: { contentId: v.id('content') },
+	handler: async (ctx, args) => {
+		return await ctx.db
+			.query('flashcards')
+			.withIndex('by_content', (q) => q.eq('contentId', args.contentId))
+			.collect();
+	}
+});
+
 export const listDue = query({
 	args: { limit: v.optional(v.number()), contentId: v.optional(v.id('content')) },
 	handler: async (ctx, args) => {

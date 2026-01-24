@@ -4,13 +4,24 @@
 	import { api } from '../../../convex/_generated/api';
 	import type { Id } from '../../../convex/_generated/dataModel';
 	import { Markdown } from '$lib/components/prompt-kit/markdown/index.js';
-	import { Calendar } from '@lucide/svelte';
+	import { Calendar, MessageSquare, Share2 } from '@lucide/svelte';
 	import { Badge } from '$lib/components/ui/badge/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import { authClient } from '$lib/auth-client';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { ReactionsBar, CommentsSection } from '$lib/components/interactions/index.js';
+	import CircleSelectionDialog from '$lib/components/CircleSelectionDialog.svelte';
+	import { toast } from 'svelte-sonner';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
 
 	const id = $derived(page.params.id as Id<'blogs'>);
+	let isCircleDialogOpen = $state(false);
+	let circleDialogTitle = $state('Select a Circle');
+	let circleDialogAction = $state<'discuss' | 'share'>('discuss');
+
+	let commentToDelete = $state<Id<'blog_comments'> | null>(null);
+	let isDeleteCommentDialogOpen = $state(false);
+
 	const blogQuery = useQuery(api.blogs.get, () => ({ id }));
 	const commentsQuery = useQuery(api.blogs.getComments, () => ({ blogId: id }));
 	const client = useConvexClient();
@@ -59,13 +70,54 @@
 		});
 	}
 
-	async function handleDeleteComment(commentId: string) {
-		if (!confirm('Are you sure you want to delete this comment?')) return;
+	async function onCircleSelect(groupId: string) {
 		try {
-			await client.mutation(api.blogs.removeComment, { id: commentId as Id<'blog_comments'> });
-		} catch (e) {
-			console.error('Failed to delete comment:', e);
+			await client.mutation((api as any).groups.shareContent, {
+				groupId: groupId as Id<'groups'>,
+				blogId: id
+			});
+
+			if (circleDialogAction === 'discuss') {
+				window.location.href = `/groups/${groupId}/blog/${id}`;
+			} else {
+				toast.success('Blog shared to circle feed!');
+				isCircleDialogOpen = false;
+			}
+		} catch (e: any) {
+			toast.error(e.message || 'Failed to share content');
+			console.error('Circle action failed:', e);
 		}
+	}
+
+	function handleDiscussInCircle() {
+		if (!isAuthenticated) return;
+		circleDialogTitle = 'Discuss in Circle';
+		circleDialogAction = 'discuss';
+		isCircleDialogOpen = true;
+	}
+
+	function handleShareToCircle() {
+		if (!isAuthenticated) return;
+		circleDialogTitle = 'Share to Circle';
+		circleDialogAction = 'share';
+		isCircleDialogOpen = true;
+	}
+
+	async function confirmDeleteComment() {
+		if (!commentToDelete) return;
+		try {
+			await client.mutation(api.blogs.removeComment, { id: commentToDelete });
+			toast.success('Comment deleted');
+			isDeleteCommentDialogOpen = false;
+			commentToDelete = null;
+		} catch (e: any) {
+			toast.error(e.message || 'Failed to delete comment');
+		}
+	}
+
+	function handleDeleteComment(commentId: string) {
+		commentToDelete = commentId as Id<'blog_comments'>;
+		isDeleteCommentDialogOpen = true;
 	}
 
 	async function handleCommentLike(commentId: string) {
@@ -126,7 +178,9 @@
 				{blog.title}
 			</h1>
 			<!-- Like/Dislike Section -->
-			<div class="mt-10 border-b border-border pb-6">
+			<div
+				class="mt-10 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-center sm:justify-between"
+			>
 				<ReactionsBar
 					likes={blog.likes}
 					dislikes={blog.dislikes}
@@ -137,6 +191,27 @@
 					onDislike={handleDislike}
 					onScrollToComments={scrollToComments}
 				/>
+
+				<div class="flex items-center gap-2">
+					<Button
+						variant="secondary"
+						size="sm"
+						class="h-9 gap-2 px-4 font-bold"
+						onclick={handleDiscussInCircle}
+					>
+						<MessageSquare class="h-4 w-4" />
+						Discuss in Circle
+					</Button>
+					<Button
+						variant="ghost"
+						size="icon"
+						class="h-9 w-9 text-muted-foreground"
+						title="Share to Circle"
+						onclick={handleShareToCircle}
+					>
+						<Share2 class="h-4 w-4" />
+					</Button>
+				</div>
 			</div>
 		</header>
 
@@ -151,6 +226,7 @@
 			{isAuthenticated}
 			{currentUserId}
 			{currentUserInitial}
+			blogId={id}
 			onAddComment={handleAddComment}
 			onDeleteComment={handleDeleteComment}
 			onCommentLike={handleCommentLike}
@@ -162,3 +238,24 @@
 		Blog post not found.
 	</div>
 {/if}
+
+<CircleSelectionDialog
+	bind:open={isCircleDialogOpen}
+	title={circleDialogTitle}
+	onSelect={onCircleSelect}
+/>
+
+<Dialog.Root bind:open={isDeleteCommentDialogOpen}>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>Delete Comment?</Dialog.Title>
+			<Dialog.Description>
+				Are you sure you want to permanently delete this comment? This action cannot be undone.
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (isDeleteCommentDialogOpen = false)}>Cancel</Button>
+			<Button variant="destructive" onclick={confirmDeleteComment}>Delete Comment</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

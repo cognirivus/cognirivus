@@ -104,28 +104,34 @@ const schema = defineSchema({
 	blog_reactions: defineTable({
 		blogId: v.id('blogs'),
 		userId: v.string(),
-		like_dislike: v.number()
+		like_dislike: v.number(),
+		groupId: v.optional(v.id('groups'))
 	})
 		.index('by_blog', ['blogId'])
-		.index('by_blog_user', ['blogId', 'userId']),
+		.index('by_blog_user', ['blogId', 'userId'])
+		.index('by_group', ['groupId']),
 	blog_comments: defineTable({
 		blogId: v.id('blogs'),
 		userId: v.string(),
 		userName: v.optional(v.string()),
 		body: v.string(),
 		parentId: v.optional(v.id('blog_comments')),
-		createdAt: v.number()
+		createdAt: v.number(),
+		groupId: v.optional(v.id('groups'))
 	})
 		.index('by_blog', ['blogId'])
 		.index('by_blog_created_at', ['blogId', 'createdAt'])
-		.index('by_parent', ['parentId']),
+		.index('by_parent', ['parentId'])
+		.index('by_group', ['groupId']),
 	comment_reactions: defineTable({
 		commentId: v.id('blog_comments'),
 		userId: v.string(),
-		like_dislike: v.number()
+		like_dislike: v.number(),
+		groupId: v.optional(v.id('groups'))
 	})
 		.index('by_comment', ['commentId'])
-		.index('by_comment_user', ['commentId', 'userId']),
+		.index('by_comment_user', ['commentId', 'userId'])
+		.index('by_group', ['groupId']),
 	news: defineTable({
 		date: v.string(),
 		snippet: v.string(),
@@ -238,28 +244,34 @@ const schema = defineSchema({
 	content_reactions: defineTable({
 		contentId: v.id('content'),
 		userId: v.string(),
-		like_dislike: v.number()
+		like_dislike: v.number(),
+		groupId: v.optional(v.id('groups'))
 	})
 		.index('by_content', ['contentId'])
-		.index('by_content_user', ['contentId', 'userId']),
+		.index('by_content_user', ['contentId', 'userId'])
+		.index('by_group', ['groupId']),
 	content_comments: defineTable({
 		contentId: v.id('content'),
 		userId: v.string(),
 		userName: v.optional(v.string()),
 		body: v.string(),
 		parentId: v.optional(v.id('content_comments')),
-		createdAt: v.number()
+		createdAt: v.number(),
+		groupId: v.optional(v.id('groups'))
 	})
 		.index('by_content', ['contentId'])
 		.index('by_content_created_at', ['contentId', 'createdAt'])
-		.index('by_parent', ['parentId']),
+		.index('by_parent', ['parentId'])
+		.index('by_group', ['groupId']),
 	content_comment_reactions: defineTable({
 		commentId: v.id('content_comments'),
 		userId: v.string(),
-		like_dislike: v.number()
+		like_dislike: v.number(),
+		groupId: v.optional(v.id('groups'))
 	})
 		.index('by_comment', ['commentId'])
-		.index('by_comment_user', ['commentId', 'userId']),
+		.index('by_comment_user', ['commentId', 'userId'])
+		.index('by_group', ['groupId']),
 	extraction_jobs: defineTable({
 		sourceType: v.string(),
 		sourceIds: v.array(v.string()),
@@ -288,7 +300,42 @@ const schema = defineSchema({
 		.index('by_sourceType', ['sourceType'])
 		.index('by_extractionType', ['extractionType'])
 		.index('by_createdAt', ['createdAt'])
-		.index('by_createdBy', ['createdBy'])
+		.index('by_createdBy', ['createdBy']),
+	groups: defineTable({
+		name: v.string(),
+		groupname: v.string(),
+		description: v.optional(v.string()),
+		ownerId: v.string(), // userId from better-auth
+		inviteCode: v.string(),
+		icon: v.optional(v.string()),
+		isPublic: v.boolean(),
+		createdAt: v.number()
+	})
+		.index('by_invite_code', ['inviteCode'])
+		.index('by_groupname', ['groupname'])
+		.index('by_public', ['isPublic']),
+	memberships: defineTable({
+		userId: v.string(),
+		groupId: v.id('groups'),
+		role: v.union(v.literal('admin'), v.literal('member')),
+		status: v.union(v.literal('active'), v.literal('pending')),
+		joinedAt: v.number()
+	})
+		.index('by_user', ['userId'])
+		.index('by_group', ['groupId'])
+		.index('by_user_group', ['userId', 'groupId'])
+		.index('by_group_status', ['groupId', 'status']),
+	shared_content: defineTable({
+		groupId: v.id('groups'),
+		contentId: v.optional(v.id('content')),
+		blogId: v.optional(v.id('blogs')),
+		newsId: v.optional(v.id('news')),
+		entityId: v.optional(v.id('entities')),
+		sharedById: v.string(),
+		sharedAt: v.number()
+	})
+		.index('by_group', ['groupId'])
+		.index('by_shared_by', ['sharedById'])
 });
 
 export default schema;

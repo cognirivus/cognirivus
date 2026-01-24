@@ -1,10 +1,13 @@
 <script lang="ts">
-	import { MessageCircle, Send, LoaderCircle } from '@lucide/svelte';
+	import { MessageCircle, Send, LoaderCircle, Users } from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
+	import * as Tabs from '$lib/components/ui/tabs/index.js';
+	import CircleSelectionList from '$lib/components/CircleSelectionList.svelte';
 	import CommentItem from './CommentItem.svelte';
 	import type { Comment, FlatComment } from './types.js';
+	import type { Id } from '$convex/_generated/dataModel';
 
 	interface Props {
 		comments: FlatComment[];
@@ -12,6 +15,10 @@
 		isAuthenticated: boolean;
 		currentUserId?: string;
 		currentUserInitial?: string;
+		contentId?: Id<'content'>;
+		blogId?: Id<'blogs'>;
+		showTabs?: boolean;
+		groupName?: string;
 		onAddComment: (body: string, parentId?: string) => Promise<void>;
 		onDeleteComment: (commentId: string) => void;
 		onCommentLike: (commentId: string) => void;
@@ -24,6 +31,10 @@
 		isAuthenticated,
 		currentUserId,
 		currentUserInitial = 'U',
+		contentId,
+		blogId,
+		showTabs = true,
+		groupName,
 		onAddComment,
 		onDeleteComment,
 		onCommentLike,
@@ -32,6 +43,7 @@
 
 	let commentText = $state('');
 	let isSubmitting = $state(false);
+	let activeTab = $state('comments');
 
 	// Build tree structure from flat comments
 	const commentTree = $derived.by(() => {
@@ -79,8 +91,59 @@
 </script>
 
 <div id="comments" class="mt-10 border-t border-border pt-8">
-	<h2 class="mb-6 text-xl font-bold">Comments</h2>
+	{#if showTabs}
+		<Tabs.Root value={activeTab} class="w-full">
+			<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+				<Tabs.List class="grid w-full grid-cols-2 sm:w-[400px]">
+					<Tabs.Trigger value="comments" class="gap-2">
+						<MessageCircle class="h-4 w-4" />
+						Comments ({comments.length})
+					</Tabs.Trigger>
+					<Tabs.Trigger value="circles" class="gap-2">
+						<Users class="h-4 w-4" />
+						Circles
+					</Tabs.Trigger>
+				</Tabs.List>
+			</div>
 
+			<Tabs.Content value="comments" class="mt-0">
+				{@render commentsContent()}
+			</Tabs.Content>
+
+			<Tabs.Content value="circles" class="mt-0">
+				{#if isAuthenticated}
+					{#if contentId || blogId}
+						<CircleSelectionList {contentId} {blogId} />
+					{:else}
+						<p class="py-8 text-center text-sm text-muted-foreground">
+							This content cannot be discussed in circles.
+						</p>
+					{/if}
+				{:else}
+					<Card.Root class="mb-8 border-dashed">
+						<Card.Content class="flex flex-col items-center justify-center py-10 text-center">
+							<Users class="mb-3 h-10 w-10 text-muted-foreground/50" />
+							<p class="mb-1 text-sm font-medium text-foreground">Sign in to use Circles</p>
+							<Card.Description class="mb-4 max-w-xs">
+								Private group discussions are exclusive to registered members.
+							</Card.Description>
+							<Button href="/signin" size="sm">Sign in</Button>
+						</Card.Content>
+					</Card.Root>
+				{/if}
+			</Tabs.Content>
+		</Tabs.Root>
+	{:else}
+		<div class="mb-6">
+			<h2 class="text-xl font-bold">
+				Comments {#if groupName}in <span class="text-primary">{groupName}</span>{/if} ({comments.length})
+			</h2>
+		</div>
+		{@render commentsContent()}
+	{/if}
+</div>
+
+{#snippet commentsContent()}
 	<!-- Add Comment Form -->
 	{#if isAuthenticated}
 		<div class="mb-8">
@@ -157,4 +220,4 @@
 			No comments yet. Be the first to comment!
 		</p>
 	{/if}
-</div>
+{/snippet}

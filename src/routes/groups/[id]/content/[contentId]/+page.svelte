@@ -9,59 +9,58 @@
 		Tag,
 		Book,
 		MapPin,
-		Brain,
 		Users,
 		Building2,
 		Briefcase,
 		Check,
 		ChevronRight,
 		FileText,
-		Share2,
-		MessageSquare
+		MessageSquare,
+		ArrowLeft,
+		Share2
 	} from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader';
 	import { Markdown } from '$lib/components/prompt-kit/markdown';
-	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 	import { ReactionsBar, CommentsSection } from '$lib/components/interactions';
+	import MarkCompleteToggle from '$lib/components/MarkCompleteToggle.svelte';
 	import { authClient } from '$lib/auth-client';
 	import type { Id } from '$convex/_generated/dataModel';
-	import CircleSelectionDialog from '$lib/components/CircleSelectionDialog.svelte';
+	import { Separator } from '$lib/components/ui/separator';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
 
-	const contentId = $derived(page.params.id as Id<'content'>);
-	let isCircleDialogOpen = $state(false);
-	let circleDialogTitle = $state('Select a Circle');
-	let circleDialogAction = $state<'discuss' | 'share'>('discuss');
+	const groupId = $derived(page.params.id as Id<'groups'>);
+	const contentId = $derived(page.params.contentId as Id<'content'>);
+	const client = useConvexClient();
+	const session = authClient.useSession();
 
 	let commentToDelete = $state<Id<'content_comments'> | null>(null);
 	let isDeleteCommentDialogOpen = $state(false);
 
-	const client = useConvexClient();
-	const session = authClient.useSession();
+	// Fetch Group Info
+	const groupQuery = useQuery((api as any).groups.get, () => (groupId ? { groupId } : 'skip'));
+	const group = $derived(groupQuery.data);
 
+	// Fetch Content Info
 	const contentQuery = useQuery((api as any).content.getById, () =>
-		page.params.id ? { id: page.params.id as Id<'content'> } : 'skip'
+		contentId ? { id: contentId } : 'skip'
 	);
 	const item = $derived(contentQuery.data);
 
-	const flashcardsQuery = useQuery((api as any).flashcards.listByContent, () =>
-		page.params.id ? { contentId: page.params.id as Id<'content'> } : 'skip'
-	);
-
-	const progressQuery = useQuery(api.content.getUserProgress, {});
-
+	// Group-Scoped Interactions
 	const reactionsQuery = useQuery(api.content.getReactionCounts, () =>
-		page.params.id ? { contentId: page.params.id as Id<'content'> } : 'skip'
+		contentId ? { contentId, groupId } : 'skip'
 	);
 	const reactions = $derived(
 		reactionsQuery.data ?? { likes: 0, dislikes: 0, commentCount: 0, userReaction: null }
 	);
 
 	const commentsQuery = useQuery(api.content.getComments, () =>
-		page.params.id ? { contentId: page.params.id as Id<'content'> } : 'skip'
+		contentId ? { contentId, groupId } : 'skip'
 	);
 	const comments = $derived(commentsQuery.data ?? []);
+
+	const progressQuery = useQuery(api.content.getUserProgress, {});
 
 	const isAuthenticated = $derived(!!session.value?.data?.user);
 	const currentUserId = $derived(session.value?.data?.user?.id);
@@ -81,7 +80,7 @@
 	async function handleLike() {
 		if (!isAuthenticated) return;
 		try {
-			await client.mutation(api.content.toggleLike, { contentId });
+			await client.mutation(api.content.toggleLike, { contentId, groupId });
 		} catch (e) {
 			console.error('Failed to toggle like:', e);
 		}
@@ -90,7 +89,7 @@
 	async function handleDislike() {
 		if (!isAuthenticated) return;
 		try {
-			await client.mutation(api.content.toggleDislike, { contentId });
+			await client.mutation(api.content.toggleDislike, { contentId, groupId });
 		} catch (e) {
 			console.error('Failed to toggle dislike:', e);
 		}
@@ -100,41 +99,20 @@
 		await client.mutation(api.content.addComment, {
 			contentId,
 			body,
-			parentId: parentId as Id<'content_comments'> | undefined
+			parentId: parentId as Id<'content_comments'> | undefined,
+			groupId
 		});
 	}
 
-	async function onCircleSelect(groupId: string) {
+	async function handleCommentLike(commentId: string) {
+		if (!isAuthenticated) return;
 		try {
-			await client.mutation((api as any).groups.shareContent, {
-				groupId: groupId as Id<'groups'>,
-				contentId
+			await client.mutation(api.content.toggleCommentLike, {
+				commentId: commentId as Id<'content_comments'>
 			});
-
-			if (circleDialogAction === 'discuss') {
-				window.location.href = `/groups/${groupId}/content/${contentId}`;
-			} else {
-				toast.success('Content shared to circle feed!');
-				isCircleDialogOpen = false;
-			}
-		} catch (e: any) {
-			toast.error(e.message || 'Failed to share content');
-			console.error('Circle action failed:', e);
+		} catch (e) {
+			console.error('Failed to toggle comment like:', e);
 		}
-	}
-
-	function handleDiscussInCircle() {
-		if (!isAuthenticated) return;
-		circleDialogTitle = 'Discuss in Circle';
-		circleDialogAction = 'discuss';
-		isCircleDialogOpen = true;
-	}
-
-	function handleShareToCircle() {
-		if (!isAuthenticated) return;
-		circleDialogTitle = 'Share to Circle';
-		circleDialogAction = 'share';
-		isCircleDialogOpen = true;
 	}
 
 	async function confirmDeleteComment() {
@@ -154,17 +132,6 @@
 		isDeleteCommentDialogOpen = true;
 	}
 
-	async function handleCommentLike(commentId: string) {
-		if (!isAuthenticated) return;
-		try {
-			await client.mutation(api.content.toggleCommentLike, {
-				commentId: commentId as Id<'content_comments'>
-			});
-		} catch (e) {
-			console.error('Failed to toggle comment like:', e);
-		}
-	}
-
 	async function handleCommentDislike(commentId: string) {
 		if (!isAuthenticated) return;
 		try {
@@ -182,15 +149,15 @@
 </script>
 
 <svelte:head>
-	<title>{item?.title || 'Content'} - Knowledge Base</title>
+	<title>{item?.title || 'Content'} - {group?.name || 'Circle'}</title>
 </svelte:head>
 
 <div class="flex h-full w-full overflow-hidden">
 	<div class="flex-1 overflow-y-auto">
 		<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-			{#if contentQuery.isLoading}
+			{#if contentQuery.isLoading || groupQuery.isLoading}
 				<div class="flex h-[50vh] items-center justify-center">
-					<p>Loading content...</p>
+					<Loader variant="circular" size="lg" />
 				</div>
 			{:else if !item}
 				<div class="flex flex-col items-center justify-center py-20 text-center">
@@ -201,11 +168,21 @@
 					<p class="text-sm text-muted-foreground">
 						The content you're looking for doesn't exist or has been removed.
 					</p>
-					<Button href="/content" variant="outline" class="mt-4">Back to Knowledge Base</Button>
+					<Button href="/groups/{groupId}" variant="outline" class="mt-4">Back to Circle</Button>
 				</div>
 			{:else}
 				<!-- Breadcrumb Context -->
 				<div class="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+					<Button
+						variant="ghost"
+						size="sm"
+						href="/groups/{groupId}"
+						class="-ml-2 h-7 gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+					>
+						<ArrowLeft class="h-3.5 w-3.5" />
+						{group?.name || 'Circle'}
+					</Button>
+					<ChevronRight class="h-3.5 w-3.5" />
 					<a
 						href={item.topic === 'Current Affairs' ? '/content?news=true' : '/content'}
 						class="hover:text-foreground hover:underline"
@@ -251,6 +228,13 @@
 									Completed
 								</Badge>
 							{/if}
+							<Badge
+								variant="outline"
+								class="border-primary/20 bg-primary/5 text-[10px] font-bold text-primary uppercase"
+							>
+								<Users class="mr-1 h-3 w-3" />
+								Circle Exclusive
+							</Badge>
 						</div>
 
 						<!-- Title -->
@@ -298,22 +282,13 @@
 
 							<div class="flex items-center gap-2">
 								<Button
-									variant="secondary"
-									size="sm"
-									class="h-9 gap-2 px-4 font-bold"
-									onclick={handleDiscussInCircle}
-								>
-									<MessageSquare class="h-4 w-4" />
-									Discuss in Circle
-								</Button>
-								<Button
 									variant="ghost"
-									size="icon"
-									class="h-9 w-9 text-muted-foreground"
-									title="Share to Circle"
-									onclick={handleShareToCircle}
+									size="sm"
+									class="h-9 gap-2 px-3 text-muted-foreground"
+									href="/content/{item._id}"
 								>
 									<Share2 class="h-4 w-4" />
+									View Public
 								</Button>
 							</div>
 						</div>
@@ -343,27 +318,6 @@
 						{/if}
 					</header>
 
-					<!-- Flashcards CTA -->
-					{#if page.data.currentUser && flashcardsQuery.data && flashcardsQuery.data.length > 0}
-						<div
-							class="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 p-4"
-						>
-							<div class="flex items-center gap-3">
-								<div class="rounded-full bg-primary/10 p-2 text-primary">
-									<Brain class="h-5 w-5" />
-								</div>
-								<div>
-									<p class="text-sm font-semibold">{flashcardsQuery.data.length} Flashcards</p>
-									<p class="text-xs text-muted-foreground">Test your knowledge</p>
-								</div>
-							</div>
-							<Button href="/flashcards/study?contentId={item._id}" size="sm" class="gap-2">
-								Study Now
-								<ChevronRight class="h-4 w-4" />
-							</Button>
-						</div>
-					{/if}
-
 					<!-- Content Body -->
 					<div class="rounded-lg border bg-card p-6 shadow-sm">
 						<div class="prose prose-zinc dark:prose-invert max-w-none">
@@ -371,34 +325,32 @@
 						</div>
 					</div>
 
-					<!-- Footer -->
-					{#if item.subject}
-						<footer
-							class="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3"
-						>
-							<p class="text-xs text-muted-foreground">
-								Part of <span class="font-semibold text-foreground">{item.subject.name}</span>
-							</p>
-							<Button
-								variant="ghost"
-								size="sm"
-								href="/content?subject={item.subject._id}"
-								class="h-8 gap-1 text-xs"
-							>
-								View all {item.subject.name}
-								<ChevronRight class="h-3.5 w-3.5" />
-							</Button>
-						</footer>
-					{/if}
+					<!-- Circle Info (Bottom) -->
+					<div class="rounded-xl border border-primary/20 bg-primary/5 p-6">
+						<div class="flex items-center gap-3">
+							<div class="rounded-full border border-primary/20 bg-primary/10 p-2 text-primary">
+								<MessageSquare class="h-5 w-5" />
+							</div>
+							<div>
+								<p class="text-sm font-bold">Circle Feed</p>
+								<p class="text-xs text-muted-foreground">
+									Your comments and reactions here are only visible to <span
+										class="font-bold text-primary">{group?.name}</span
+									> members.
+								</p>
+							</div>
+						</div>
+					</div>
 
-					<div id="comments">
+					<div id="comments" class="scroll-mt-20">
 						<CommentsSection
 							{comments}
 							isLoading={commentsQuery.isLoading}
 							{isAuthenticated}
 							{currentUserId}
 							{currentUserInitial}
-							{contentId}
+							showTabs={false}
+							groupName={group?.name}
 							onAddComment={handleAddComment}
 							onDeleteComment={handleDeleteComment}
 							onCommentLike={handleCommentLike}
@@ -410,12 +362,6 @@
 		</div>
 	</div>
 </div>
-
-<CircleSelectionDialog
-	bind:open={isCircleDialogOpen}
-	title={circleDialogTitle}
-	onSelect={onCircleSelect}
-/>
 
 <Dialog.Root bind:open={isDeleteCommentDialogOpen}>
 	<Dialog.Content>
