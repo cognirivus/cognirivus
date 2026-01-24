@@ -48,7 +48,7 @@
 		(page.data.currentUser as any)?.id ?? (page.data.currentUser as any)?._id
 	);
 
-	let itemToUnshare = $state<Id<'shared_content'> | null>(null);
+	let itemToUnshare = $state<Id<'group_shared_content'> | null>(null);
 	let isUnshareDialogOpen = $state(false);
 
 	async function confirmUnshare() {

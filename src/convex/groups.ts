@@ -35,7 +35,7 @@ export const create = mutation({
 			createdAt: Date.now()
 		});
 
-		await ctx.db.insert('memberships', {
+		await ctx.db.insert('group_memberships', {
 			userId: user._id,
 			groupId,
 			role: 'admin',
@@ -66,7 +66,7 @@ export const join = mutation({
 		if (!group) throw new Error('Group not found');
 
 		const existingMembership = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user_group', (q) => q.eq('userId', user._id).eq('groupId', group._id))
 			.unique();
 
@@ -77,7 +77,7 @@ export const join = mutation({
 
 		const status = group.isPublic ? 'active' : 'pending';
 
-		await ctx.db.insert('memberships', {
+		await ctx.db.insert('group_memberships', {
 			userId: user._id,
 			groupId: group._id,
 			role: 'member',
@@ -96,7 +96,7 @@ export const list = query({
 		if (!user) return [];
 
 		const memberships = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user', (q) => q.eq('userId', user._id))
 			.collect();
 
@@ -126,7 +126,7 @@ export const get = query({
 		if (!group) return null;
 
 		const membership = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user_group', (q) => q.eq('userId', user._id).eq('groupId', groupId))
 			.unique();
 
@@ -163,7 +163,7 @@ export const getPendingMembers = query({
 		if (!user) throw new Error('Not authenticated');
 
 		const membership = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user_group', (q) => q.eq('userId', user._id).eq('groupId', groupId))
 			.unique();
 
@@ -173,7 +173,7 @@ export const getPendingMembers = query({
 		}
 
 		const pending = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_group_status', (q) => q.eq('groupId', groupId).eq('status', 'pending'))
 			.collect();
 
@@ -192,7 +192,7 @@ export const getPendingMembers = query({
 
 export const respondToRequest = mutation({
 	args: {
-		membershipId: v.id('memberships'),
+		membershipId: v.id('group_memberships'),
 		action: v.union(v.literal('accept'), v.literal('decline'))
 	},
 	handler: async (ctx, { membershipId, action }) => {
@@ -203,7 +203,7 @@ export const respondToRequest = mutation({
 		if (!targetMembership) throw new Error('Membership record not found');
 
 		const adminMembership = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user_group', (q) =>
 				q.eq('userId', user._id).eq('groupId', targetMembership.groupId)
 			)
@@ -224,7 +224,7 @@ export const respondToRequest = mutation({
 
 export const removeMember = mutation({
 	args: {
-		membershipId: v.id('memberships')
+		membershipId: v.id('group_memberships')
 	},
 	handler: async (ctx, { membershipId }) => {
 		const user = await authComponent.getAuthUser(ctx);
@@ -238,7 +238,7 @@ export const removeMember = mutation({
 
 		// Only admin or owner can remove members
 		const adminMembership = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user_group', (q) =>
 				q.eq('userId', user._id).eq('groupId', targetMembership.groupId)
 			)
@@ -264,14 +264,14 @@ export const getMembers = query({
 		if (!user) return [];
 
 		const membership = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user_group', (q) => q.eq('userId', user._id).eq('groupId', groupId))
 			.unique();
 
 		if (!membership || membership.status !== 'active') return [];
 
 		const members = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_group', (q) => q.eq('groupId', groupId))
 			.collect();
 
@@ -302,7 +302,7 @@ export const updatePrivacy = mutation({
 
 		if (group.ownerId !== user._id) {
 			const adminMembership = await ctx.db
-				.query('memberships')
+				.query('group_memberships')
 				.withIndex('by_user_group', (q) => q.eq('userId', user._id).eq('groupId', groupId))
 				.unique();
 			if (adminMembership?.role !== 'admin') throw new Error('Unauthorized');
@@ -325,7 +325,7 @@ export const shareContent = mutation({
 		if (!user) throw new Error('Not authenticated');
 
 		const membership = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user_group', (q) => q.eq('userId', user._id).eq('groupId', args.groupId))
 			.unique();
 
@@ -335,25 +335,25 @@ export const shareContent = mutation({
 		let existing = null;
 		if (args.contentId) {
 			existing = await ctx.db
-				.query('shared_content')
+				.query('group_shared_content')
 				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
 				.filter((q) => q.eq(q.field('contentId'), args.contentId))
 				.unique();
 		} else if (args.blogId) {
 			existing = await ctx.db
-				.query('shared_content')
+				.query('group_shared_content')
 				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
 				.filter((q) => q.eq(q.field('blogId'), args.blogId))
 				.unique();
 		} else if (args.newsId) {
 			existing = await ctx.db
-				.query('shared_content')
+				.query('group_shared_content')
 				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
 				.filter((q) => q.eq(q.field('newsId'), args.newsId))
 				.unique();
 		} else if (args.entityId) {
 			existing = await ctx.db
-				.query('shared_content')
+				.query('group_shared_content')
 				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
 				.filter((q) => q.eq(q.field('entityId'), args.entityId))
 				.unique();
@@ -361,7 +361,7 @@ export const shareContent = mutation({
 
 		if (existing) return existing._id;
 
-		return await ctx.db.insert('shared_content', {
+		return await ctx.db.insert('group_shared_content', {
 			...args,
 			sharedById: user._id,
 			sharedAt: Date.now()
@@ -371,7 +371,7 @@ export const shareContent = mutation({
 
 export const unshareContent = mutation({
 	args: {
-		sharedId: v.id('shared_content')
+		sharedId: v.id('group_shared_content')
 	},
 	handler: async (ctx, { sharedId }) => {
 		const user = await authComponent.getAuthUser(ctx);
@@ -381,7 +381,7 @@ export const unshareContent = mutation({
 		if (!shared) throw new Error('Shared content not found');
 
 		const membership = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user_group', (q) => q.eq('userId', user._id).eq('groupId', shared.groupId))
 			.unique();
 
@@ -411,14 +411,14 @@ export const getSharedContent = query({
 		if (!user) return [];
 
 		const membership = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user_group', (q) => q.eq('userId', user._id).eq('groupId', args.groupId))
 			.unique();
 
 		if (!membership || membership.status !== 'active') return [];
 
 		let query = ctx.db
-			.query('shared_content')
+			.query('group_shared_content')
 			.withIndex('by_group', (q) => q.eq('groupId', args.groupId));
 
 		const shared = await query.order('desc').collect();
@@ -469,19 +469,19 @@ export const getMemberAnalytics = query({
 		if (!user) return null;
 
 		const membership = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_user_group', (q) => q.eq('userId', user._id).eq('groupId', groupId))
 			.unique();
 
 		if (!membership || membership.status !== 'active') return null;
 
 		const memberships = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_group_status', (q) => q.eq('groupId', groupId).eq('status', 'active'))
 			.collect();
 
 		const shared = await ctx.db
-			.query('shared_content')
+			.query('group_shared_content')
 			.withIndex('by_group', (q) => q.eq('groupId', groupId))
 			.collect();
 
@@ -543,7 +543,7 @@ export const update = mutation({
 
 		if (group.ownerId !== user._id) {
 			const adminMembership = await ctx.db
-				.query('memberships')
+				.query('group_memberships')
 				.withIndex('by_user_group', (q) => q.eq('userId', user._id).eq('groupId', groupId))
 				.unique();
 			if (adminMembership?.role !== 'admin') throw new Error('Unauthorized');
@@ -568,7 +568,7 @@ export const remove = mutation({
 
 		// 1. Delete shared content portals
 		const shared = await ctx.db
-			.query('shared_content')
+			.query('group_shared_content')
 			.withIndex('by_group', (q) => q.eq('groupId', groupId))
 			.collect();
 		for (const s of shared) await ctx.db.delete(s._id);
@@ -613,7 +613,7 @@ export const remove = mutation({
 
 		// 4. Delete memberships
 		const memberships = await ctx.db
-			.query('memberships')
+			.query('group_memberships')
 			.withIndex('by_group', (q) => q.eq('groupId', groupId))
 			.collect();
 		for (const m of memberships) await ctx.db.delete(m._id);

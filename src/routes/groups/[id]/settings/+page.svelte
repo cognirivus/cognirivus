@@ -57,7 +57,7 @@
 	let isDeleting = $state(false);
 	let showDeleteConfirm = $state(false);
 
-	let memberToRemove = $state<{ id: Id<'memberships'>; name: string } | null>(null);
+	let memberToRemove = $state<{ id: Id<'group_memberships'>; name: string } | null>(null);
 	let isRemoveMemberDialogOpen = $state(false);
 
 	$effect(() => {
@@ -102,7 +102,10 @@
 		}
 	}
 
-	async function handleResponse(membershipId: Id<'memberships'>, action: 'accept' | 'decline') {
+	async function handleResponse(
+		membershipId: Id<'group_memberships'>,
+		action: 'accept' | 'decline'
+	) {
 		try {
 			await client.mutation((api as any).groups.respondToRequest, {
 				membershipId,

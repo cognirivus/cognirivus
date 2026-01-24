@@ -314,7 +314,7 @@ const schema = defineSchema({
 		.index('by_invite_code', ['inviteCode'])
 		.index('by_groupname', ['groupname'])
 		.index('by_public', ['isPublic']),
-	memberships: defineTable({
+	group_memberships: defineTable({
 		userId: v.string(),
 		groupId: v.id('groups'),
 		role: v.union(v.literal('admin'), v.literal('member')),
@@ -325,7 +325,7 @@ const schema = defineSchema({
 		.index('by_group', ['groupId'])
 		.index('by_user_group', ['userId', 'groupId'])
 		.index('by_group_status', ['groupId', 'status']),
-	shared_content: defineTable({
+	group_shared_content: defineTable({
 		groupId: v.id('groups'),
 		contentId: v.optional(v.id('content')),
 		blogId: v.optional(v.id('blogs')),
