@@ -301,19 +301,10 @@
 									variant="secondary"
 									size="sm"
 									class="h-9 gap-2 px-4 font-bold"
-									onclick={handleDiscussInCircle}
-								>
-									<MessageSquare class="h-4 w-4" />
-									Discuss in Circle
-								</Button>
-								<Button
-									variant="ghost"
-									size="icon"
-									class="h-9 w-9 text-muted-foreground"
-									title="Share to Circle"
 									onclick={handleShareToCircle}
 								>
 									<Share2 class="h-4 w-4" />
+									Share to Circle
 								</Button>
 							</div>
 						</div>

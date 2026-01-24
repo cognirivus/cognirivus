@@ -3,6 +3,7 @@
 	import { api } from '$convex/_generated/api';
 	import { page } from '$app/state';
 	import * as Card from '$lib/components/ui/card';
+	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Users, TrendingUp, Award, CheckCircle2, BookOpen, Zap, FileText } from '@lucide/svelte';
 	import type { Id } from '$convex/_generated/dataModel';
@@ -114,58 +115,52 @@
 						Member Leaderboard
 					</h2>
 
-					<div class="space-y-4">
+					<div class="divide-y rounded-xl border bg-card shadow-sm">
 						{#each sortedStats as stat, i}
-							<Card.Root
-								class={stat.userId === currentUserId ? 'border-primary/30 bg-primary/5' : ''}
+							<div
+								class="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50 {stat.userId ===
+								currentUserId
+									? 'bg-primary/5'
+									: ''}"
 							>
-								<Card.Content class="p-6">
-									<div class="flex items-center gap-6">
-										<div
-											class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-lg font-black tabular-nums"
-										>
-											{i + 1}
-										</div>
+								<div
+									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-black tabular-nums"
+								>
+									{i + 1}
+								</div>
 
-										<div class="min-w-0 flex-1">
-											<div class="mb-2 flex items-center justify-between">
-												<div>
-													<span class="text-lg font-black">
-														{stat.name}
-														{#if stat.userId === currentUserId}
-															<span
-																class="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary"
-																>YOU</span
-															>
-														{/if}
-													</span>
-													<p class="text-xs tracking-tight text-muted-foreground uppercase">
-														{stat.role}
-													</p>
-												</div>
-												<div class="text-right">
-													<span class="text-xl font-black tabular-nums">{stat.completed}</span>
-													<span class="text-xs text-muted-foreground uppercase">
-														/ {stat.total}</span
-													>
-												</div>
-											</div>
-
-											<div class="space-y-1.5">
-												<div class="h-2 w-full overflow-hidden rounded-full bg-muted">
-													<div
-														class="h-full bg-primary transition-all duration-1000"
-														style="width: {stat.percentage}%"
-													></div>
-												</div>
-												<p class="text-right text-[10px] font-bold text-muted-foreground uppercase">
-													{Math.round(stat.percentage)}% Complete
-												</p>
-											</div>
-										</div>
+								<div class="flex min-w-0 flex-1 items-center justify-between gap-4">
+									<div class="min-w-0">
+										<span class="text-sm font-bold">
+											{stat.name}
+											{#if stat.userId === currentUserId}
+												<span
+													class="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[8px] text-primary"
+													>YOU</span
+												>
+											{/if}
+										</span>
+										<p class="text-[10px] tracking-tight text-muted-foreground uppercase">
+											{stat.role}
+										</p>
 									</div>
-								</Card.Content>
-							</Card.Root>
+
+									<div class="flex items-center gap-3">
+										<div class="text-right">
+											<span class="text-sm font-black tabular-nums">{stat.completed}</span>
+											<span class="text-[10px] text-muted-foreground uppercase">
+												/ {stat.total}</span
+											>
+										</div>
+										<Badge
+											variant="secondary"
+											class="bg-primary/10 text-[10px] font-bold text-primary"
+										>
+											{Math.round(stat.percentage)}%
+										</Badge>
+									</div>
+								</div>
+							</div>
 						{/each}
 					</div>
 				</div>

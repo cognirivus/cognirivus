@@ -24,7 +24,8 @@
 		Shield,
 		Globe,
 		Lock,
-		UserMinus
+		UserMinus,
+		Copy
 	} from '@lucide/svelte';
 	import type { Id } from '$convex/_generated/dataModel';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
@@ -49,6 +50,8 @@
 	let name = $state('');
 	let description = $state('');
 	let isPublic = $state(false);
+	let showPrivacyConfirm = $state(false);
+	let pendingPublicValue = $state(false);
 	let confirmName = $state('');
 	let isSaving = $state(false);
 	let isDeleting = $state(false);
@@ -74,6 +77,13 @@
 
 	const isDeleteEnabled = $derived(confirmName === group?.name);
 
+	function copyInviteCode() {
+		if (group?.inviteCode) {
+			navigator.clipboard.writeText(group.inviteCode);
+			toast.success('Invite code copied to clipboard!');
+		}
+	}
+
 	async function handleUpdate() {
 		if (!name.trim()) return;
 		isSaving = true;
@@ -83,12 +93,6 @@
 				name: name.trim(),
 				description: description.trim()
 			});
-			if (isPublic !== group?.isPublic) {
-				await client.mutation((api as any).groups.updatePrivacy, {
-					groupId,
-					isPublic
-				});
-			}
 			toast.success('Circle settings updated');
 		} catch (e: any) {
 			console.error(e);
@@ -194,6 +198,27 @@
 						</Card.Footer>
 					</Card.Root>
 
+					<!-- Invite Code (Admin Only) -->
+					{#if isAdmin}
+						<Card.Root>
+							<Card.Header>
+								<Card.Title>Invite Peer</Card.Title>
+								<Card.Description>Share this code to let others join your circle.</Card.Description>
+							</Card.Header>
+							<Card.Content>
+								<div class="flex items-center justify-between rounded-lg border bg-muted/20 p-4">
+									<code class="font-mono text-xl font-black text-primary"
+										>{group?.inviteCode || '...'}</code
+									>
+									<Button variant="outline" size="sm" onclick={copyInviteCode} class="gap-2">
+										<Copy class="h-4 w-4" />
+										Copy Code
+									</Button>
+								</div>
+							</Card.Content>
+						</Card.Root>
+					{/if}
+
 					<!-- Privacy Settings -->
 					<Card.Root>
 						<Card.Header>
@@ -218,71 +243,20 @@
 											: 'Only people with the invite code can request to join. Admin approval required.'}
 									</p>
 								</div>
-								<Switch bind:checked={isPublic} />
+								<Switch
+									checked={isPublic}
+									onCheckedChange={(checked) => {
+										pendingPublicValue = checked;
+										showPrivacyConfirm = true;
+									}}
+								/>
 							</div>
 						</Card.Content>
 						<Card.Footer class="flex justify-end border-t p-4">
-							<Button
-								variant="ghost"
-								size="sm"
-								onclick={handleUpdate}
-								disabled={isSaving || isPublic === group.isPublic}
-							>
-								Update Privacy
-							</Button>
+							<Badge variant="outline" class="text-[10px] uppercase">
+								{isPublic ? 'Public' : 'Private'}
+							</Badge>
 						</Card.Footer>
-					</Card.Root>
-
-					<!-- Danger Zone -->
-					<Card.Root class="border-destructive/20 bg-destructive/5">
-						<Card.Header>
-							<Card.Title class="flex items-center gap-2 text-destructive">
-								<AlertTriangle class="h-5 w-5" />
-								Danger Zone
-							</Card.Title>
-						</Card.Header>
-						<Card.Content>
-							{#if !showDeleteConfirm}
-								<Button
-									variant="destructive"
-									size="sm"
-									class="w-full gap-2"
-									onclick={() => (showDeleteConfirm = true)}
-								>
-									<Trash2 class="h-4 w-4" />
-									Delete Circle
-								</Button>
-							{:else}
-								<div class="animate-in space-y-4 fade-in slide-in-from-top-2">
-									<p class="text-xs text-muted-foreground">
-										Type <strong>{group.name}</strong> to confirm.
-									</p>
-									<Input placeholder="Circle name" bind:value={confirmName} class="h-8 text-xs" />
-									<div class="flex gap-2">
-										<Button
-											variant="destructive"
-											size="sm"
-											class="flex-1"
-											onclick={handleDelete}
-											disabled={isDeleting || !isDeleteEnabled}
-										>
-											Confirm
-										</Button>
-										<Button
-											variant="outline"
-											size="sm"
-											class="flex-1"
-											onclick={() => {
-												showDeleteConfirm = false;
-												confirmName = '';
-											}}
-										>
-											Cancel
-										</Button>
-									</div>
-								</div>
-							{/if}
-						</Card.Content>
 					</Card.Root>
 				</div>
 
@@ -405,23 +379,100 @@
 					</Card.Root>
 				</div>
 			</div>
+
+			<!-- Danger Zone -->
+			<Card.Root class="border-destructive/20 bg-destructive/5">
+				<Card.Header>
+					<Card.Title class="flex items-center gap-2 text-destructive">
+						<AlertTriangle class="h-5 w-5" />
+						Danger Zone
+					</Card.Title>
+				</Card.Header>
+				<Card.Content>
+					{#if !showDeleteConfirm}
+						<Button
+							variant="destructive"
+							size="sm"
+							class="w-full gap-2"
+							onclick={() => (showDeleteConfirm = true)}
+						>
+							<Trash2 class="h-4 w-4" />
+							Delete Circle
+						</Button>
+					{:else}
+						<div class="animate-in space-y-4 fade-in slide-in-from-top-2">
+							<p class="text-xs text-muted-foreground">
+								Type <strong>{group.name}</strong> to confirm.
+							</p>
+							<Input placeholder="Circle name" bind:value={confirmName} class="h-8 text-xs" />
+							<div class="flex gap-2">
+								<Button
+									variant="destructive"
+									size="sm"
+									class="flex-1"
+									onclick={handleDelete}
+									disabled={isDeleting || !isDeleteEnabled}
+								>
+									Confirm
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									class="flex-1"
+									onclick={() => {
+										showDeleteConfirm = false;
+										confirmName = '';
+									}}
+								>
+									Cancel
+								</Button>
+							</div>
+						</div>
+					{/if}
+				</Card.Content>
+			</Card.Root>
 		</div>
 	{/if}
 </div>
 
-<Dialog.Root bind:open={isRemoveMemberDialogOpen}>
+<Dialog.Root
+	bind:open={showPrivacyConfirm}
+	onOpenChange={(open) => {
+		if (!open) showPrivacyConfirm = false;
+	}}
+>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>Remove Member?</Dialog.Title>
+			<Dialog.Title>Change Circle Privacy?</Dialog.Title>
 			<Dialog.Description>
-				Are you sure you want to remove <span class="font-bold text-foreground"
-					>{memberToRemove?.name}</span
-				> from this circle? They will lose access to the feed and analytics immediately.
+				Are you sure you want to make this circle <span class="font-bold text-foreground"
+					>{pendingPublicValue ? 'Public' : 'Private'}</span
+				>?
+				{#if pendingPublicValue}
+					Anyone will be able to find and join this circle without approval.
+				{:else}
+					New members will need an invite code and admin approval to join.
+				{/if}
 			</Dialog.Description>
 		</Dialog.Header>
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (isRemoveMemberDialogOpen = false)}>Cancel</Button>
-			<Button variant="destructive" onclick={confirmRemoveMember}>Remove Member</Button>
+			<Button variant="outline" onclick={() => (showPrivacyConfirm = false)}>Cancel</Button>
+			<Button
+				onclick={async () => {
+					try {
+						await client.mutation((api as any).groups.updatePrivacy, {
+							groupId,
+							isPublic: pendingPublicValue
+						});
+						isPublic = pendingPublicValue;
+						toast.success('Privacy updated');
+					} catch (e: any) {
+						toast.error(e.message || 'Failed to update privacy');
+					} finally {
+						showPrivacyConfirm = false;
+					}
+				}}>Confirm Change</Button
+			>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>

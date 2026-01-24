@@ -131,6 +131,11 @@
 			keepFocus: true,
 			noScroll: true
 		});
+
+		if (isMobile) {
+			isSidebarOpen = false;
+			isRightSidebarOpen = false;
+		}
 	}
 
 	function handleSearch() {

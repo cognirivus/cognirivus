@@ -96,6 +96,10 @@
 			else params.set(key, value);
 		});
 		goto(`/groups/${groupId}?${params.toString()}`, { noScroll: true, keepFocus: true });
+		if (isMobile) {
+			isSidebarOpen = false;
+			isRightSidebarOpen = false;
+		}
 	}
 
 	function handleSearch() {
@@ -113,6 +117,10 @@
 
 	function navigate(path: string) {
 		goto(`/groups/${groupId}${path}`, { noScroll: true });
+		if (isMobile) {
+			isSidebarOpen = false;
+			isRightSidebarOpen = false;
+		}
 	}
 </script>
 
@@ -264,21 +272,6 @@
 				</div>
 			{/if}
 		</div>
-
-		<!-- Invite Code -->
-		<div class="mt-auto border-t bg-muted/20 p-4">
-			<div class="flex flex-col gap-2 rounded-lg border bg-background p-3">
-				<span class="text-[9px] font-black tracking-widest text-muted-foreground uppercase"
-					>Invite Code</span
-				>
-				<div class="flex items-center justify-between">
-					<code class="font-mono text-xs font-bold text-primary">{group?.inviteCode || '...'}</code>
-					<button class="text-muted-foreground hover:text-primary" onclick={copyInviteCode}>
-						<Copy class="h-3.5 w-3.5" />
-					</button>
-				</div>
-			</div>
-		</div>
 	</aside>
 
 	<!-- Main Content -->
@@ -326,7 +319,7 @@
 							<Search
 								class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
 							/>
-							<Input
+							<input
 								type="text"
 								placeholder="Search in circle..."
 								bind:value={searchInput}
@@ -348,7 +341,7 @@
 						<Button size="sm" class="h-7 px-3 text-xs" onclick={handleSearch}>Search</Button>
 					</div>
 				</header>
-			{:else}
+			{:else if !page.url.pathname.includes('/content/')}
 				<header
 					class="flex h-10 shrink-0 items-center justify-between border-b bg-background px-4 {isSidebarOpen
 						? ''
@@ -365,6 +358,19 @@
 			<div class="flex-1 overflow-y-auto">
 				{@render children()}
 			</div>
+
+			<!-- Right Sidebar FAB for Mobile -->
+			{#if isMobile}
+				<button
+					onclick={() => (isRightSidebarOpen = true)}
+					class="fixed right-6 bottom-12 z-40 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:scale-105 active:scale-95 lg:hidden {isRightSidebarOpen
+						? 'pointer-events-none scale-0 opacity-0'
+						: 'scale-100 opacity-100'}"
+					aria-label="View Details"
+				>
+					<Info class="size-4" />
+				</button>
+			{/if}
 		{/if}
 	</main>
 
@@ -415,42 +421,6 @@
 							{:else}
 								<ShieldCheck class="h-3.5 w-3.5 text-amber-500" />
 								<span class="text-[10px] font-bold text-amber-600 uppercase">Private Circle</span>
-							{/if}
-						</div>
-					</div>
-
-					<Separator />
-
-					<div>
-						<h3 class="mb-3 text-[10px] font-black tracking-widest text-muted-foreground uppercase">
-							Members
-						</h3>
-						<div class="space-y-3">
-							{#if analytics}
-								{#each analytics.memberStats as member}
-									<div class="flex items-center gap-3">
-										<div
-											class="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary"
-										>
-											{member.name.charAt(0)}
-										</div>
-										<div class="flex flex-col">
-											<span class="text-xs font-bold">
-												{member.name}
-												{#if member.userId === currentUserId}
-													<Badge
-														variant="outline"
-														class="ml-1 border-primary/30 px-1 py-0 text-[8px] font-black text-primary uppercase"
-														>You</Badge
-													>
-												{/if}
-											</span>
-											<span class="text-[9px] tracking-tight text-muted-foreground uppercase"
-												>{member.role}</span
-											>
-										</div>
-									</div>
-								{/each}
 							{/if}
 						</div>
 					</div>

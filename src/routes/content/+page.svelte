@@ -497,51 +497,25 @@
 		{/if}
 
 		{#if contentQuery.isLoading}
-			<div class="overflow-x-auto rounded-lg border">
-				<table class="w-full min-w-[600px] sm:min-w-0">
-					<thead class="bg-muted/50">
-						<tr>
-							<th class="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase"
-								>Title</th
-							>
-							<th
-								class="hidden px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase sm:table-cell"
-								>Subject</th
-							>
-							<th
-								class="hidden px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase md:table-cell"
-								>Topic</th
-							>
-							<th
-								class="hidden px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase lg:table-cell"
-								>Date</th
-							>
-							<th
-								class="px-4 py-3 text-center text-xs font-semibold text-muted-foreground uppercase"
-								>Status</th
-							>
-						</tr>
-					</thead>
-					<tbody class="divide-y">
-						{#each Array(10) as _}
-							<tr class="animate-pulse">
-								<td class="px-4 py-4"><div class="h-4 w-48 rounded bg-muted"></div></td>
-								<td class="hidden px-4 py-4 sm:table-cell"
-									><div class="h-4 w-24 rounded bg-muted"></div></td
-								>
-								<td class="hidden px-4 py-4 md:table-cell"
-									><div class="h-4 w-20 rounded bg-muted"></div></td
-								>
-								<td class="hidden px-4 py-4 lg:table-cell"
-									><div class="h-4 w-16 rounded bg-muted"></div></td
-								>
-								<td class="px-4 py-4 text-center"
-									><div class="mx-auto h-4 w-12 rounded bg-muted"></div></td
-								>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+			<div class="space-y-1">
+				{#each Array(5) as _}
+					<div class="flex flex-col gap-3 rounded-lg border-b border-border/40 px-3 py-6 sm:px-4">
+						<div class="flex gap-2">
+							<div class="h-4 w-24 animate-pulse rounded bg-muted"></div>
+							<div class="h-4 w-20 animate-pulse rounded bg-muted"></div>
+						</div>
+						<div class="flex items-start justify-between gap-4">
+							<div class="flex-1 space-y-3">
+								<div class="h-6 w-3/4 animate-pulse rounded bg-muted"></div>
+								<div class="space-y-2">
+									<div class="h-4 w-full animate-pulse rounded bg-muted"></div>
+									<div class="h-4 w-2/3 animate-pulse rounded bg-muted"></div>
+								</div>
+							</div>
+							<div class="h-8 w-8 animate-pulse rounded-md bg-muted"></div>
+						</div>
+					</div>
+				{/each}
 			</div>
 		{:else if contentItems.length === 0}
 			<div class="flex flex-col items-center justify-center py-20 text-center">

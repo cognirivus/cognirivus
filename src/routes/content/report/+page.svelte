@@ -144,7 +144,7 @@
 </svelte:head>
 
 <div class="h-full overflow-y-auto">
-	<div class="px-4 py-6 sm:px-6">
+	<div class="mx-auto max-w-5xl px-4 py-6 sm:px-6">
 		{#if !isEntityView}
 			<div class="flex flex-col items-center justify-center py-20 text-center">
 				<h2 class="text-2xl font-bold">Invalid Report URL</h2>
