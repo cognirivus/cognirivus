@@ -13,7 +13,7 @@
 
 	let isProcessing = $state(false);
 
-	async function handleSelectCircle(groupId: Id<'groups'>) {
+	async function handleSelectGroup(groupId: Id<'groups'>) {
 		isProcessing = true;
 		try {
 			await client.mutation((api as any).groups.shareContent, {
@@ -27,7 +27,7 @@
 				window.location.href = `/groups/${groupId}/blog/${blogId}`;
 			}
 		} catch (e) {
-			console.error('Failed to prepare circle discussion:', e);
+			console.error('Failed to prepare group discussion:', e);
 		} finally {
 			isProcessing = false;
 		}
@@ -44,22 +44,22 @@
 			class="flex flex-col items-center justify-center rounded-xl border border-dashed bg-muted/20 py-12 text-center"
 		>
 			<Users class="mb-3 h-12 w-12 text-muted-foreground/30" />
-			<h3 class="text-lg font-medium">No Circles Yet</h3>
+			<h3 class="text-lg font-medium">No Groups Yet</h3>
 			<p class="mx-auto mt-1 max-w-xs text-sm text-muted-foreground">
-				Join or create a circle to start private group discussions about this content.
+				Join or create a group to start private group discussions about this content.
 			</p>
-			<Button href="/groups" variant="outline" size="sm" class="mt-4">Explore Circles</Button>
+			<Button href="/groups" variant="outline" size="sm" class="mt-4">Explore Groups</Button>
 		</div>
 	{:else}
 		<div class="grid gap-3">
 			<p class="mb-1 text-xs font-bold tracking-wider text-muted-foreground uppercase">
-				Select a Circle to Discuss In
+				Select a Group to Discuss In
 			</p>
 			{#each groups as group}
 				<button
 					class="group flex w-full items-center justify-between rounded-xl border bg-card p-4 text-left transition-all hover:border-primary/50 hover:bg-primary/5 disabled:opacity-50"
 					disabled={isProcessing}
-					onclick={() => handleSelectCircle(group._id)}
+					onclick={() => handleSelectGroup(group._id)}
 				>
 					<div class="flex items-center gap-4">
 						<div
@@ -70,7 +70,7 @@
 						<div>
 							<p class="leading-tight font-bold">{group.name}</p>
 							<p class="line-clamp-1 text-xs text-muted-foreground">
-								{group.description || 'Private Circle'}
+								{group.description || 'Private Group'}
 							</p>
 						</div>
 					</div>

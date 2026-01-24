@@ -93,10 +93,10 @@
 				name: name.trim(),
 				description: description.trim()
 			});
-			toast.success('Circle settings updated');
+			toast.success('Group settings updated');
 		} catch (e: any) {
 			console.error(e);
-			toast.error(e.message || 'Failed to update circle');
+			toast.error(e.message || 'Failed to update group');
 		} finally {
 			isSaving = false;
 		}
@@ -132,11 +132,11 @@
 		isDeleting = true;
 		try {
 			await client.mutation((api as any).groups.remove, { groupId });
-			toast.success('Circle deleted');
+			toast.success('Group deleted');
 			window.location.href = '/groups';
 		} catch (e) {
 			console.error(e);
-			toast.error('Failed to delete circle');
+			toast.error('Failed to delete group');
 			isDeleting = false;
 		}
 	}
@@ -150,8 +150,8 @@
 	{:else if !group || !isAdmin}
 		<div class="flex flex-col items-center justify-center py-20 text-center">
 			<h2 class="text-xl font-bold">Access Denied</h2>
-			<p class="text-muted-foreground">You don't have permission to manage this circle.</p>
-			<Button href="/groups/{groupId}" variant="outline" class="mt-4">Back to Circle</Button>
+			<p class="text-muted-foreground">You don't have permission to manage this group.</p>
+			<Button href="/groups/{groupId}" variant="outline" class="mt-4">Back to Group</Button>
 		</div>
 	{:else}
 		<div class="mx-auto flex w-full max-w-4xl flex-col gap-8 pb-20">
@@ -160,7 +160,7 @@
 					class="mb-1 flex items-center gap-2 text-sm font-bold tracking-wider text-primary uppercase"
 				>
 					<Settings class="h-4 w-4" />
-					Circle Settings
+					Group Settings
 				</div>
 				<h1 class="text-3xl font-extrabold tracking-tight">{group.name}</h1>
 				<p class="font-mono text-xs text-muted-foreground">@{group.groupname}</p>
@@ -178,15 +178,15 @@
 						</Card.Header>
 						<Card.Content class="space-y-4">
 							<div class="space-y-2">
-								<Label for="name">Circle Name</Label>
-								<Input id="name" bind:value={name} placeholder="Enter circle name" />
+								<Label for="name">Group Name</Label>
+								<Input id="name" bind:value={name} placeholder="Enter group name" />
 							</div>
 							<div class="space-y-2">
 								<Label for="description">Description</Label>
 								<Textarea
 									id="description"
 									bind:value={description}
-									placeholder="What is this circle about?"
+									placeholder="What is this group about?"
 									rows={4}
 								/>
 							</div>
@@ -203,7 +203,7 @@
 						<Card.Root>
 							<Card.Header>
 								<Card.Title>Invite Peer</Card.Title>
-								<Card.Description>Share this code to let others join your circle.</Card.Description>
+								<Card.Description>Share this code to let others join your group.</Card.Description>
 							</Card.Header>
 							<Card.Content>
 								<div class="flex items-center justify-between rounded-lg border bg-muted/20 p-4">
@@ -231,15 +231,15 @@
 									<div class="flex items-center gap-2">
 										{#if isPublic}
 											<Globe class="h-4 w-4 text-green-500" />
-											<span class="font-bold">Public Circle</span>
+											<span class="font-bold">Public Group</span>
 										{:else}
 											<Lock class="h-4 w-4 text-amber-500" />
-											<span class="font-bold">Private Circle</span>
+											<span class="font-bold">Private Group</span>
 										{/if}
 									</div>
 									<p class="text-xs leading-snug text-muted-foreground">
 										{isPublic
-											? 'Anyone can find and join this circle automatically.'
+											? 'Anyone can find and join this group automatically.'
 											: 'Only people with the invite code can request to join. Admin approval required.'}
 									</p>
 								</div>
@@ -325,7 +325,7 @@
 								<Shield class="h-5 w-5 text-primary" />
 								Active Members
 							</Card.Title>
-							<Card.Description>Manage who is in this circle.</Card.Description>
+							<Card.Description>Manage who is in this group.</Card.Description>
 						</Card.Header>
 						<Card.Content>
 							<div class="space-y-4">
@@ -397,14 +397,14 @@
 							onclick={() => (showDeleteConfirm = true)}
 						>
 							<Trash2 class="h-4 w-4" />
-							Delete Circle
+							Delete Group
 						</Button>
 					{:else}
 						<div class="animate-in space-y-4 fade-in slide-in-from-top-2">
 							<p class="text-xs text-muted-foreground">
 								Type <strong>{group.name}</strong> to confirm.
 							</p>
-							<Input placeholder="Circle name" bind:value={confirmName} class="h-8 text-xs" />
+							<Input placeholder="Group name" bind:value={confirmName} class="h-8 text-xs" />
 							<div class="flex gap-2">
 								<Button
 									variant="destructive"
@@ -443,13 +443,13 @@
 >
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>Change Circle Privacy?</Dialog.Title>
+			<Dialog.Title>Change Group Privacy?</Dialog.Title>
 			<Dialog.Description>
-				Are you sure you want to make this circle <span class="font-bold text-foreground"
+				Are you sure you want to make this group <span class="font-bold text-foreground"
 					>{pendingPublicValue ? 'Public' : 'Private'}</span
 				>?
 				{#if pendingPublicValue}
-					Anyone will be able to find and join this circle without approval.
+					Anyone will be able to find and join this group without approval.
 				{:else}
 					New members will need an invite code and admin approval to join.
 				{/if}

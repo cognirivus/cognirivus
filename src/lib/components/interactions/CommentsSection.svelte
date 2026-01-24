@@ -4,7 +4,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Tabs from '$lib/components/ui/tabs/index.js';
-	import CircleSelectionList from '$lib/components/CircleSelectionList.svelte';
+	import GroupSelectionList from '$lib/components/GroupSelectionList.svelte';
 	import CommentItem from './CommentItem.svelte';
 	import type { Comment, FlatComment } from './types.js';
 	import type { Id } from '$convex/_generated/dataModel';
@@ -99,9 +99,9 @@
 						<MessageCircle class="h-4 w-4" />
 						Comments ({comments.length})
 					</Tabs.Trigger>
-					<Tabs.Trigger value="circles" class="gap-2">
+					<Tabs.Trigger value="groups" class="gap-2">
 						<Users class="h-4 w-4" />
-						Circles
+						Groups
 					</Tabs.Trigger>
 				</Tabs.List>
 			</div>
@@ -110,20 +110,20 @@
 				{@render commentsContent()}
 			</Tabs.Content>
 
-			<Tabs.Content value="circles" class="mt-0">
+			<Tabs.Content value="groups" class="mt-0">
 				{#if isAuthenticated}
 					{#if contentId || blogId}
-						<CircleSelectionList {contentId} {blogId} />
+						<GroupSelectionList {contentId} {blogId} />
 					{:else}
 						<p class="py-8 text-center text-sm text-muted-foreground">
-							This content cannot be discussed in circles.
+							This content cannot be discussed in groups.
 						</p>
 					{/if}
 				{:else}
 					<Card.Root class="mb-8 border-dashed">
 						<Card.Content class="flex flex-col items-center justify-center py-10 text-center">
 							<Users class="mb-3 h-10 w-10 text-muted-foreground/50" />
-							<p class="mb-1 text-sm font-medium text-foreground">Sign in to use Circles</p>
+							<p class="mb-1 text-sm font-medium text-foreground">Sign in to use Groups</p>
 							<Card.Description class="mb-4 max-w-xs">
 								Private group discussions are exclusive to registered members.
 							</Card.Description>

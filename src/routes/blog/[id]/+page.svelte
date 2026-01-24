@@ -10,14 +10,14 @@
 	import { authClient } from '$lib/auth-client';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 	import { ReactionsBar, CommentsSection } from '$lib/components/interactions/index.js';
-	import CircleSelectionDialog from '$lib/components/CircleSelectionDialog.svelte';
+	import GroupSelectionDialog from '$lib/components/GroupSelectionDialog.svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 
 	const id = $derived(page.params.id as Id<'blogs'>);
-	let isCircleDialogOpen = $state(false);
-	let circleDialogTitle = $state('Select a Circle');
-	let circleDialogAction = $state<'discuss' | 'share'>('discuss');
+	let isGroupDialogOpen = $state(false);
+	let groupDialogTitle = $state('Select a Group');
+	let groupDialogAction = $state<'discuss' | 'share'>('discuss');
 
 	let commentToDelete = $state<Id<'blog_comments'> | null>(null);
 	let isDeleteCommentDialogOpen = $state(false);
@@ -70,37 +70,30 @@
 		});
 	}
 
-	async function onCircleSelect(groupId: string) {
+	async function onGroupSelect(groupId: string) {
 		try {
 			await client.mutation((api as any).groups.shareContent, {
 				groupId: groupId as Id<'groups'>,
 				blogId: id
 			});
 
-			if (circleDialogAction === 'discuss') {
+			if (groupDialogAction === 'discuss') {
 				window.location.href = `/groups/${groupId}/blog/${id}`;
 			} else {
-				toast.success('Blog shared to circle feed!');
-				isCircleDialogOpen = false;
+				toast.success('Blog shared to group feed!');
+				isGroupDialogOpen = false;
 			}
 		} catch (e: any) {
 			toast.error(e.message || 'Failed to share content');
-			console.error('Circle action failed:', e);
+			console.error('Group action failed:', e);
 		}
 	}
 
-	function handleDiscussInCircle() {
+	function handleShareToGroup() {
 		if (!isAuthenticated) return;
-		circleDialogTitle = 'Discuss in Circle';
-		circleDialogAction = 'discuss';
-		isCircleDialogOpen = true;
-	}
-
-	function handleShareToCircle() {
-		if (!isAuthenticated) return;
-		circleDialogTitle = 'Share to Circle';
-		circleDialogAction = 'share';
-		isCircleDialogOpen = true;
+		groupDialogTitle = 'Share to Group';
+		groupDialogAction = 'share';
+		isGroupDialogOpen = true;
 	}
 
 	async function confirmDeleteComment() {
@@ -197,10 +190,10 @@
 						variant="secondary"
 						size="sm"
 						class="h-9 gap-2 px-4 font-bold"
-						onclick={handleShareToCircle}
+						onclick={handleShareToGroup}
 					>
 						<Share2 class="h-4 w-4" />
-						Share to Circle
+						Share to Group
 					</Button>
 				</div>
 			</div>
@@ -230,10 +223,10 @@
 	</div>
 {/if}
 
-<CircleSelectionDialog
-	bind:open={isCircleDialogOpen}
-	title={circleDialogTitle}
-	onSelect={onCircleSelect}
+<GroupSelectionDialog
+	bind:open={isGroupDialogOpen}
+	title={groupDialogTitle}
+	onSelect={onGroupSelect}
 />
 
 <Dialog.Root bind:open={isDeleteCommentDialogOpen}>

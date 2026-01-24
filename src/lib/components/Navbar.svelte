@@ -46,7 +46,7 @@
 		{ name: 'Chat', href: '/chat', icon: MessageSquare, authRequired: true },
 		{ name: 'Knowledge Base', href: '/content', icon: Library, authRequired: false, inPrep: true },
 		{ name: 'Flashcards', href: '/flashcards', icon: Brain, authRequired: true, inPrep: true },
-		{ name: 'Circles', href: '/groups', icon: Users, authRequired: true },
+		{ name: 'Groups', href: '/groups', icon: Users, authRequired: true },
 		{ name: 'Blog', href: '/blog', icon: BookOpen, authRequired: false },
 		{ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, authRequired: true },
 		{ name: 'Admin', href: '/admin', icon: ShieldCheck, adminOnly: true }

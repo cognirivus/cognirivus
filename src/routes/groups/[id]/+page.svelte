@@ -146,7 +146,7 @@
 												href="/groups/{groupId}/content/{item.contentId}"
 											>
 												<MessageSquare class="h-4 w-4" />
-												Discuss in Circle
+												Discuss in Group
 											</Button>
 										{:else if item.blogId}
 											<Button
@@ -156,7 +156,7 @@
 												href="/groups/{groupId}/blog/{item.blogId}"
 											>
 												<MessageSquare class="h-4 w-4" />
-												Discuss in Circle
+												Discuss in Group
 											</Button>
 										{/if}
 
@@ -198,10 +198,10 @@
 <Dialog.Root bind:open={isUnshareDialogOpen}>
 	<Dialog.Content>
 		<Dialog.Header>
-			<Dialog.Title>Remove from Circle Feed?</Dialog.Title>
+			<Dialog.Title>Remove from Group Feed?</Dialog.Title>
 			<Dialog.Description>
-				This will remove the item from the circle's shared intelligence feed. You can always share
-				it again later from the Knowledge Base.
+				This will remove the item from the group's shared intelligence feed. You can always share it
+				again later from the Knowledge Base.
 			</Dialog.Description>
 		</Dialog.Header>
 		<Dialog.Footer>

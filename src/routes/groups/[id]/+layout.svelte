@@ -145,7 +145,7 @@
 			<div class="flex items-center gap-2">
 				<Users class="h-3.5 w-3.5 text-primary" />
 				<h2 class="truncate text-[11px] font-bold tracking-tight text-foreground/80 uppercase">
-					{group?.name || 'Circle'}
+					{group?.name || 'Group'}
 				</h2>
 			</div>
 			<button
@@ -160,7 +160,7 @@
 			<!-- Quick Navigation -->
 			<div class="space-y-1">
 				<h3 class="px-2 text-[10px] font-black tracking-widest text-muted-foreground uppercase">
-					Circle Hub
+					Group Hub
 				</h3>
 				<button
 					onclick={() => navigate('')}
@@ -296,7 +296,7 @@
 					for admin approval. You'll get access to the intelligence feed once you're accepted.
 				</p>
 				<div class="mt-10 flex gap-4">
-					<Button variant="outline" href="/groups">Back to Circles</Button>
+					<Button variant="outline" href="/groups">Back to Groups</Button>
 					<Button
 						variant="ghost"
 						class="text-muted-foreground"
@@ -321,7 +321,7 @@
 							/>
 							<input
 								type="text"
-								placeholder="Search in circle..."
+								placeholder="Search in group..."
 								bind:value={searchInput}
 								onkeydown={(e) => e.key === 'Enter' && handleSearch()}
 								class="h-7 w-full border-none bg-muted/30 pr-8 pl-9 text-xs focus-visible:ring-primary/20"
@@ -350,7 +350,7 @@
 					<div
 						class="flex items-center gap-2 text-[10px] font-black tracking-widest text-muted-foreground uppercase"
 					>
-						{page.url.pathname.includes('/dashboard') ? 'Circle Analytics' : 'Circle Management'}
+						{page.url.pathname.includes('/dashboard') ? 'Group Analytics' : 'Group Management'}
 					</div>
 				</header>
 			{/if}
@@ -395,7 +395,7 @@
 			{/if}
 			<div class="flex flex-1 items-center justify-end gap-2">
 				<h2 class="text-[11px] font-bold tracking-tight text-foreground/80 uppercase">
-					Circle Details
+					Group Details
 				</h2>
 				<Info class="h-3.5 w-3.5 text-primary" />
 			</div>
@@ -409,7 +409,7 @@
 							Description
 						</h3>
 						<p class="text-xs leading-relaxed text-muted-foreground">
-							{group.description || 'No description provided for this circle.'}
+							{group.description || 'No description provided for this group.'}
 						</p>
 					</div>
 
@@ -417,10 +417,10 @@
 						<div class="flex items-center gap-2">
 							{#if group.isPublic}
 								<Users class="h-3.5 w-3.5 text-green-500" />
-								<span class="text-[10px] font-bold text-green-600 uppercase">Public Circle</span>
+								<span class="text-[10px] font-bold text-green-600 uppercase">Public Group</span>
 							{:else}
 								<ShieldCheck class="h-3.5 w-3.5 text-amber-500" />
-								<span class="text-[10px] font-bold text-amber-600 uppercase">Private Circle</span>
+								<span class="text-[10px] font-bold text-amber-600 uppercase">Private Group</span>
 							{/if}
 						</div>
 					</div>

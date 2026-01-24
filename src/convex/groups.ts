@@ -63,7 +63,7 @@ export const join = mutation({
 			group = await ctx.db.get(groupId);
 		}
 
-		if (!group) throw new Error('Circle not found');
+		if (!group) throw new Error('Group not found');
 
 		const existingMembership = await ctx.db
 			.query('memberships')

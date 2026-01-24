@@ -150,7 +150,7 @@
 </script>
 
 <svelte:head>
-	<title>{item?.title || 'Content'} - {group?.name || 'Circle'}</title>
+	<title>{item?.title || 'Content'} - {group?.name || 'Group'}</title>
 </svelte:head>
 
 <div class="flex h-full w-full overflow-hidden">
@@ -169,7 +169,7 @@
 					<p class="text-sm text-muted-foreground">
 						The content you're looking for doesn't exist or has been removed.
 					</p>
-					<Button href="/groups/{groupId}" variant="outline" class="mt-4">Back to Circle</Button>
+					<Button href="/groups/{groupId}" variant="outline" class="mt-4">Back to Group</Button>
 				</div>
 			{:else}
 				<!-- Breadcrumb Context -->
@@ -181,7 +181,7 @@
 						class="-ml-2 h-7 gap-1.5 px-2 text-muted-foreground hover:text-foreground"
 					>
 						<ArrowLeft class="h-3.5 w-3.5" />
-						{group?.name || 'Circle'}
+						{group?.name || 'Group'}
 					</Button>
 					<ChevronRight class="h-3.5 w-3.5" />
 					<a
@@ -234,7 +234,7 @@
 								class="border-primary/20 bg-primary/5 text-[10px] font-bold text-primary uppercase"
 							>
 								<Users class="mr-1 h-3 w-3" />
-								Circle Exclusive
+								Group Exclusive
 							</Badge>
 						</div>
 
@@ -326,14 +326,14 @@
 						</div>
 					</div>
 
-					<!-- Circle Info (Bottom) -->
+					<!-- Group Info (Bottom) -->
 					<div class="rounded-xl border border-primary/20 bg-primary/5 p-6">
 						<div class="flex items-center gap-3">
 							<div class="rounded-full border border-primary/20 bg-primary/10 p-2 text-primary">
 								<MessageSquare class="h-5 w-5" />
 							</div>
 							<div>
-								<p class="text-sm font-bold">Circle Feed</p>
+								<p class="text-sm font-bold">Group Feed</p>
 								<p class="text-xs text-muted-foreground">
 									Your comments and reactions here are only visible to <span
 										class="font-bold text-primary">{group?.name}</span

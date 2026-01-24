@@ -141,7 +141,7 @@
 						<Users class="h-3 w-3" />
 						Collaborative Learning
 					</div>
-					<h1 class="text-4xl font-black tracking-tight sm:text-5xl">Cognirivus Circles</h1>
+					<h1 class="text-4xl font-black tracking-tight sm:text-5xl">Cognirivus Groups</h1>
 					<p class="mx-auto mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground">
 						Private spaces for your study groups to share intelligence, track collective progress,
 						and engage in scoped discussions.
@@ -154,7 +154,7 @@
 								class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
 							/>
 							<Input
-								placeholder="Search public circles by name or @id..."
+								placeholder="Search public groups by name or @id..."
 								bind:value={searchQuery}
 								class="h-12 pr-4 pl-10 shadow-sm focus:ring-primary/20"
 							/>
@@ -194,7 +194,7 @@
 									</div>
 								{:else}
 									<div class="p-8 text-center text-sm text-muted-foreground">
-										No public circles found matching "{searchQuery}"
+										No public groups found matching "{searchQuery}"
 									</div>
 								{/if}
 							</div>
@@ -205,9 +205,9 @@
 				<!-- Main Column: My Groups -->
 				<div class="space-y-6">
 					<div class="flex items-center justify-between">
-						<h2 class="text-xl font-black tracking-tight">My Active Circles</h2>
+						<h2 class="text-xl font-black tracking-tight">My Active Groups</h2>
 						<Badge variant="outline" class="font-bold uppercase tabular-nums"
-							>{groups.length} Circles</Badge
+							>{groups.length} Groups</Badge
 						>
 					</div>
 
@@ -291,7 +291,7 @@
 																class="mt-1 line-clamp-2 min-h-[2.5rem] text-sm leading-relaxed"
 															>
 																{group.description ||
-																	'Private discussion circle for intelligence sharing and group progress tracking.'}
+																	'Private discussion group for intelligence sharing and group progress tracking.'}
 															</Card.Description>
 														</div>
 													</div>
@@ -323,9 +323,9 @@
 							<div class="mb-6 rounded-full bg-muted p-6">
 								<Users class="h-12 w-12 text-muted-foreground/30" />
 							</div>
-							<h3 class="text-xl font-bold">No Circles Found</h3>
+							<h3 class="text-xl font-bold">No Groups Found</h3>
 							<p class="mt-2 max-w-xs text-muted-foreground">
-								You haven't joined any circles yet. Start one yourself or use an invite code from a
+								You haven't joined any groups yet. Start one yourself or use an invite code from a
 								peer.
 							</p>
 						</div>
@@ -337,7 +337,7 @@
 							<Shield class="h-5 w-5 text-primary" />
 							<h4 class="text-sm font-bold">Thread Isolation</h4>
 							<p class="text-xs text-muted-foreground">
-								Private comments only visible to circle members.
+								Private comments only visible to group members.
 							</p>
 						</div>
 						<div class="space-y-2 p-4">
@@ -366,7 +366,7 @@
 				class="fixed right-6 bottom-12 z-40 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:scale-105 active:scale-95 lg:hidden {isRightSidebarOpen
 					? 'pointer-events-none scale-0 opacity-0'
 					: 'scale-100 opacity-100'}"
-				aria-label="Circle Actions"
+				aria-label="Group Actions"
 			>
 				<Plus class="size-4" />
 			</button>
@@ -394,7 +394,7 @@
 			{/if}
 			<div class="flex flex-1 items-center justify-end gap-2">
 				<h2 class="text-[11px] font-bold tracking-tight text-foreground/80 uppercase">
-					Circle Actions
+					Group Actions
 				</h2>
 				<Plus class="h-3.5 w-3.5 text-primary" />
 			</div>
@@ -405,7 +405,7 @@
 				<div>
 					<h3 class="flex items-center gap-2 text-lg font-black tracking-tight">
 						<Plus class="h-5 w-5 text-primary" />
-						Launch Circle
+						Launch Group
 					</h3>
 					<p class="mt-1 text-sm text-muted-foreground">Create a new hub for your group.</p>
 				</div>
@@ -422,7 +422,7 @@
 					</div>
 					<div class="space-y-2">
 						<Label class="text-[10px] font-black text-muted-foreground uppercase"
-							>Circle ID (@handle)</Label
+							>Group ID (@handle)</Label
 						>
 						<Input
 							placeholder="e.g. upsc-2026"
@@ -432,7 +432,7 @@
 					</div>
 					<div class="flex items-center justify-between rounded-lg border-2 bg-muted/20 p-3">
 						<div class="space-y-0.5">
-							<Label class="text-xs font-bold">Public Circle</Label>
+							<Label class="text-xs font-bold">Public Group</Label>
 							<p class="text-[10px] leading-tight text-muted-foreground">
 								Anyone can join without approval.
 							</p>
@@ -444,7 +444,7 @@
 						disabled={!groupName || !groupSlug || isCreating}
 						onclick={handleCreateGroup}
 					>
-						{isCreating ? 'Creating Hub...' : 'Create New Circle'}
+						{isCreating ? 'Creating Hub...' : 'Create New Group'}
 					</Button>
 				</div>
 			</div>
@@ -455,7 +455,7 @@
 				<div>
 					<h3 class="flex items-center gap-2 text-lg font-black tracking-tight">
 						<UserPlus class="h-5 w-5 text-blue-500" />
-						Join Circle
+						Join Group
 					</h3>
 					<p class="mt-1 text-sm text-muted-foreground">
 						Enter an invite code provided by a member.
@@ -473,7 +473,7 @@
 						disabled={!inviteCode || isJoining}
 						onclick={() => handleJoinGroup()}
 					>
-						{isJoining ? 'Verifying...' : 'Join Circle'}
+						{isJoining ? 'Verifying...' : 'Join Group'}
 					</Button>
 				</div>
 			</div>
@@ -483,7 +483,7 @@
 					Community Security
 				</p>
 				<p class="text-xs leading-relaxed text-muted-foreground">
-					Circles are private by default. Only people with your invite code can see shared content
+					Groups are private by default. Only people with your invite code can see shared content
 					and discussions.
 				</p>
 			</div>

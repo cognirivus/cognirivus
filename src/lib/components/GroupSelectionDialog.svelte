@@ -9,7 +9,7 @@
 
 	let {
 		open = $bindable(false),
-		title = 'Select a Circle',
+		title = 'Select a Group',
 		onSelect
 	} = $props<{
 		open: boolean;
@@ -25,9 +25,7 @@
 	<Dialog.Content class="sm:max-w-[425px]">
 		<Dialog.Header>
 			<Dialog.Title>{title}</Dialog.Title>
-			<Dialog.Description>
-				Choose one of your circles to share this content with.
-			</Dialog.Description>
+			<Dialog.Description>Choose one of your groups to share this content with.</Dialog.Description>
 		</Dialog.Header>
 
 		<div class="py-4">
@@ -40,12 +38,12 @@
 					class="flex flex-col items-center justify-center rounded-xl border border-dashed bg-muted/20 py-10 text-center"
 				>
 					<Users class="mb-2 h-10 w-10 text-muted-foreground/30" />
-					<p class="text-sm font-medium">No active circles</p>
+					<p class="text-sm font-medium">No active groups</p>
 					<p class="mt-1 px-4 text-xs text-muted-foreground">
-						You need to be a member of at least one circle to share content.
+						You need to be a member of at least one group to share content.
 					</p>
 					<Button href="/groups" variant="link" class="mt-2 h-auto p-0 text-xs"
-						>Browse Circles</Button
+						>Browse Groups</Button
 					>
 				</div>
 			{:else}

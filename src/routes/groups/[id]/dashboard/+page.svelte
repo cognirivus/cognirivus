@@ -43,11 +43,11 @@
 				class="mb-1 flex items-center gap-2 text-sm font-bold tracking-wider text-primary uppercase"
 			>
 				<TrendingUp class="h-4 w-4" />
-				Circle Dashboard
+				Group Dashboard
 			</div>
 			<h1 class="text-3xl font-extrabold tracking-tight">Performance & Progress</h1>
 			<p class="text-muted-foreground">
-				Track how your circle is moving through the shared intelligence in this hub.
+				Track how your group is moving through the shared intelligence in this hub.
 			</p>
 		</header>
 
@@ -63,7 +63,7 @@
 						<div class="flex items-center justify-between">
 							<div>
 								<p class="text-[10px] font-black tracking-widest text-muted-foreground uppercase">
-									Shared in Circle
+									Shared in Group
 								</p>
 								<p class="text-3xl font-black tabular-nums">{analytics.totalContent}</p>
 							</div>
@@ -95,7 +95,7 @@
 						<div class="flex items-center justify-between">
 							<div>
 								<p class="text-[10px] font-black tracking-widest text-muted-foreground uppercase">
-									Circle Completion
+									Group Completion
 								</p>
 								<p class="text-3xl font-black tabular-nums">{averageProgress}%</p>
 							</div>
@@ -165,14 +165,14 @@
 					</div>
 				</div>
 
-				<!-- Circle Insights -->
+				<!-- Group Insights -->
 				<div class="space-y-6">
 					<h2 class="text-xl font-bold">Insights</h2>
 
 					<Card.Root>
 						<Card.Header>
 							<Card.Title class="text-sm font-bold tracking-wider text-muted-foreground uppercase"
-								>Circle Activity</Card.Title
+								>Group Activity</Card.Title
 							>
 						</Card.Header>
 						<Card.Content class="space-y-4">
@@ -206,7 +206,7 @@
 							Pro Tip
 						</p>
 						<p class="text-sm leading-relaxed text-muted-foreground">
-							Regularly sharing content in the circle feed helps others stay on track and increases
+							Regularly sharing content in the group feed helps others stay on track and increases
 							the overall group completion rate.
 						</p>
 					</div>
