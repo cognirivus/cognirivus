@@ -10,16 +10,19 @@
 		ChevronRight,
 		CheckCircle,
 		Zap,
-		Brain
+		Brain,
+		Highlighter
 	} from '@lucide/svelte';
 
 	const progressQuery = useQuery(api.content.getProgressAnalytics, {});
 	const usageQuery = useQuery(api.analytics.getDashboardStats, {});
 	const memoriesQuery = useQuery(api.memories.list, {});
+	const highlightsQuery = useQuery(api.highlights.getAllUserHighlights, {});
 
 	const progressStats = $derived(progressQuery.data);
 	const usageStats = $derived(usageQuery.data);
 	const memoriesCount = $derived(memoriesQuery.data?.length ?? 0);
+	const highlightsCount = $derived(highlightsQuery.data?.length ?? 0);
 
 	function getPercentage(completed: number, total: number) {
 		if (total === 0) return 0;
@@ -50,7 +53,7 @@
 		</div>
 
 		<!-- Navigation Cards -->
-		<div class="grid gap-6 md:grid-cols-3">
+		<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
 			<!-- Content Progress Card -->
 			<a href="/dashboard/content" class="group">
 				<Card.Root
@@ -71,9 +74,7 @@
 					<Card.Content class="space-y-3">
 						<div>
 							<Card.Title class="text-lg">Content Progress</Card.Title>
-							<p class="text-sm text-muted-foreground">
-								Track your learning across all content
-							</p>
+							<p class="text-sm text-muted-foreground">Track your learning across all content</p>
 						</div>
 
 						{#if progressStats}
@@ -90,11 +91,15 @@
 								<div class="h-2 overflow-hidden rounded-full bg-muted">
 									<div
 										class="h-full bg-green-500 transition-all"
-										style="width: {getPercentage(progressStats.totalCompleted, progressStats.totalContent)}%"
+										style="width: {getPercentage(
+											progressStats.totalCompleted,
+											progressStats.totalContent
+										)}%"
 									></div>
 								</div>
 								<div class="text-right text-xs font-medium text-green-600 dark:text-green-400">
-									{getPercentage(progressStats.totalCompleted, progressStats.totalContent)}% complete
+									{getPercentage(progressStats.totalCompleted, progressStats.totalContent)}%
+									complete
 								</div>
 							</div>
 						{:else}
@@ -102,6 +107,45 @@
 								<p class="text-sm text-muted-foreground">Loading stats...</p>
 							</div>
 						{/if}
+					</Card.Content>
+				</Card.Root>
+			</a>
+
+			<!-- Highlights Card -->
+			<a href="/dashboard/highlights" class="group">
+				<Card.Root
+					class="h-full transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-lg"
+				>
+					<Card.Header class="pb-3">
+						<div class="flex items-center justify-between">
+							<div
+								class="flex h-12 w-12 items-center justify-center rounded-xl bg-yellow-100 text-yellow-600 transition-colors group-hover:bg-yellow-600 group-hover:text-white dark:bg-yellow-900/30 dark:text-yellow-400"
+							>
+								<Highlighter class="h-6 w-6" />
+							</div>
+							<ChevronRight
+								class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary"
+							/>
+						</div>
+					</Card.Header>
+					<Card.Content class="space-y-3">
+						<div>
+							<Card.Title class="text-lg">Highlights</Card.Title>
+							<p class="text-sm text-muted-foreground">Review your saved text highlights</p>
+						</div>
+
+						<div class="space-y-2 rounded-lg bg-muted/50 p-3">
+							<div class="flex items-center justify-between text-sm">
+								<span class="flex items-center gap-2 text-muted-foreground">
+									<Highlighter class="h-4 w-4 text-yellow-500" />
+									Saved
+								</span>
+								<span class="font-bold">{highlightsCount}</span>
+							</div>
+							<p class="text-xs text-muted-foreground">
+								Quickly access your notes and group discussions
+							</p>
+						</div>
 					</Card.Content>
 				</Card.Root>
 			</a>

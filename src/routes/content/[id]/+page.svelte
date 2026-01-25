@@ -17,7 +17,8 @@
 		ChevronRight,
 		FileText,
 		Share2,
-		MessageSquare
+		MessageSquare,
+		Globe
 	} from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader';
 	import { Markdown } from '$lib/components/prompt-kit/markdown';
@@ -28,14 +29,16 @@
 	import GroupSelectionDialog from '$lib/components/GroupSelectionDialog.svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import { HighlightWrapper, FloatingToolbar, InlineCommentPane } from '$lib/components/highlights';
+	import { highlightStore } from '$lib/stores/highlights.svelte';
 
 	const contentId = $derived(page.params.id as Id<'content'>);
-	let isGroupDialogOpen = $state(false);
-	let groupDialogTitle = $state('Select a Group');
-	let groupDialogAction = $state<'discuss' | 'share'>('discuss');
+	let activeCommentId = $state<Id<'highlights'> | null>(null);
 
-	let commentToDelete = $state<Id<'content_comments'> | null>(null);
-	let isDeleteCommentDialogOpen = $state(false);
+	const highlightsQuery = useQuery(api.highlights.listHighlights, () =>
+		page.params.id ? { contentId: page.params.id as Id<'content'> } : 'skip'
+	);
+	const highlights = $derived(highlightsQuery.data ?? []);
 
 	const client = useConvexClient();
 	const session = authClient.useSession();
@@ -68,6 +71,71 @@
 	const currentUserInitial = $derived(
 		session.value?.data?.user?.name?.charAt(0).toUpperCase() ?? 'U'
 	);
+
+	// Calculate authors for the layers menu
+	const authors = $derived.by(() => {
+		const map = new Map<string, { id: string; name: string; count: number }>();
+
+		// Always include "You" if authenticated
+		if (isAuthenticated && currentUserId) {
+			map.set(currentUserId, { id: currentUserId, name: 'You', count: 0 });
+		}
+
+		highlights.forEach((h) => {
+			const existing = map.get(h.userId);
+			if (existing) {
+				existing.count++;
+			} else {
+				if (h.userId === currentUserId) {
+					const you = map.get(currentUserId!)!;
+					you.count++;
+				} else {
+					map.set(h.userId, {
+						id: h.userId,
+						name: h.userName || 'Unknown',
+						count: 1
+					});
+				}
+			}
+		});
+		return Array.from(map.values());
+	});
+
+	async function handleAddHighlight(
+		color: string,
+		serializedRange: string,
+		text: string,
+		gId?: string
+	) {
+		if (!isAuthenticated) return;
+		try {
+			return await client.mutation(api.highlights.createHighlight, {
+				contentId,
+				serializedRange,
+				text,
+				color,
+				groupId: gId as Id<'groups'> | undefined
+			});
+		} catch (e) {
+			console.error('Failed to create highlight:', e);
+			toast.error('Failed to save highlight');
+		}
+	}
+
+	async function handleRemoveHighlight(id: Id<'highlights'>) {
+		try {
+			await client.mutation(api.highlights.removeHighlight, { id });
+		} catch (e) {
+			console.error('Failed to remove highlight:', e);
+		}
+	}
+
+	let isGroupDialogOpen = $state(false);
+	let groupDialogTitle = $state('Select a Group');
+	let groupDialogAction = $state<'discuss' | 'share'>('discuss');
+
+	let commentToDelete = $state<Id<'content_comments'> | null>(null);
+	let isDeleteCommentDialogOpen = $state(false);
 
 	function getEntityIcon(type: string) {
 		const t = type.toLowerCase();
@@ -122,7 +190,6 @@
 			console.error('Group action failed:', e);
 		}
 	}
-
 
 	function handleShareToGroup() {
 		if (!isAuthenticated) return;
@@ -300,6 +367,15 @@
 									<Share2 class="h-4 w-4" />
 									Share to Group
 								</Button>
+								<Button
+									variant="ghost"
+									size="sm"
+									class="h-9 gap-2 px-3 text-muted-foreground"
+									href="/content/{item._id}"
+								>
+									<Globe class="h-4 w-4" />
+									View Public
+								</Button>
 							</div>
 						</div>
 
@@ -350,11 +426,19 @@
 					{/if}
 
 					<!-- Content Body -->
-					<div class="rounded-lg border bg-card p-6 shadow-sm">
-						<div class="prose prose-zinc dark:prose-invert max-w-none">
-							<Markdown content={item.body} />
+					<HighlightWrapper
+						{highlights}
+						{currentUserId}
+						onAddHighlight={handleAddHighlight}
+						onRemoveHighlight={handleRemoveHighlight}
+						onAddComment={(id) => (activeCommentId = id)}
+					>
+						<div class="rounded-lg border bg-card p-6 shadow-sm">
+							<div class="prose prose-zinc dark:prose-invert max-w-none">
+								<Markdown content={item.body} />
+							</div>
 						</div>
-					</div>
+					</HighlightWrapper>
 
 					<!-- Footer -->
 					{#if item.subject}
@@ -395,6 +479,12 @@
 		</div>
 	</div>
 </div>
+
+<FloatingToolbar {authors} />
+
+{#if activeCommentId}
+	<InlineCommentPane highlightId={activeCommentId} onClose={() => (activeCommentId = null)} />
+{/if}
 
 <GroupSelectionDialog
 	bind:open={isGroupDialogOpen}

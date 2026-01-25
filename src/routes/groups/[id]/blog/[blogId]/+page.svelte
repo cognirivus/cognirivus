@@ -13,11 +13,49 @@
 	import { Separator } from '$lib/components/ui/separator';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import { HighlightWrapper, FloatingToolbar, InlineCommentPane } from '$lib/components/highlights';
+	import { highlightStore } from '$lib/stores/highlights.svelte';
 
 	const groupId = $derived(page.params.id as Id<'groups'>);
 	const blogId = $derived(page.params.blogId as Id<'blogs'>);
 	const client = useConvexClient();
 	const session = authClient.useSession();
+
+	let activeCommentId = $state<Id<'highlights'> | null>(null);
+
+	const highlightsQuery = useQuery(api.highlights.listHighlights, () =>
+		blogId ? { blogId, groupId } : 'skip'
+	);
+	const highlights = $derived(highlightsQuery.data ?? []);
+
+	async function handleAddHighlight(
+		color: string,
+		serializedRange: string,
+		text: string,
+		gId?: string
+	) {
+		if (!isAuthenticated) return;
+		try {
+			return await client.mutation(api.highlights.createHighlight, {
+				blogId,
+				serializedRange,
+				text,
+				color,
+				groupId: (gId as Id<'groups'>) || groupId
+			});
+		} catch (e) {
+			console.error('Failed to create highlight:', e);
+			toast.error('Failed to save highlight');
+		}
+	}
+
+	async function handleRemoveHighlight(id: Id<'highlights'>) {
+		try {
+			await client.mutation(api.highlights.removeHighlight, { id });
+		} catch (e) {
+			console.error('Failed to remove highlight:', e);
+		}
+	}
 
 	let commentToDelete = $state<Id<'blog_comments'> | null>(null);
 	let isDeleteCommentDialogOpen = $state(false);
@@ -48,6 +86,32 @@
 	const currentUserInitial = $derived(
 		session.value?.data?.user?.name?.charAt(0).toUpperCase() ?? 'U'
 	);
+
+	// Calculate authors for the layers menu
+	const authors = $derived.by(() => {
+		const map = new Map<string, { id: string; name: string; count: number }>();
+		if (isAuthenticated && currentUserId) {
+			map.set(currentUserId, { id: currentUserId, name: 'You', count: 0 });
+		}
+		highlights.forEach((h) => {
+			const existing = map.get(h.userId);
+			if (existing) {
+				existing.count++;
+			} else {
+				if (h.userId === currentUserId) {
+					const you = map.get(currentUserId!)!;
+					you.count++;
+				} else {
+					map.set(h.userId, {
+						id: h.userId,
+						name: h.userName || 'Unknown',
+						count: 1
+					});
+				}
+			}
+		});
+		return Array.from(map.values());
+	});
 
 	function formatDate(date: number) {
 		return new Intl.DateTimeFormat('en-US', {
@@ -210,11 +274,20 @@
 						</div>
 					</header>
 
-					<div class="rounded-lg border bg-card p-6 shadow-sm">
-						<div class="prose prose-zinc dark:prose-invert max-w-none">
-							<Markdown content={blog.body} />
+					<HighlightWrapper
+						{highlights}
+						{currentUserId}
+						{groupId}
+						onAddHighlight={handleAddHighlight}
+						onRemoveHighlight={handleRemoveHighlight}
+						onAddComment={(id) => (activeCommentId = id)}
+					>
+						<div class="rounded-lg border bg-card p-6 shadow-sm">
+							<div class="prose prose-zinc dark:prose-invert max-w-none">
+								<Markdown content={blog.body} />
+							</div>
 						</div>
-					</div>
+					</HighlightWrapper>
 
 					<!-- Group Info (Bottom) -->
 					<div class="rounded-xl border border-primary/20 bg-primary/5 p-6">
@@ -253,6 +326,12 @@
 		</div>
 	</div>
 </div>
+
+<FloatingToolbar {authors} {groupId} />
+
+{#if activeCommentId}
+	<InlineCommentPane highlightId={activeCommentId} onClose={() => (activeCommentId = null)} />
+{/if}
 
 <Dialog.Root bind:open={isDeleteCommentDialogOpen}>
 	<Dialog.Content>

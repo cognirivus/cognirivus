@@ -3,7 +3,7 @@
 	import { Streamdown, type StreamdownProps, type Extension } from 'svelte-streamdown';
 	import { mode } from 'mode-watcher';
 	import type { HTMLAttributes } from 'svelte/elements';
-	import { highlightsEnabled } from '$lib/stores/highlights';
+	import { highlightStore } from '$lib/stores/highlights.svelte';
 
 	type Props = {
 		content: string;
@@ -53,7 +53,7 @@
 	>
 		{#snippet children({ token })}
 			{#if token.type === 'highlight'}
-				{#if $highlightsEnabled}
+				{#if highlightStore.enabled}
 					<mark class="hl">{token.text}</mark>
 				{:else}
 					{token.text}

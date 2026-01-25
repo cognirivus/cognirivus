@@ -13,8 +13,45 @@
 	import GroupSelectionDialog from '$lib/components/GroupSelectionDialog.svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { HighlightWrapper, FloatingToolbar, InlineCommentPane } from '$lib/components/highlights';
+	import { highlightStore } from '$lib/stores/highlights.svelte';
 
 	const id = $derived(page.params.id as Id<'blogs'>);
+	let activeCommentId = $state<Id<'highlights'> | null>(null);
+
+	const highlightsQuery = useQuery(api.highlights.listHighlights, () =>
+		id ? { blogId: id } : 'skip'
+	);
+	const highlights = $derived(highlightsQuery.data ?? []);
+
+	async function handleAddHighlight(
+		color: string,
+		serializedRange: string,
+		text: string,
+		gId?: string
+	) {
+		if (!isAuthenticated) return;
+		try {
+			return await client.mutation(api.highlights.createHighlight, {
+				blogId: id,
+				serializedRange,
+				text,
+				color,
+				groupId: gId as Id<'groups'> | undefined
+			});
+		} catch (e) {
+			console.error('Failed to create highlight:', e);
+			toast.error('Failed to save highlight');
+		}
+	}
+
+	async function handleRemoveHighlight(hId: Id<'highlights'>) {
+		try {
+			await client.mutation(api.highlights.removeHighlight, { id: hId });
+		} catch (e) {
+			console.error('Failed to remove highlight:', e);
+		}
+	}
 	let isGroupDialogOpen = $state(false);
 	let groupDialogTitle = $state('Select a Group');
 	let groupDialogAction = $state<'discuss' | 'share'>('discuss');
@@ -35,6 +72,35 @@
 	const currentUserInitial = $derived(
 		session.value?.data?.user?.name?.charAt(0).toUpperCase() ?? 'U'
 	);
+
+	// Calculate authors for the layers menu
+	const authors = $derived.by(() => {
+		const map = new Map<string, { id: string; name: string; count: number }>();
+
+		// Always include "You" if authenticated
+		if (isAuthenticated && currentUserId) {
+			map.set(currentUserId, { id: currentUserId, name: 'You', count: 0 });
+		}
+
+		highlights.forEach((h) => {
+			const existing = map.get(h.userId);
+			if (existing) {
+				existing.count++;
+			} else {
+				if (h.userId === currentUserId) {
+					const you = map.get(currentUserId!)!;
+					you.count++;
+				} else {
+					map.set(h.userId, {
+						id: h.userId,
+						name: h.userName || 'Unknown',
+						count: 1
+					});
+				}
+			}
+		});
+		return Array.from(map.values());
+	});
 
 	function formatDate(date: number) {
 		return new Intl.DateTimeFormat('en-US', {
@@ -199,9 +265,17 @@
 			</div>
 		</header>
 
-		<div class="prose prose-neutral dark:prose-invert max-w-none">
-			<Markdown content={blog.body} />
-		</div>
+		<HighlightWrapper
+			{highlights}
+			{currentUserId}
+			onAddHighlight={handleAddHighlight}
+			onRemoveHighlight={handleRemoveHighlight}
+			onAddComment={(id) => (activeCommentId = id)}
+		>
+			<div class="prose prose-neutral dark:prose-invert max-w-none">
+				<Markdown content={blog.body} />
+			</div>
+		</HighlightWrapper>
 
 		<!-- Comments Section -->
 		<CommentsSection
@@ -221,6 +295,12 @@
 	<div class="flex h-32 items-center justify-center text-muted-foreground">
 		Blog post not found.
 	</div>
+{/if}
+
+<FloatingToolbar {authors} />
+
+{#if activeCommentId}
+	<InlineCommentPane highlightId={activeCommentId} onClose={() => (activeCommentId = null)} />
 {/if}
 
 <GroupSelectionDialog

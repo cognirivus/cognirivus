@@ -18,6 +18,7 @@ import type * as currentAffairs from "../currentAffairs.js";
 import type * as extraction from "../extraction.js";
 import type * as flashcards from "../flashcards.js";
 import type * as groups from "../groups.js";
+import type * as highlights from "../highlights.js";
 import type * as http from "../http.js";
 import type * as image from "../image.js";
 import type * as lib_extractors_types from "../lib/extractors/types.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   extraction: typeof extraction;
   flashcards: typeof flashcards;
   groups: typeof groups;
+  highlights: typeof highlights;
   http: typeof http;
   image: typeof image;
   "lib/extractors/types": typeof lib_extractors_types;

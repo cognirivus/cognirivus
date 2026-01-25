@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { ChartLine, Settings, BookCheck } from '@lucide/svelte';
+	import { ChartLine, Settings, BookCheck, Highlighter } from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button/index.js';
 	import { cn } from '$lib/utils.js';
 
@@ -11,6 +11,11 @@
 			name: 'Content Progress',
 			href: '/dashboard/content',
 			icon: BookCheck
+		},
+		{
+			name: 'Highlights',
+			href: '/dashboard/highlights',
+			icon: Highlighter
 		},
 		{
 			name: 'Usage',

@@ -335,7 +335,54 @@ const schema = defineSchema({
 		sharedAt: v.number()
 	})
 		.index('by_group', ['groupId'])
-		.index('by_shared_by', ['sharedById'])
+		.index('by_shared_by', ['sharedById']),
+
+	highlights: defineTable({
+		userId: v.string(),
+		userName: v.optional(v.string()),
+		groupId: v.optional(v.id('groups')),
+		contentId: v.optional(v.id('content')),
+		blogId: v.optional(v.id('blogs')),
+		serializedRange: v.string(),
+		text: v.string(),
+		color: v.string(),
+		createdAt: v.number()
+	})
+		.index('by_user', ['userId'])
+		.index('by_user_content', ['userId', 'contentId'])
+		.index('by_user_blog', ['userId', 'blogId'])
+		.index('by_group_content', ['groupId', 'contentId'])
+		.index('by_group_blog', ['groupId', 'blogId']),
+
+	group_shared_highlights: defineTable({
+		groupId: v.id('groups'),
+		contentId: v.optional(v.id('content')),
+		blogId: v.optional(v.id('blogs')),
+		sharedById: v.string(),
+		sharedAt: v.number()
+	})
+		.index('by_group_content', ['groupId', 'contentId'])
+		.index('by_group_blog', ['groupId', 'blogId'])
+		.index('by_shared_by', ['sharedById']),
+
+	inline_comments: defineTable({
+		highlightId: v.id('highlights'),
+		userId: v.string(),
+		userName: v.optional(v.string()),
+		body: v.string(),
+		parentId: v.optional(v.id('inline_comments')),
+		createdAt: v.number()
+	})
+		.index('by_highlight', ['highlightId'])
+		.index('by_parent', ['parentId']),
+
+	inline_comment_reactions: defineTable({
+		commentId: v.id('inline_comments'),
+		userId: v.string(),
+		like_dislike: v.number()
+	})
+		.index('by_comment', ['commentId'])
+		.index('by_comment_user', ['commentId', 'userId'])
 });
 
 export default schema;

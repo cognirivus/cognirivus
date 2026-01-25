@@ -168,3 +168,11 @@
 		transform: scale(1);
 	}
 }
+
+/* Highlight Styles - Reset defaults */
+mark {
+	background-color: transparent;
+	color: inherit;
+	padding: 0;
+	border-bottom: none;
+}
