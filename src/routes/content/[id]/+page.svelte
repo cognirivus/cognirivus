@@ -367,15 +367,6 @@
 									<Share2 class="h-4 w-4" />
 									Share to Group
 								</Button>
-								<Button
-									variant="ghost"
-									size="sm"
-									class="h-9 gap-2 px-3 text-muted-foreground"
-									href="/content/{item._id}"
-								>
-									<Globe class="h-4 w-4" />
-									View Public
-								</Button>
 							</div>
 						</div>
 

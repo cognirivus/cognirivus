@@ -57,7 +57,6 @@
 		>
 			<Highlighter class="h-3 w-3" />
 		</Button>
-		<LayersMenu {authors} />
 	</div>
 
 	<div class="flex items-center gap-2">
