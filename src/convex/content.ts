@@ -1032,6 +1032,9 @@ export const toggleCommentLike = mutation({
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
 
+		const comment = await ctx.db.get(args.commentId);
+		if (!comment) throw new Error('Comment not found');
+
 		const existing = await ctx.db
 			.query('content_comment_reactions')
 			.withIndex('by_comment_user', (q) => q.eq('commentId', args.commentId).eq('userId', user._id))
@@ -1040,25 +1043,31 @@ export const toggleCommentLike = mutation({
 		if (existing) {
 			await ctx.db.delete(existing._id);
 			if (existing.like_dislike === 1) {
-				await contentCommentLikesAggregate.delete(ctx, existing);
+				if (!comment.groupId) await contentCommentLikesAggregate.delete(ctx, existing);
 			} else {
-				await contentCommentDislikesAggregate.delete(ctx, existing);
+				if (!comment.groupId) await contentCommentDislikesAggregate.delete(ctx, existing);
 				const id = await ctx.db.insert('content_comment_reactions', {
 					commentId: args.commentId,
 					userId: user._id,
-					like_dislike: 1
+					like_dislike: 1,
+					groupId: comment.groupId
 				});
-				const doc = await ctx.db.get(id);
-				await contentCommentLikesAggregate.insert(ctx, doc!);
+				if (!comment.groupId) {
+					const doc = await ctx.db.get(id);
+					await contentCommentLikesAggregate.insert(ctx, doc!);
+				}
 			}
 		} else {
 			const id = await ctx.db.insert('content_comment_reactions', {
 				commentId: args.commentId,
 				userId: user._id,
-				like_dislike: 1
+				like_dislike: 1,
+				groupId: comment.groupId
 			});
-			const doc = await ctx.db.get(id);
-			await contentCommentLikesAggregate.insert(ctx, doc!);
+			if (!comment.groupId) {
+				const doc = await ctx.db.get(id);
+				await contentCommentLikesAggregate.insert(ctx, doc!);
+			}
 		}
 	}
 });
@@ -1069,6 +1078,9 @@ export const toggleCommentDislike = mutation({
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
 
+		const comment = await ctx.db.get(args.commentId);
+		if (!comment) throw new Error('Comment not found');
+
 		const existing = await ctx.db
 			.query('content_comment_reactions')
 			.withIndex('by_comment_user', (q) => q.eq('commentId', args.commentId).eq('userId', user._id))
@@ -1077,25 +1089,31 @@ export const toggleCommentDislike = mutation({
 		if (existing) {
 			await ctx.db.delete(existing._id);
 			if (existing.like_dislike === -1) {
-				await contentCommentDislikesAggregate.delete(ctx, existing);
+				if (!comment.groupId) await contentCommentDislikesAggregate.delete(ctx, existing);
 			} else {
-				await contentCommentLikesAggregate.delete(ctx, existing);
+				if (!comment.groupId) await contentCommentLikesAggregate.delete(ctx, existing);
 				const id = await ctx.db.insert('content_comment_reactions', {
 					commentId: args.commentId,
 					userId: user._id,
-					like_dislike: -1
+					like_dislike: -1,
+					groupId: comment.groupId
 				});
-				const doc = await ctx.db.get(id);
-				await contentCommentDislikesAggregate.insert(ctx, doc!);
+				if (!comment.groupId) {
+					const doc = await ctx.db.get(id);
+					await contentCommentDislikesAggregate.insert(ctx, doc!);
+				}
 			}
 		} else {
 			const id = await ctx.db.insert('content_comment_reactions', {
 				commentId: args.commentId,
 				userId: user._id,
-				like_dislike: -1
+				like_dislike: -1,
+				groupId: comment.groupId
 			});
-			const doc = await ctx.db.get(id);
-			await contentCommentDislikesAggregate.insert(ctx, doc!);
+			if (!comment.groupId) {
+				const doc = await ctx.db.get(id);
+				await contentCommentDislikesAggregate.insert(ctx, doc!);
+			}
 		}
 	}
 });
@@ -1103,12 +1121,18 @@ export const toggleCommentDislike = mutation({
 export const getComments = query({
 	args: { contentId: v.id('content'), groupId: v.optional(v.id('groups')) },
 	handler: async (ctx, args) => {
-		const comments = await ctx.db
+		let commentsQuery = ctx.db
 			.query('content_comments')
-			.withIndex('by_content_created_at', (q) => q.eq('contentId', args.contentId))
-			.filter((q) => q.eq(q.field('groupId'), args.groupId))
-			.order('asc')
-			.collect();
+			.withIndex('by_content_created_at', (q) => q.eq('contentId', args.contentId));
+
+		if (args.groupId) {
+			commentsQuery = commentsQuery.filter((q) => q.eq(q.field('groupId'), args.groupId));
+		} else {
+			// Explicitly filter for public comments (no groupId)
+			commentsQuery = commentsQuery.filter((q) => q.eq(q.field('groupId'), undefined));
+		}
+
+		const comments = await commentsQuery.order('asc').collect();
 
 		const identity = await ctx.auth.getUserIdentity();
 		const user = identity ? await authComponent.getAuthUser(ctx) : null;
