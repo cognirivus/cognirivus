@@ -81,33 +81,29 @@
 	);
 	const comments = $derived(commentsQuery.data ?? []);
 
-	const isAuthenticated = $derived(!!session.value?.data?.user);
-	const currentUserId = $derived(session.value?.data?.user?.id);
-	const currentUserInitial = $derived(
-		session.value?.data?.user?.name?.charAt(0).toUpperCase() ?? 'U'
-	);
+	const isAuthenticated = $derived(!!$session.data?.user);
+	const currentUserId = $derived($session.data?.user?.id);
+	const currentUserInitial = $derived($session.data?.user?.name?.charAt(0).toUpperCase() ?? 'U');
 
 	// Calculate authors for the layers menu
 	const authors = $derived.by(() => {
 		const map = new Map<string, { id: string; name: string; count: number }>();
+
+		// Always include "You" if authenticated
 		if (isAuthenticated && currentUserId) {
 			map.set(currentUserId, { id: currentUserId, name: 'You', count: 0 });
 		}
+
 		highlights.forEach((h) => {
 			const existing = map.get(h.userId);
 			if (existing) {
 				existing.count++;
 			} else {
-				if (h.userId === currentUserId) {
-					const you = map.get(currentUserId!)!;
-					you.count++;
-				} else {
-					map.set(h.userId, {
-						id: h.userId,
-						name: h.userName || 'Unknown',
-						count: 1
-					});
-				}
+				map.set(h.userId, {
+					id: h.userId,
+					name: h.userId === currentUserId ? 'You' : h.userName || 'Unknown',
+					count: 1
+				});
 			}
 		});
 		return Array.from(map.values());
@@ -198,7 +194,7 @@
 
 <div class="flex h-full w-full overflow-hidden">
 	<div class="flex-1 overflow-y-auto">
-		<div class="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+		<div class="mx-auto max-w-4xl px-4 pt-8 pb-32 sm:px-6">
 			{#if blogQuery.isLoading || groupQuery.isLoading}
 				<div class="flex h-[50vh] items-center justify-center">
 					<Loader variant="circular" size="lg" />

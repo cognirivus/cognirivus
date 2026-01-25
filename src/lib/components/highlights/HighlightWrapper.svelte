@@ -46,23 +46,17 @@
 	// Track what is currently applied in the DOM to avoid unnecessary work
 	let renderedHighlights = new Set<string>();
 
-	// Initialize visible authors with everyone when highlights load first time
-	$effect(() => {
-		if (highlights.length > 0 && highlightStore.visibleAuthorIds.size === 0) {
-			const authors = new Set(highlights.map((h) => h.userId));
-			highlightStore.visibleAuthorIds = authors;
-		}
-	});
-
-	// Filter highlights based on visibility
+	// Filter highlights based on visibility and master enable toggle
 	const visibleHighlights = $derived(
-		highlights.filter((h) => highlightStore.visibleAuthorIds.has(h.userId))
+		highlightStore.enabled
+			? highlights.filter((h) => !highlightStore.hiddenAuthorIds.has(h.userId))
+			: []
 	);
 
 	function handleSelection(e?: Event) {
-		if (!highlightStore.enabled || isApplying) return;
+		if (!highlightStore.enabled) return;
 
-		// If click originated in popup, don't clear context
+		// If click originated in popup, don't clear context or update selection
 		const target = e?.target as HTMLElement;
 		if (target && target.closest('.highlight-popup')) {
 			return;
@@ -75,7 +69,14 @@
 		}
 
 		const range = selection.getRangeAt(0);
-		if (!containerEl || !containerEl.contains(range.commonAncestorContainer)) {
+		const contains = containerEl?.contains(range.commonAncestorContainer);
+
+		if (!containerEl || !contains) {
+			// Don't clear if click was on popup
+			const target = e?.target as HTMLElement;
+			if (target && target.closest('.highlight-popup')) {
+				return;
+			}
 			highlightStore.selectionContext = null;
 			return;
 		}
@@ -85,25 +86,25 @@
 		const text = selection.toString().trim();
 
 		if (text.length > 0) {
-			// Save context with container-relative coordinates
-			highlightStore.selectionContext = {
-				top: rect.top - containerRect.top,
-				left: rect.left - containerRect.left + rect.width / 2,
-				range,
-				text
-			};
-
 			// Sticky Mode Auto-Highlight
 			if (highlightStore.activeColor) {
 				const color = highlightStore.activeColor;
 				try {
 					const serialized = serializeRange(range, containerEl);
-					onAddHighlight(color, serialized, text).then(() => {
+					onAddHighlight(color, serialized, text, groupId).then(() => {
 						highlightStore.clearSelection();
 					});
 				} catch (err) {
 					console.error('Sticky highlight failed:', err);
 				}
+			} else {
+				// Save context with container-relative coordinates
+				highlightStore.selectionContext = {
+					top: rect.top - containerRect.top,
+					left: rect.left - containerRect.left + rect.width / 2,
+					range,
+					text
+				};
 			}
 		}
 	}
@@ -111,6 +112,14 @@
 	async function syncHighlights() {
 		if (!containerEl || isApplying) return;
 		isApplying = true;
+
+		// Wait for any Svelte DOM updates to finish
+		await tick();
+
+		if (!containerEl) {
+			isApplying = false;
+			return;
+		}
 
 		// Disconnect to avoid loops
 		observer?.disconnect();
@@ -127,7 +136,6 @@
 					renderedHighlights.delete(id);
 				}
 			}
-			containerEl.normalize();
 
 			// 2. Add new highlights
 			const toAdd = targetHighlights.filter((h) => !renderedHighlights.has(h._id));
@@ -189,26 +197,43 @@
 	const debouncedUpdatePositions = debounce(updateMarkerPositions, 50);
 
 	// Full nuke and rebuild - essentially the old function, used only for emergencies
-	function forceRebuild() {
-		if (!containerEl) return;
-		renderedHighlights.clear();
-		const marks = containerEl.querySelectorAll('mark[data-highlight-id]');
-		marks.forEach((m) => {
-			const parent = m.parentNode;
-			if (parent) {
-				while (m.firstChild) parent.insertBefore(m.firstChild, m);
-				parent.removeChild(m);
+	async function forceRebuild() {
+		if (!containerEl || isApplying) return;
+		isApplying = true;
+
+		try {
+			await tick();
+			if (!containerEl) return;
+
+			// Disconnect to avoid loops
+			observer?.disconnect();
+
+			// Use the robust removal logic for every rendered highlight
+			for (const id of renderedHighlights) {
+				removeHighlightById(id, containerEl);
 			}
-		});
-		containerEl.normalize();
-		syncHighlights();
+			renderedHighlights.clear();
+
+			// Ensure any stray marks (not in our set) are also cleaned up robustly
+			const remainingMarks = containerEl.querySelectorAll('mark[data-highlight-id]');
+			remainingMarks.forEach((m) => {
+				const id = (m as HTMLElement).dataset.highlightId;
+				if (id) removeHighlightById(id, containerEl!);
+			});
+		} finally {
+			isApplying = false;
+			if (containerEl && observer) {
+				observer.observe(containerEl, { childList: true, subtree: true, characterData: true });
+			}
+			syncHighlights();
+		}
 	}
 
 	$effect(() => {
 		// When highlights prop changes OR visibility set changes, run sync
 		// visibleHighlights is derived from both
 		if (containerEl && visibleHighlights) {
-			syncHighlights();
+			debouncedSync();
 		}
 	});
 
@@ -274,81 +299,25 @@
 	}
 </script>
 
-<div
-	bind:this={containerEl}
-	class="highlight-container relative pr-12"
-	onclick={handleContainerClick}
-	role="button"
-	tabindex="0"
-	onkeydown={(e) => {
-		if (e.key === 'Enter' || e.key === ' ') handleContainerClick(e as any);
-	}}
->
+<div bind:this={containerEl} class="highlight-container relative" onclick={handleContainerClick}>
 	{@render children()}
 
-	{#if highlightStore.selectionContext}
-		<div class="highlight-popup pointer-events-none absolute z-[100]">
-			<SelectionPopup
-				onHighlight={async (color) => {
-					if (highlightStore.selectionContext && containerEl) {
-						try {
-							const serialized = serializeRange(highlightStore.selectionContext.range, containerEl);
-							await onAddHighlight(
-								color,
-								serialized,
-								highlightStore.selectionContext.text,
-								groupId
-							);
-							highlightStore.clearSelection();
-						} catch (err) {
-							console.error('Highlight failed:', err);
-						}
+	{#if highlightStore.selectionContext && !highlightStore.activeColor}
+		<SelectionPopup
+			onHighlight={async (color) => {
+				const context = highlightStore.selectionContext;
+				if (context && containerEl) {
+					try {
+						const serialized = serializeRange(context.range, containerEl);
+						await onAddHighlight(color, serialized, context.text, groupId);
+						highlightStore.clearSelection();
+					} catch (err) {
+						console.error('Highlight failed:', err);
 					}
-				}}
-				onAddComment={async () => {
-					if (highlightStore.selectionContext && containerEl) {
-						try {
-							const serialized = serializeRange(highlightStore.selectionContext.range, containerEl);
-							const id = await onAddHighlight(
-								'yellow',
-								serialized,
-								highlightStore.selectionContext.text,
-								groupId
-							);
-							if (id) {
-								onAddComment(id);
-							}
-							highlightStore.clearSelection();
-						} catch (err) {
-							console.error('Add comment failed:', err);
-						}
-					}
-				}}
-			/>
-		</div>
+				}
+			}}
+		/>
 	{/if}
-
-	<!-- Margin Icons -->
-	<div class="absolute top-0 right-0 bottom-0 z-10 w-12 border-l bg-muted/5">
-		{#each markerPositions as pos (pos.id)}
-			<div class="absolute right-2 transition-all duration-300" style="top: {pos.top}px;">
-				<Button
-					variant="ghost"
-					size="icon"
-					class={cn(
-						'h-8 w-8 rounded-full shadow-sm hover:scale-110',
-						pos.color === 'yellow' && 'bg-yellow-200 text-yellow-700 hover:bg-yellow-300',
-						pos.color === 'green' && 'bg-green-200 text-green-700 hover:bg-green-300',
-						pos.color === 'blue' && 'bg-blue-200 text-blue-700 hover:bg-blue-300',
-						pos.color === 'pink' && 'bg-pink-200 text-pink-700 hover:bg-pink-300'
-					)}
-					onclick={() => onAddComment(pos.id)}
-				>
-					<MessageSquare class="h-4 w-4" />
-				</Button>
-			</div>
-		{/each}
-	</div>
 </div>
 
 <style>
@@ -358,12 +327,5 @@
 	}
 	:global(.highlight-container mark:hover) {
 		filter: brightness(0.9);
-	}
-
-	.highlight-popup {
-		pointer-events: none;
-	}
-	:global(.highlight-popup > *) {
-		pointer-events: auto;
 	}
 </style>

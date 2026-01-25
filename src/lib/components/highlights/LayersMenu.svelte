@@ -14,6 +14,7 @@
 
 	let { authors = [] } = $props<{ authors: Author[] }>();
 	let isOpen = $state(false);
+	// Test comment
 </script>
 
 <DropdownMenu.Root bind:open={isOpen}>
@@ -54,6 +55,7 @@
 					<div
 						role="button"
 						tabindex="0"
+						class="flex items-center"
 						onclick={(e) => {
 							e.stopPropagation();
 							highlightStore.toggleAuthorVisibility(author.id);
@@ -66,9 +68,8 @@
 						}}
 					>
 						<Switch
-							checked={highlightStore.visibleAuthorIds.has(author.id)}
-							class="h-4 w-7"
-							onCheckedChange={() => {}}
+							checked={!highlightStore.hiddenAuthorIds.has(author.id)}
+							class="pointer-events-none h-4 w-7"
 						/>
 					</div>
 				</div>

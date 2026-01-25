@@ -67,11 +67,9 @@
 	const blog = $derived(blogQuery.data);
 	const comments = $derived(commentsQuery.data ?? []);
 
-	const isAuthenticated = $derived(!!session.value?.data?.user);
-	const currentUserId = $derived(session.value?.data?.user?.id);
-	const currentUserInitial = $derived(
-		session.value?.data?.user?.name?.charAt(0).toUpperCase() ?? 'U'
-	);
+	const isAuthenticated = $derived(!!$session.data?.user);
+	const currentUserId = $derived($session.data?.user?.id);
+	const currentUserInitial = $derived($session.data?.user?.name?.charAt(0).toUpperCase() ?? 'U');
 
 	// Calculate authors for the layers menu
 	const authors = $derived.by(() => {
@@ -87,16 +85,11 @@
 			if (existing) {
 				existing.count++;
 			} else {
-				if (h.userId === currentUserId) {
-					const you = map.get(currentUserId!)!;
-					you.count++;
-				} else {
-					map.set(h.userId, {
-						id: h.userId,
-						name: h.userName || 'Unknown',
-						count: 1
-					});
-				}
+				map.set(h.userId, {
+					id: h.userId,
+					name: h.userId === currentUserId ? 'You' : h.userName || 'Unknown',
+					count: 1
+				});
 			}
 		});
 		return Array.from(map.values());
@@ -291,6 +284,7 @@
 			onCommentDislike={handleCommentDislike}
 		/>
 	</article>
+	<div class="h-32"></div>
 {:else}
 	<div class="flex h-32 items-center justify-center text-muted-foreground">
 		Blog post not found.

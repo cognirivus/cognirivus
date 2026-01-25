@@ -5,9 +5,8 @@
 	import { cn } from '$lib/utils';
 	import { fade } from 'svelte/transition';
 
-	const { onHighlight, onAddComment } = $props<{
+	const { onHighlight } = $props<{
 		onHighlight: (color: string) => Promise<void>;
-		onAddComment: () => Promise<void>;
 	}>();
 
 	const colors = [
@@ -31,52 +30,39 @@
 
 	let popupEl = $state<HTMLDivElement | null>(null);
 
-	$effect(() => {
-		if (highlightStore.selectionContext) {
-			console.log(
-				'Popup visible at:',
-				highlightStore.selectionContext.top,
-				highlightStore.selectionContext.left
-			);
-		}
-	});
-
 	const style = $derived.by(() => {
-		if (!highlightStore.selectionContext) return '';
+		if (!highlightStore.selectionContext) return 'display: none;';
 		const { top, left } = highlightStore.selectionContext;
-		// Subtract some extra to move it above the line
-		return `top: ${top - 8}px; left: ${left}px; transform: translate(-50%, -100%);`;
+		return `top: ${top - 12}px; left: ${left}px; transform: translate(-50%, -100%);`;
 	});
 </script>
 
-{#if highlightStore.selectionContext}
-	<div
-		bind:this={popupEl}
-		class="absolute z-[100] flex items-center gap-1 rounded-full border bg-background p-1.5 shadow-xl ring-1 ring-border/50"
-		{style}
-		transition:fade={{ duration: 100 }}
-	>
-		<div class="mr-1 flex items-center gap-1 border-r pr-1">
-			{#each colors as color}
-				<button
-					class={cn(
-						'h-6 w-6 rounded-full transition-transform hover:scale-110 active:scale-95',
-						color.class
-					)}
-					onclick={() => onHighlight(color.name)}
-					title={`Highlight ${color.name}`}
-				></button>
-			{/each}
-		</div>
-
-		<Button
-			variant="ghost"
-			size="icon"
-			class="h-7 w-7 rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-			onclick={onAddComment}
-			title="Add Comment"
-		>
-			<MessageSquarePlus class="h-4 w-4" />
-		</Button>
+<div
+	bind:this={popupEl}
+	class="highlight-popup pointer-events-auto absolute z-[100] flex items-center gap-1 rounded-full border bg-background p-1.5 shadow-xl ring-1 ring-border/50"
+	{style}
+	transition:fade={{ duration: 100 }}
+>
+	<div class="flex items-center gap-1">
+		{#each colors as color}
+			<button
+				type="button"
+				class={cn(
+					'h-6 w-6 rounded-full transition-transform hover:scale-110 active:scale-95',
+					color.class
+				)}
+				onclick={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					onHighlight(color.name);
+				}}
+				title={`Highlight ${color.name}`}
+			></button>
+		{/each}
 	</div>
-{/if}
+
+	<!-- Arrow -->
+	<div
+		class="pointer-events-none absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-r border-b bg-background"
+	></div>
+</div>

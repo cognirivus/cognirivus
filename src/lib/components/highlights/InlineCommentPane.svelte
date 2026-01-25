@@ -21,7 +21,7 @@
 
 	const client = useConvexClient();
 	const session = authClient.useSession();
-	const user = $derived(session.value?.data?.user);
+	const user = $derived($session.data?.user);
 
 	const commentsQuery = useQuery(api.highlights.getInlineComments, () => ({ highlightId }));
 	const comments = $derived(commentsQuery.data ?? []);
