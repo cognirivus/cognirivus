@@ -3,7 +3,7 @@ import { action } from './_generated/server';
 import { api, internal } from './_generated/api';
 import { authComponent } from './auth';
 
-export const generateReport = action({
+export const generateArticle = action({
 	args: {
 		entityId: v.id('entities')
 	},
@@ -64,27 +64,27 @@ export const generateReport = action({
 				'X-Title': 'Cognirivus UPSC Synthesizer'
 			},
 			body: JSON.stringify({
-				model: 'google/gemini-2.5-flash-lite',
+				model: 'google/gemini-2.0-flash-lite-001',
 				messages: [
 					{
 						role: 'system',
-						content: `You are a UPSC (Union Public Service Commission) expert faculty. Your task is to synthesize fragmented news analysis segments into a single, cohesive, and professional intelligence report for a specific entity: ${entity.name}.
+						content: `You are a UPSC (Union Public Service Commission) expert faculty. Your task is to synthesize fragmented news analysis segments into a single, cohesive, and professional Article for a specific entity: ${entity.name}.
 
 STRICT GROUNDING: Use ONLY the information provided in the input. Do not include external facts, dates, general knowledge, or speculative details not explicitly found in the source text.
 
 CITATIONS: Every factual claim or summary point MUST be followed by its respective reference tag(s) from the input (e.g., [Ref1] or [Ref1][Ref2]). This is mandatory for accountability.
 
 GUIDELINES:
-1. STRUCTURE: Organize the report by General Studies (GS) Paper numbers (GS 1, GS 2, GS 3, GS 4). 
+1. STRUCTURE: Organize the Article by General Studies (GS) Paper numbers (GS 1, GS 2, GS 3, GS 4). 
 2. SYNTHESIS: Connect the dots between different subjects ONLY where such relationships are evident in the provided text.
 3. STYLE: Use professional, academic language suitable for UPSC Mains answer writing. Use bullet points, bold headings, and clear paragraphs.
-4. ATOMICITY: Ensure the final report is standalone and comprehensive relative to the provided data.
+4. ATOMICITY: Ensure the final Article is standalone and comprehensive relative to the provided data.
 5. FOOTER: Keep "GS Paper 0 / Other" items at the very end under a "Miscellaneous Updates" or "General Facts" heading.
 6. MARKDOWN: Use standard Markdown for formatting. Do not use H1 (reserved for page title). Use H2 for GS Papers and H3 for Subjects.`
 					},
 					{
 						role: 'user',
-						content: `STRICTLY BASED ONLY ON THE PROVIDED DATA, synthesize the following about ${entity.name}:\n\n${formattedContent}`
+						content: `STRICTLY BASED ONLY ON THE PROVIDED DATA, synthesize the following Article about ${entity.name}:\n\n${formattedContent}`
 					}
 				]
 			})
@@ -95,16 +95,16 @@ GUIDELINES:
 		}
 
 		const data = await response.json();
-		const report = data.choices[0]?.message?.content;
+		const article = data.choices[0]?.message?.content;
 
-		if (!report) throw new Error('AI returned empty response');
+		if (!article) throw new Error('AI returned empty response');
 
-		// 6. Save Report
-		await ctx.runMutation(internal.content.saveReport, {
+		// 6. Save Article
+		await ctx.runMutation(internal.content.saveArticle, {
 			entityId: args.entityId,
-			report
+			article
 		});
 
-		return 'Report generated successfully';
+		return 'Article generated successfully';
 	}
 });

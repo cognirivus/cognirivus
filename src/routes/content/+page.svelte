@@ -201,8 +201,10 @@
 		goto(`/content?${params.toString()}`);
 	}
 
-	function viewEntityReport(entity: any) {
-		goto(`/content/report?view=entity&type=${encodeURIComponent(entity.type)}&slug=${entity.slug}`);
+	function viewEntityArticle(entity: any) {
+		goto(
+			`/content/article?view=entity&type=${encodeURIComponent(entity.type)}&slug=${entity.slug}`
+		);
 	}
 
 	function viewAllForEntity(entityId: string) {
@@ -565,11 +567,11 @@
 										class="h-8 gap-1.5 text-xs text-primary"
 										onclick={(e) => {
 											e.stopPropagation();
-											viewEntityReport(entity);
+											viewEntityArticle(entity);
 										}}
 									>
 										<FileText class="h-3.5 w-3.5" />
-										<span class="hidden sm:inline">Report</span>
+										<span class="hidden sm:inline">Article</span>
 									</Button>
 									<Button
 										variant="outline"

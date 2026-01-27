@@ -23,7 +23,9 @@
 		PanelRight,
 		Info,
 		Zap,
-		Library
+		Library,
+		Sparkles,
+		Brain
 	} from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -90,6 +92,19 @@
 
 	const allSubjects = $derived(subjectsQuery.data || []);
 	const allEntityTypes = $derived(entityTypesQuery.data || []);
+
+	// Dynamic sidebar content for [id] route
+	const contentId = $derived(page.params.id as any);
+	const contentQuery = useQuery((api as any).content.getById, () =>
+		contentId ? { id: contentId } : 'skip'
+	);
+	const contentItem = $derived(contentQuery.data);
+
+	const entitiesWithArticles = $derived(
+		contentItem?.entities
+			?.filter((e: any) => e.article)
+			.sort((a: any, b: any) => b.segmentCount - a.segmentCount) ?? []
+	);
 
 	const subjects = $derived(
 		selectedGsPapers.length > 0
@@ -506,13 +521,70 @@
 		</div>
 
 		<div class="flex-1 space-y-6 overflow-y-auto p-6">
-			<div class="flex h-full flex-col items-center justify-center text-center">
-				<div class="rounded-full bg-muted p-5">
-					<Info class="size-10 text-muted-foreground" />
+			{#if contentItem}
+				<!-- Related Articles -->
+				{#if entitiesWithArticles.length > 0}
+					<div class="space-y-4">
+						<h3
+							class="flex items-center gap-2 text-[10px] font-black tracking-widest text-muted-foreground uppercase"
+						>
+							<FileText class="h-3 w-3" />
+							Knowledge Articles
+						</h3>
+						<div class="space-y-3">
+							{#each entitiesWithArticles as ent}
+								<div
+									class="group space-y-3 rounded-xl border bg-card p-4 transition-all hover:border-primary/30 hover:shadow-md"
+								>
+									<div class="flex items-center justify-between">
+										<Badge variant="outline" class="h-4 px-1.5 text-[8px] font-bold uppercase">
+											{ent.type}
+										</Badge>
+										<Sparkles class="h-3 w-3 text-primary opacity-50" />
+									</div>
+									<h4 class="text-xs font-bold tracking-tight">{ent.name} Article</h4>
+									<p class="line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
+										UPSC analysis incorporating this segment and {ent.segmentCount - 1} others.
+									</p>
+									<div class="pt-1">
+										<Button
+											href="/content/article?view=entity&type={encodeURIComponent(
+												ent.type
+											)}&slug={ent.slug}"
+											variant="secondary"
+											size="sm"
+											class="h-7 w-full gap-2 text-[10px] font-bold uppercase transition-all group-hover:bg-primary group-hover:text-primary-foreground"
+										>
+											<FileText class="h-3 w-3" />
+											Read Article
+										</Button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{:else}
+					<div class="flex h-full flex-col items-center justify-center py-20 text-center">
+						<div class="rounded-full bg-muted p-5">
+							<Info class="size-10 text-muted-foreground" />
+						</div>
+						<h3 class="mt-5 text-base font-medium text-foreground">Analysis & Details</h3>
+						<p class="mt-1 text-sm text-muted-foreground">
+							Select a news segment or entity to see detailed analysis.
+						</p>
+					</div>
+				{/if}
+			{:else}
+				<div class="flex h-full flex-col items-center justify-center py-20 text-center">
+					<div class="rounded-full bg-muted p-5">
+						<Info class="size-10 text-muted-foreground" />
+					</div>
+					<h3 class="mt-5 text-base font-medium text-foreground">Analysis & Details</h3>
+					<p class="mt-1 text-sm text-muted-foreground">
+						Select a news segment or entity to see detailed analysis.
+					</p>
 				</div>
-				<h3 class="mt-5 text-base font-medium text-foreground">No selection</h3>
-				<p class="mt-1 text-sm text-muted-foreground">Select an item to see detailed analysis.</p>
-			</div>
+			{/if}
 		</div>
 	</aside>
 </div>

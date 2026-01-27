@@ -363,7 +363,7 @@
 								{#each item.entities as ent}
 									{@const Icon = getEntityIcon(ent.type)}
 									<a
-										href="/content/report?view=entity&type={encodeURIComponent(
+										href="/content/article?view=entity&type={encodeURIComponent(
 											ent.type
 										)}&slug={ent.slug}"
 										class="group flex items-center gap-1.5 rounded-full border bg-muted/30 px-2.5 py-1 text-xs font-medium transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"

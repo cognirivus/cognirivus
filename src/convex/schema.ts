@@ -182,8 +182,8 @@ const schema = defineSchema({
 		name: v.string(),
 		type: v.string(),
 		slug: v.string(),
-		report: v.optional(v.string()),
-		reportGeneratedAt: v.optional(v.number())
+		article: v.optional(v.string()),
+		articleGeneratedAt: v.optional(v.number())
 	})
 		.index('by_type', ['type'])
 		.index('by_slug', ['slug'])
@@ -194,9 +194,9 @@ const schema = defineSchema({
 	})
 		.index('by_content', ['contentId'])
 		.index('by_entity', ['entityId']),
-	report_archive: defineTable({
+	article_archive: defineTable({
 		entityId: v.id('entities'),
-		report: v.string(),
+		article: v.string(),
 		createdAt: v.number()
 	}).index('by_entity', ['entityId']),
 	user_content_progress: defineTable({

@@ -53,7 +53,7 @@
 		user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin')
 	);
 
-	let entityViewMode = $state<'segments' | 'report'>('report');
+	let entityViewMode = $state<'segments' | 'article'>('article');
 	let isGenerating = $state(false);
 
 	const typeMeta = $derived.by(() => {
@@ -124,11 +124,11 @@
 		if (!entity) return;
 		isGenerating = true;
 		try {
-			await client.action((api as any).synthesizer.generateReport, { entityId: entity._id });
-			toast.success('Intelligence report synthesized successfully!');
-			entityViewMode = 'report';
+			await client.action((api as any).synthesizer.generateArticle, { entityId: entity._id });
+			toast.success('Article synthesized successfully!');
+			entityViewMode = 'article';
 		} catch (err: any) {
-			toast.error(err.message || 'Failed to generate report');
+			toast.error(err.message || 'Failed to generate article');
 		} finally {
 			isGenerating = false;
 		}
@@ -140,14 +140,14 @@
 </script>
 
 <svelte:head>
-	<title>{entity?.name || typeMeta.label} Analysis - Knowledge Base</title>
+	<title>{entity?.name || typeMeta.label} Article - Knowledge Base</title>
 </svelte:head>
 
 <div class="h-full overflow-y-auto">
 	<div class="mx-auto max-w-5xl px-4 py-6 sm:px-6">
 		{#if !isEntityView}
 			<div class="flex flex-col items-center justify-center py-20 text-center">
-				<h2 class="text-2xl font-bold">Invalid Report URL</h2>
+				<h2 class="text-2xl font-bold">Invalid Article URL</h2>
 				<p class="text-muted-foreground">
 					Missing entity type or slug parameters. Use the sidebar to select an entity.
 				</p>
@@ -215,10 +215,10 @@
 								Segments
 							</Button>
 							<Button
-								variant={entityViewMode === 'report' ? 'default' : 'ghost'}
+								variant={entityViewMode === 'article' ? 'default' : 'ghost'}
 								size="sm"
 								class="h-8 gap-2 rounded-md px-3"
-								onclick={() => (entityViewMode = 'report')}
+								onclick={() => (entityViewMode = 'article')}
 							>
 								<FileText class="h-4 w-4" />
 								Article
@@ -235,37 +235,37 @@
 							>
 								{#if isGenerating}
 									<Loader variant="circular" size="sm" />
-									Synthesizing...
+									Writing Article...
 								{:else}
 									<Sparkles class="h-4 w-4" />
-									{entity.report ? 'Update Analysis' : 'Generate Analysis'}
+									{entity.article ? 'Update Article' : 'Generate Article'}
 								{/if}
 							</Button>
 						{/if}
 					</div>
 				</header>
 
-				{#if entityViewMode === 'report'}
-					<!-- Report View -->
-					{#if entity.report}
+				{#if entityViewMode === 'article'}
+					<!-- Article View -->
+					{#if entity.article}
 						<div class="rounded-lg border bg-card p-6 shadow-sm">
 							<div class="prose prose-zinc dark:prose-invert max-w-none">
-								<Markdown content={entity.report} {sources} />
+								<Markdown content={entity.article} {sources} />
 							</div>
 						</div>
 						<p class="text-center text-xs text-muted-foreground italic">
-							Last synthesized: {new Date(entity.reportGeneratedAt!).toLocaleString()}
+							Last synthesized: {new Date(entity.articleGeneratedAt!).toLocaleString()}
 						</p>
 					{:else}
 						<div class="flex flex-col items-center justify-center py-20 text-center">
 							<div class="mb-4 rounded-full bg-primary/5 p-6 text-primary">
 								<Sparkles class="h-12 w-12" />
 							</div>
-							<h3 class="text-xl font-bold">No Synthesized Report Yet</h3>
+							<h3 class="text-xl font-bold">No Synthesized Article Yet</h3>
 							<p class="max-w-md text-muted-foreground">
 								{isAdmin
-									? `Click the button above to generate a comprehensive UPSC-style intelligence report for this ${typeMeta.desc}.`
-									: `A comprehensive analysis for this ${typeMeta.desc} is pending synthesis by our faculty.`}
+									? `Click the button above to generate a comprehensive UPSC-style Article for this ${typeMeta.desc}.`
+									: `A comprehensive Article for this ${typeMeta.desc} is pending synthesis by our faculty.`}
 							</p>
 						</div>
 					{/if}

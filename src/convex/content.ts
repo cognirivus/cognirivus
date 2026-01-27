@@ -453,33 +453,33 @@ export const isNewsProcessed = internalQuery({
 	}
 });
 
-export const saveReport = internalMutation({
+export const saveArticle = internalMutation({
 	args: {
 		entityId: v.id('entities'),
-		report: v.string()
+		article: v.string()
 	},
 	handler: async (ctx, args) => {
 		const entity = await ctx.db.get(args.entityId);
-		if (entity?.report) {
-			await ctx.db.insert('report_archive', {
+		if (entity?.article) {
+			await ctx.db.insert('article_archive', {
 				entityId: args.entityId,
-				report: entity.report,
-				createdAt: entity.reportGeneratedAt ?? Date.now()
+				article: entity.article,
+				createdAt: entity.articleGeneratedAt ?? Date.now()
 			});
 		}
 
 		await ctx.db.patch(args.entityId, {
-			report: args.report,
-			reportGeneratedAt: Date.now()
+			article: args.article,
+			articleGeneratedAt: Date.now()
 		});
 	}
 });
 
-export const listReportArchive = query({
+export const listArticleArchive = query({
 	args: { entityId: v.id('entities') },
 	handler: async (ctx, args) => {
 		return await ctx.db
-			.query('report_archive')
+			.query('article_archive')
 			.withIndex('by_entity', (q) => q.eq('entityId', args.entityId))
 			.order('desc')
 			.collect();
@@ -876,6 +876,91 @@ export const getEntity = query({
 });
 
 // ===== Content Reactions & Comments =====
+
+export const listAllEntities = query({
+	args: {
+		paginationOpts: paginationOptsValidator,
+		search: v.optional(v.string()),
+		type: v.optional(v.string()),
+		onlyGenerated: v.optional(v.boolean())
+	},
+	handler: async (ctx, args) => {
+		let query;
+		if (args.type) {
+			query = ctx.db
+				.query('entities')
+				.withIndex('by_type', (q) => q.eq('type', args.type!))
+				.order('desc');
+		} else {
+			query = ctx.db.query('entities').order('desc');
+		}
+
+		if (args.onlyGenerated) {
+			query = query.filter((q) => q.neq(q.field('article'), undefined));
+		}
+
+		const result = await query.paginate(args.paginationOpts);
+
+		const enriched = await Promise.all(
+			result.page.map(async (entity) => {
+				const links = await ctx.db
+					.query('content_entities')
+					.withIndex('by_entity', (q) => q.eq('entityId', entity._id))
+					.collect();
+				return { ...entity, segmentCount: links.length };
+			})
+		);
+
+		return { ...result, page: enriched };
+	}
+});
+
+export const updateEntityArticle = mutation({
+	args: {
+		id: v.id('entities'),
+		article: v.string()
+	},
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+		const entity = await ctx.db.get(args.id);
+		if (!entity) throw new Error('Entity not found');
+
+		if (entity.article) {
+			await ctx.db.insert('article_archive', {
+				entityId: args.id,
+				article: entity.article,
+				createdAt: entity.articleGeneratedAt ?? Date.now()
+			});
+		}
+
+		await ctx.db.patch(args.id, {
+			article: args.article,
+			articleGeneratedAt: Date.now()
+		});
+	}
+});
+
+export const removeEntityArticle = mutation({
+	args: { id: v.id('entities') },
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+		const entity = await ctx.db.get(args.id);
+		if (!entity) throw new Error('Entity not found');
+
+		if (entity.article) {
+			await ctx.db.insert('article_archive', {
+				entityId: args.id,
+				article: entity.article,
+				createdAt: entity.articleGeneratedAt ?? Date.now()
+			});
+		}
+
+		await ctx.db.patch(args.id, {
+			article: undefined,
+			articleGeneratedAt: undefined
+		});
+	}
+});
 
 export const toggleLike = mutation({
 	args: { contentId: v.id('content'), groupId: v.optional(v.id('groups')) },

@@ -63,6 +63,11 @@
 			name: 'Extraction',
 			href: '/admin/extraction',
 			icon: Sparkles
+		},
+		{
+			name: 'Articles',
+			href: '/admin/article',
+			icon: FileText
 		}
 	];
 
