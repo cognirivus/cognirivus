@@ -470,6 +470,58 @@ export const remove = mutation({
 	}
 });
 
+export const removeBulk = mutation({
+	args: { ids: v.array(v.id('blogs')) },
+	handler: async (ctx, args) => {
+		const admin = await checkAdmin(ctx);
+		if (!admin) throw new Error('Unauthorized: Admin access required');
+
+		for (const id of args.ids) {
+			const blog = await ctx.db.get(id);
+			if (!blog) continue;
+
+			// Delete R2 content
+			if (blog.r2Key) {
+				await r2.deleteObject(ctx, blog.r2Key);
+			}
+
+			// Delete RAG entry if exists
+			if (blog.ragEntryId) {
+				await ctx.scheduler.runAfter(0, internal.blogs.deleteRag, { ragEntryId: blog.ragEntryId });
+			}
+
+			// Delete reactions
+			const reactions = await ctx.db
+				.query('blog_reactions')
+				.withIndex('by_blog', (q) => q.eq('blogId', id))
+				.collect();
+			for (const r of reactions) {
+				await ctx.db.delete(r._id);
+				if (!r.groupId) {
+					if (r.like_dislike === 1) {
+						await likesAggregate.delete(ctx, r);
+					} else {
+						await dislikesAggregate.delete(ctx, r);
+					}
+				}
+			}
+
+			// Delete comments and their reactions
+			const comments = await ctx.db
+				.query('blog_comments')
+				.withIndex('by_blog', (q) => q.eq('blogId', id))
+				.collect();
+			for (const comment of comments) {
+				await deleteCommentWithReactions(ctx, comment._id);
+			}
+
+			await ctx.db.delete(id);
+		}
+
+		return args.ids;
+	}
+});
+
 async function deleteBlogReactionsAndComments(ctx: MutationCtx, blogId: Id<'blogs'>) {
 	const reactions = await ctx.db
 		.query('blog_reactions')

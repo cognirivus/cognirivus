@@ -272,3 +272,30 @@ export const remove = mutation({
 		return args.id;
 	}
 });
+
+export const removeBulk = mutation({
+	args: { ids: v.array(v.id('news')) },
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		for (const id of args.ids) {
+			const news = await ctx.db.get(id);
+			if (news?.r2Key) {
+				await r2.deleteObject(ctx, news.r2Key);
+			}
+
+			const linkedContent = await ctx.db
+				.query('content')
+				.withIndex('by_newsId', (q) => q.eq('newsId', id))
+				.collect();
+
+			for (const item of linkedContent) {
+				await ctx.db.patch(item._id, { newsId: undefined });
+			}
+
+			await ctx.db.delete(id);
+		}
+
+		return args.ids;
+	}
+});

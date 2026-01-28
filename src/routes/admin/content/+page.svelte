@@ -24,8 +24,12 @@
 		Calendar,
 		ChevronLeft,
 		ChevronRight,
-		ChevronDown
+		ChevronDown,
+		CheckSquare,
+		Square,
+		Loader2
 	} from '@lucide/svelte';
+	import { toast } from 'svelte-sonner';
 
 	const client = useConvexClient();
 
@@ -78,6 +82,7 @@
 		if (contentQuery.data && !contentQuery.data.isDone) {
 			cursorHistory = [...cursorHistory, currentCursor ?? ''];
 			currentCursor = contentQuery.data.continueCursor;
+			selectedIds = new Set();
 			updateUrl();
 		}
 	}
@@ -87,6 +92,7 @@
 			const prev = cursorHistory[cursorHistory.length - 1];
 			cursorHistory = cursorHistory.slice(0, -1);
 			currentCursor = prev === '' ? null : prev;
+			selectedIds = new Set();
 			updateUrl();
 		}
 	}
@@ -116,6 +122,8 @@
 	let date = $state('');
 	let error = $state('');
 	let isSaving = $state(false);
+	let selectedIds = $state<Set<Id<'content'>>>(new Set());
+	let isDeleting = $state(false);
 
 	const topics = [
 		'Current Affairs',
@@ -204,6 +212,48 @@
 		}
 	}
 
+	function toggleSelect(id: Id<'content'>) {
+		const next = new Set(selectedIds);
+		if (next.has(id)) {
+			next.delete(id);
+		} else {
+			next.add(id);
+		}
+		selectedIds = next;
+	}
+
+	function toggleSelectAll() {
+		if (!contentQuery.data) return;
+		const allIds = contentQuery.data.page.map((item) => item._id);
+		if (selectedIds.size === allIds.length) {
+			selectedIds = new Set();
+		} else {
+			selectedIds = new Set(allIds);
+		}
+	}
+
+	async function handleBulkDelete() {
+		if (selectedIds.size === 0) return;
+		const count = selectedIds.size;
+		if (
+			!confirm(
+				`Are you sure you want to delete ${count} content item(s)? This will also delete linked flashcards, reactions, and comments.`
+			)
+		)
+			return;
+
+		isDeleting = true;
+		try {
+			await client.mutation(api.content.removeBulk, { ids: Array.from(selectedIds) });
+			selectedIds = new Set();
+			toast.success(`Deleted ${count} content item(s)`);
+		} catch (e: any) {
+			toast.error(e.message || 'Failed to delete content');
+		} finally {
+			isDeleting = false;
+		}
+	}
+
 	function formatDate(date: string | undefined) {
 		if (!date) return '—';
 		return new Intl.DateTimeFormat('en-US', {
@@ -234,10 +284,28 @@
 			</p>
 		</div>
 		{#if !isEditing}
-			<Button onclick={startCreate} class="gap-2 font-medium shadow-sm">
-				<Plus class="h-4 w-4" />
-				Add Content
-			</Button>
+			<div class="flex items-center gap-2">
+				<Button onclick={startCreate} class="gap-2 font-medium shadow-sm">
+					<Plus class="h-4 w-4" />
+					Add Content
+				</Button>
+				{#if selectedIds.size > 0}
+					<Button
+						variant="destructive"
+						size="sm"
+						onclick={handleBulkDelete}
+						disabled={isDeleting}
+						class="gap-2 font-medium"
+					>
+						{#if isDeleting}
+							<Loader2 class="h-4 w-4 animate-spin" />
+						{:else}
+							<Trash2 class="h-4 w-4" />
+						{/if}
+						Delete ({selectedIds.size})
+					</Button>
+				{/if}
+			</div>
 		{/if}
 	</div>
 
@@ -484,6 +552,21 @@
 					<table class="w-full text-left text-sm">
 						<thead>
 							<tr class="border-b bg-muted/40 transition-colors">
+								<th class="h-12 w-12 px-4 align-middle">
+									<button
+										type="button"
+										onclick={toggleSelectAll}
+										class="flex items-center justify-center"
+									>
+										{#if contentQuery.data && selectedIds.size === contentQuery.data.page.length}
+											<CheckSquare class="h-4 w-4 text-primary" />
+										{:else if selectedIds.size > 0}
+											<CheckSquare class="h-4 w-4 text-muted-foreground" />
+										{:else}
+											<Square class="h-4 w-4 text-muted-foreground" />
+										{/if}
+									</button>
+								</th>
 								<th class="h-12 px-6 font-medium text-muted-foreground">Title</th>
 								<th class="h-12 px-6 font-medium text-muted-foreground">Subject</th>
 								<th class="h-12 px-6 font-medium text-muted-foreground">Topic</th>
@@ -495,6 +578,19 @@
 						<tbody class="divide-y">
 							{#each contentQuery.data.page as item}
 								<tr class="transition-colors hover:bg-muted/20">
+									<td class="w-12 px-4 py-4">
+										<button
+											type="button"
+											onclick={() => toggleSelect(item._id)}
+											class="flex items-center justify-center"
+										>
+											{#if selectedIds.has(item._id)}
+												<CheckSquare class="h-4 w-4 text-primary" />
+											{:else}
+												<Square class="h-4 w-4 text-muted-foreground hover:text-foreground" />
+											{/if}
+										</button>
+									</td>
 									<td class="max-w-[280px] px-6 py-4">
 										<div class="flex flex-col gap-1">
 											<span class="truncate font-semibold text-foreground" title={item.title}>
@@ -563,7 +659,7 @@
 								</tr>
 							{:else}
 								<tr>
-									<td colspan="6" class="px-6 py-16 text-center">
+									<td colspan="7" class="px-6 py-16 text-center">
 										<div class="flex flex-col items-center gap-3">
 											<div class="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
 												<FileText class="h-6 w-6 text-muted-foreground/50" />

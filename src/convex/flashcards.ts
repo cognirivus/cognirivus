@@ -198,6 +198,37 @@ export const removeByContent = mutation({
 	}
 });
 
+export const removeBulk = mutation({
+	args: { ids: v.array(v.id('flashcards')) },
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		for (const id of args.ids) {
+			const card = await ctx.db.get(id);
+			if (card) {
+				const content = await ctx.db.get(card.contentId);
+				if (content) {
+					await ctx.db.patch(card.contentId, {
+						flashcardCount: Math.max(0, (content.flashcardCount ?? 1) - 1)
+					});
+				}
+
+				const progress = await ctx.db
+					.query('user_flashcard_progress')
+					.withIndex('by_flashcard', (q) => q.eq('flashcardId', id))
+					.collect();
+				for (const p of progress) {
+					await ctx.db.delete(p._id);
+				}
+			}
+
+			await ctx.db.delete(id);
+		}
+
+		return args.ids;
+	}
+});
+
 export const generateFromContent = action({
 	args: { contentId: v.id('content') },
 	handler: async (ctx, args): Promise<{ success: boolean; count: number; error?: string }> => {

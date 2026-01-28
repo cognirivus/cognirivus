@@ -393,6 +393,68 @@ export const remove = mutation({
 	}
 });
 
+export const removeBulk = mutation({
+	args: { ids: v.array(v.id('content')) },
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		for (const id of args.ids) {
+			// Delete entity links
+			const links = await ctx.db
+				.query('content_entities')
+				.withIndex('by_content', (q) => q.eq('contentId', id))
+				.collect();
+			for (const link of links) {
+				await ctx.db.delete(link._id);
+			}
+
+			// Delete flashcards
+			const flashcards = await ctx.db
+				.query('flashcards')
+				.withIndex('by_content', (q) => q.eq('contentId', id))
+				.collect();
+			for (const card of flashcards) {
+				// Delete flashcard progress
+				const progress = await ctx.db
+					.query('user_flashcard_progress')
+					.withIndex('by_flashcard', (q) => q.eq('flashcardId', card._id))
+					.collect();
+				for (const p of progress) {
+					await ctx.db.delete(p._id);
+				}
+				await ctx.db.delete(card._id);
+			}
+
+			// Delete reactions
+			const reactions = await ctx.db
+				.query('content_reactions')
+				.withIndex('by_content', (q) => q.eq('contentId', id))
+				.collect();
+			for (const r of reactions) {
+				await ctx.db.delete(r._id);
+				if (r.like_dislike === 1) {
+					await contentLikesAggregate.delete(ctx, r);
+				} else {
+					await contentDislikesAggregate.delete(ctx, r);
+				}
+			}
+
+			// Delete comments
+			const comments = await ctx.db
+				.query('content_comments')
+				.withIndex('by_content', (q) => q.eq('contentId', id))
+				.collect();
+			for (const comment of comments) {
+				await deleteContentCommentWithReactions(ctx, comment._id);
+			}
+
+			await ctx.db.delete(id);
+		}
+
+		return args.ids;
+	}
+});
+
 export const getById = query({
 	args: { id: v.id('content') },
 	handler: async (ctx, args) => {
@@ -959,6 +1021,49 @@ export const removeEntityArticle = mutation({
 			article: undefined,
 			articleGeneratedAt: undefined
 		});
+	}
+});
+
+export const removeEntitiesBulk = mutation({
+	args: { ids: v.array(v.id('entities')) },
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		for (const id of args.ids) {
+			const entity = await ctx.db.get(id);
+			if (!entity) continue;
+
+			// Archive article if exists before deleting entity
+			if (entity.article) {
+				await ctx.db.insert('article_archive', {
+					entityId: id,
+					article: entity.article,
+					createdAt: entity.articleGeneratedAt ?? Date.now()
+				});
+			}
+
+			// Delete content_entity links
+			const links = await ctx.db
+				.query('content_entities')
+				.withIndex('by_entity', (q) => q.eq('entityId', id))
+				.collect();
+			for (const link of links) {
+				await ctx.db.delete(link._id);
+			}
+
+			// Delete article archive entries
+			const archiveEntries = await ctx.db
+				.query('article_archive')
+				.withIndex('by_entity', (q) => q.eq('entityId', id))
+				.collect();
+			for (const entry of archiveEntries) {
+				await ctx.db.delete(entry._id);
+			}
+
+			await ctx.db.delete(id);
+		}
+
+		return args.ids;
 	}
 });
 

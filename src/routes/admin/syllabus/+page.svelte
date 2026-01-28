@@ -20,7 +20,10 @@
 		Tag,
 		FileText,
 		ChevronDown,
-		ChevronUp
+		ChevronUp,
+		CheckSquare,
+		Square,
+		Loader2
 	} from '@lucide/svelte';
 
 	const client = useConvexClient();
@@ -37,6 +40,8 @@
 	let examsText = $state('');
 	let error = $state('');
 	let isSaving = $state(false);
+	let selectedIds = $state<Set<Id<'syllabus'>>>(new Set());
+	let isDeleting = $state(false);
 
 	function startCreate() {
 		isEditing = true;
@@ -111,6 +116,43 @@
 		}
 	}
 
+	function toggleSelect(id: Id<'syllabus'>) {
+		const next = new Set(selectedIds);
+		if (next.has(id)) {
+			next.delete(id);
+		} else {
+			next.add(id);
+		}
+		selectedIds = next;
+	}
+
+	function toggleSelectAll() {
+		if (!syllabusQuery.data) return;
+		const allIds = syllabusQuery.data.map((item) => item._id);
+		if (selectedIds.size === allIds.length) {
+			selectedIds = new Set();
+		} else {
+			selectedIds = new Set(allIds);
+		}
+	}
+
+	async function handleBulkDelete() {
+		if (selectedIds.size === 0) return;
+		const count = selectedIds.size;
+		if (!confirm(`Are you sure you want to delete ${count} syllabus item(s)?`)) return;
+
+		isDeleting = true;
+		try {
+			await client.mutation(api.syllabus.removeBulk, { ids: Array.from(selectedIds) });
+			selectedIds = new Set();
+			alert(`Deleted ${count} syllabus item(s)`);
+		} catch (e: any) {
+			alert(e.message || 'Failed to delete syllabus items');
+		} finally {
+			isDeleting = false;
+		}
+	}
+
 	function truncateText(str: string, maxLen: number = 150) {
 		if (str.length <= maxLen) return str;
 		return str.slice(0, maxLen) + '...';
@@ -130,10 +172,28 @@
 			<p class="text-muted-foreground">Manage raw syllabus materials for extraction.</p>
 		</div>
 		{#if !isEditing}
-			<Button onclick={startCreate} class="gap-2 font-medium shadow-sm">
-				<Plus class="h-4 w-4" />
-				Add Syllabus
-			</Button>
+			<div class="flex items-center gap-2">
+				<Button onclick={startCreate} class="gap-2 font-medium shadow-sm">
+					<Plus class="h-4 w-4" />
+					Add Syllabus
+				</Button>
+				{#if selectedIds.size > 0}
+					<Button
+						variant="destructive"
+						size="sm"
+						onclick={handleBulkDelete}
+						disabled={isDeleting}
+						class="gap-2 font-medium"
+					>
+						{#if isDeleting}
+							<Loader2 class="h-4 w-4 animate-spin" />
+						{:else}
+							<Trash2 class="h-4 w-4" />
+						{/if}
+						Delete ({selectedIds.size})
+					</Button>
+				{/if}
+			</div>
 		{/if}
 	</div>
 
@@ -288,64 +348,95 @@
 			<p class="mt-1 text-sm text-muted-foreground">Please try refreshing the page.</p>
 		</div>
 	{:else if syllabusQuery.data}
+		{#if syllabusQuery.data.length > 0}
+			<div class="mb-4 flex items-center gap-2">
+				<button
+					type="button"
+					onclick={toggleSelectAll}
+					class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+				>
+					{#if selectedIds.size === syllabusQuery.data.length}
+						<CheckSquare class="h-4 w-4 text-primary" />
+					{:else if selectedIds.size > 0}
+						<CheckSquare class="h-4 w-4 text-muted-foreground" />
+					{:else}
+						<Square class="h-4 w-4" />
+					{/if}
+					{selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+				</button>
+			</div>
+		{/if}
 		<div class="space-y-4">
 			{#each syllabusQuery.data as item}
-				<div
-					class="overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:shadow-md"
-				>
-					<div class="flex items-start justify-between gap-4 p-5">
-						<div class="min-w-0 flex-1">
-							<div class="mb-2 flex items-center gap-2">
-								<BookOpen class="h-4 w-4 text-primary" />
-								<span class="font-semibold text-foreground">{item.title}</span>
-								{#if item.subject}
-									<Badge
-										variant="secondary"
-										class="h-5 px-1.5 text-[10px] font-bold tracking-wider uppercase"
+				<div class="flex items-start gap-3">
+					<button
+						type="button"
+						onclick={() => toggleSelect(item._id)}
+						class="mt-5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+					>
+						{#if selectedIds.has(item._id)}
+							<CheckSquare class="h-5 w-5 text-primary" />
+						{:else}
+							<Square class="h-5 w-5" />
+						{/if}
+					</button>
+					<div
+						class="flex-1 overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:shadow-md"
+					>
+						<div class="flex items-start justify-between gap-4 p-5">
+							<div class="min-w-0 flex-1">
+								<div class="mb-2 flex items-center gap-2">
+									<BookOpen class="h-4 w-4 text-primary" />
+									<span class="font-semibold text-foreground">{item.title}</span>
+									{#if item.subject}
+										<Badge
+											variant="secondary"
+											class="h-5 px-1.5 text-[10px] font-bold tracking-wider uppercase"
+										>
+											{item.subject.name}
+										</Badge>
+									{/if}
+									<Badge variant="outline" class="h-5 px-1.5 text-[10px] font-medium uppercase"
+										>{item.topic}</Badge
 									>
-										{item.subject.name}
-									</Badge>
-								{/if}
-								<Badge variant="outline" class="h-5 px-1.5 text-[10px] font-medium uppercase"
-									>{item.topic}</Badge
+								</div>
+
+								<div class="mb-3 flex flex-wrap gap-1.5">
+									{#each item.exams as exam}
+										<Badge
+											variant="outline"
+											class="border-primary/10 bg-primary/5 text-[9px] font-bold tracking-wider text-primary uppercase"
+										>
+											{exam}
+										</Badge>
+									{/each}
+								</div>
+
+								<p class="line-clamp-2 text-sm text-muted-foreground">
+									{truncateText(item.body)}
+								</p>
+							</div>
+
+							<div class="flex shrink-0 items-center gap-1">
+								<Button
+									variant="ghost"
+									size="icon-sm"
+									title="Edit"
+									onclick={() => startEdit(item)}
+									class="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
 								>
+									<Pencil class="h-4 w-4" />
+								</Button>
+								<Button
+									variant="ghost"
+									size="icon-sm"
+									title="Delete"
+									class="h-8 w-8 rounded-full text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
+									onclick={() => handleDelete(item._id)}
+								>
+									<Trash2 class="h-4 w-4" />
+								</Button>
 							</div>
-
-							<div class="mb-3 flex flex-wrap gap-1.5">
-								{#each item.exams as exam}
-									<Badge
-										variant="outline"
-										class="border-primary/10 bg-primary/5 text-[9px] font-bold tracking-wider text-primary uppercase"
-									>
-										{exam}
-									</Badge>
-								{/each}
-							</div>
-
-							<p class="line-clamp-2 text-sm text-muted-foreground">
-								{truncateText(item.body)}
-							</p>
-						</div>
-
-						<div class="flex shrink-0 items-center gap-1">
-							<Button
-								variant="ghost"
-								size="icon-sm"
-								title="Edit"
-								onclick={() => startEdit(item)}
-								class="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
-							>
-								<Pencil class="h-4 w-4" />
-							</Button>
-							<Button
-								variant="ghost"
-								size="icon-sm"
-								title="Delete"
-								class="h-8 w-8 rounded-full text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
-								onclick={() => handleDelete(item._id)}
-							>
-								<Trash2 class="h-4 w-4" />
-							</Button>
 						</div>
 					</div>
 				</div>

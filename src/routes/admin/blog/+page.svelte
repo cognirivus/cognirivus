@@ -10,7 +10,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { Plus, Pencil, Trash2, Eye, EyeOff, Save, X, ArrowLeft, BookOpen } from '@lucide/svelte';
+	import { Plus, Pencil, Trash2, Eye, EyeOff, Save, X, ArrowLeft, BookOpen, CheckSquare, Square, Loader2 } from '@lucide/svelte';
 
 	const blogsQuery = useQuery(api.blogs.list, { onlyPublished: false });
 	const client = useConvexClient();
@@ -22,6 +22,8 @@
 	let published = $state(false);
 	let error = $state('');
 	let isSaving = $state(false);
+	let selectedIds = $state<Set<Id<'blogs'>>>(new Set());
+	let isDeleting = $state(false);
 
 	function startCreate() {
 		isEditing = true;
@@ -70,6 +72,43 @@
 		}
 	}
 
+	function toggleSelect(id: Id<'blogs'>) {
+		const next = new Set(selectedIds);
+		if (next.has(id)) {
+			next.delete(id);
+		} else {
+			next.add(id);
+		}
+		selectedIds = next;
+	}
+
+	function toggleSelectAll() {
+		if (!blogsQuery.data) return;
+		const allIds = blogsQuery.data.map((blog) => blog._id);
+		if (selectedIds.size === allIds.length) {
+			selectedIds = new Set();
+		} else {
+			selectedIds = new Set(allIds);
+		}
+	}
+
+	async function handleBulkDelete() {
+		if (selectedIds.size === 0) return;
+		const count = selectedIds.size;
+		if (!confirm(`Are you sure you want to delete ${count} blog post(s)? This will also delete all reactions and comments.`)) return;
+		
+		isDeleting = true;
+		try {
+			await client.mutation(api.blogs.removeBulk, { ids: Array.from(selectedIds) });
+			selectedIds = new Set();
+			alert(`Deleted ${count} blog post(s)`);
+		} catch (e: any) {
+			alert(e.message || 'Failed to delete blog posts');
+		} finally {
+			isDeleting = false;
+		}
+	}
+
 	function formatDate(date: number) {
 		return new Intl.DateTimeFormat('en-US', {
 			year: 'numeric',
@@ -98,6 +137,22 @@
 				<Plus class="h-4 w-4" />
 				New Post
 			</Button>
+			{#if selectedIds.size > 0}
+				<Button
+					variant="destructive"
+					size="sm"
+					onclick={handleBulkDelete}
+					disabled={isDeleting}
+					class="gap-2 font-medium"
+				>
+					{#if isDeleting}
+						<Loader2 class="h-4 w-4 animate-spin" />
+					{:else}
+						<Trash2 class="h-4 w-4" />
+					{/if}
+					Delete ({selectedIds.size})
+				</Button>
+			{/if}
 		{/if}
 	</div>
 
@@ -234,6 +289,21 @@
 				<table class="w-full text-left text-sm">
 					<thead>
 						<tr class="border-b bg-muted/40 transition-colors">
+							<th class="h-12 w-12 px-4 align-middle">
+								<button
+									type="button"
+									onclick={toggleSelectAll}
+									class="flex items-center justify-center"
+								>
+									{#if blogsQuery.data && selectedIds.size === blogsQuery.data.length}
+										<CheckSquare class="h-4 w-4 text-primary" />
+									{:else if selectedIds.size > 0}
+										<CheckSquare class="h-4 w-4 text-muted-foreground" />
+									{:else}
+										<Square class="h-4 w-4 text-muted-foreground" />
+									{/if}
+								</button>
+							</th>
 							<th class="h-12 px-6 align-middle font-medium text-muted-foreground">Title</th>
 							<th class="h-12 px-6 align-middle font-medium text-muted-foreground">Status</th>
 							<th class="h-12 px-6 align-middle font-medium text-muted-foreground">Date Created</th>
@@ -245,6 +315,19 @@
 					<tbody class="divide-y">
 						{#each blogsQuery.data as blog}
 							<tr class="transition-colors hover:bg-muted/20">
+								<td class="w-12 px-4 py-4">
+									<button
+										type="button"
+										onclick={() => toggleSelect(blog._id)}
+										class="flex items-center justify-center"
+									>
+										{#if selectedIds.has(blog._id)}
+											<CheckSquare class="h-4 w-4 text-primary" />
+										{:else}
+											<Square class="h-4 w-4 text-muted-foreground hover:text-foreground" />
+										{/if}
+									</button>
+								</td>
 								<td class="px-6 py-4">
 									<span class="font-semibold text-foreground">{blog.title}</span>
 								</td>
@@ -295,7 +378,7 @@
 							</tr>
 						{:else}
 							<tr>
-								<td colspan="4" class="px-6 py-16 text-center">
+								<td colspan="5" class="px-6 py-16 text-center">
 									<div class="flex flex-col items-center gap-3">
 										<div class="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
 											<BookOpen class="h-6 w-6 text-muted-foreground/50" />

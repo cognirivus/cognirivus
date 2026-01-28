@@ -23,7 +23,10 @@
 		ChevronLeft,
 		ChevronRight,
 		Tag,
-		ChevronDown
+		ChevronDown,
+		CheckSquare,
+		Square,
+		Loader2
 	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { Markdown } from '$lib/components/prompt-kit/markdown/index.js';
@@ -75,6 +78,8 @@
 	let isSaving = $state(false);
 	let isGenerating = $state(false);
 	let showPreview = $state(false);
+	let selectedIds = $state<Set<Id<'entities'>>>(new Set());
+	let isDeleting = $state(false);
 
 	function startEdit(entity: any) {
 		isEditing = true;
@@ -136,6 +141,50 @@
 		}
 	}
 
+	function toggleSelect(id: Id<'entities'>) {
+		const next = new Set(selectedIds);
+		if (next.has(id)) {
+			next.delete(id);
+		} else {
+			next.add(id);
+		}
+		selectedIds = next;
+	}
+
+	function toggleSelectAll() {
+		if (!entitiesQuery.data) return;
+		const allIds = entitiesQuery.data.page.map((entity: any) => entity._id);
+		if (selectedIds.size === allIds.length) {
+			selectedIds = new Set();
+		} else {
+			selectedIds = new Set(allIds);
+		}
+	}
+
+	async function handleBulkDelete() {
+		if (selectedIds.size === 0) return;
+		const count = selectedIds.size;
+		if (
+			!confirm(
+				`Are you sure you want to delete ${count} entity/entities? This will also delete all linked content associations and article archives.`
+			)
+		)
+			return;
+
+		isDeleting = true;
+		try {
+			await client.mutation((api as any).content.removeEntitiesBulk, {
+				ids: Array.from(selectedIds)
+			});
+			selectedIds = new Set();
+			toast.success(`Deleted ${count} entity/entities`);
+		} catch (e: any) {
+			toast.error(e.message || 'Failed to delete entities');
+		} finally {
+			isDeleting = false;
+		}
+	}
+
 	function formatDate(date: number | undefined) {
 		if (!date) return 'Never';
 		return new Intl.DateTimeFormat('en-US', {
@@ -160,6 +209,22 @@
 			</div>
 			<p class="text-muted-foreground">Manage AI-synthesized articles for entities.</p>
 		</div>
+		{#if !isEditing && selectedIds.size > 0}
+			<Button
+				variant="destructive"
+				size="sm"
+				onclick={handleBulkDelete}
+				disabled={isDeleting}
+				class="gap-2 font-medium"
+			>
+				{#if isDeleting}
+					<Loader2 class="h-4 w-4 animate-spin" />
+				{:else}
+					<Trash2 class="h-4 w-4" />
+				{/if}
+				Delete ({selectedIds.size})
+			</Button>
+		{/if}
 	</div>
 
 	{#if isEditing}
@@ -337,6 +402,21 @@
 					<table class="w-full text-left text-sm">
 						<thead>
 							<tr class="border-b bg-muted/30">
+								<th class="h-12 w-12 px-4 align-middle">
+									<button
+										type="button"
+										onclick={toggleSelectAll}
+										class="flex items-center justify-center"
+									>
+										{#if entitiesQuery.data && selectedIds.size === entitiesQuery.data.page.length}
+											<CheckSquare class="h-4 w-4 text-primary" />
+										{:else if selectedIds.size > 0}
+											<CheckSquare class="h-4 w-4 text-muted-foreground" />
+										{:else}
+											<Square class="h-4 w-4 text-muted-foreground" />
+										{/if}
+									</button>
+								</th>
 								<th class="px-6 py-4 font-semibold text-muted-foreground">Entity Name</th>
 								<th class="px-6 py-4 font-semibold text-muted-foreground">Type</th>
 								<th class="px-6 py-4 font-semibold text-muted-foreground">Segments</th>
@@ -348,6 +428,19 @@
 						<tbody class="divide-y">
 							{#each filtered as entity (entity._id)}
 								<tr class="group transition-colors hover:bg-muted/30">
+									<td class="w-12 px-4 py-4">
+										<button
+											type="button"
+											onclick={() => toggleSelect(entity._id)}
+											class="flex items-center justify-center"
+										>
+											{#if selectedIds.has(entity._id)}
+												<CheckSquare class="h-4 w-4 text-primary" />
+											{:else}
+												<Square class="h-4 w-4 text-muted-foreground hover:text-foreground" />
+											{/if}
+										</button>
+									</td>
 									<td class="px-6 py-4">
 										<div class="font-bold text-foreground">{entity.name}</div>
 									</td>
@@ -404,7 +497,7 @@
 								</tr>
 							{:else}
 								<tr>
-									<td colspan="6" class="px-6 py-20 text-center">
+									<td colspan="7" class="px-6 py-20 text-center">
 										<div class="flex flex-col items-center gap-3">
 											<div class="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
 												<Search class="h-6 w-6 text-muted-foreground/50" />

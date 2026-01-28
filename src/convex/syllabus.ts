@@ -122,6 +122,23 @@ export const remove = mutation({
 	}
 });
 
+export const removeBulk = mutation({
+	args: { ids: v.array(v.id('syllabus')) },
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		for (const id of args.ids) {
+			const item = await ctx.db.get(id);
+			if (item?.r2Key) {
+				await r2.deleteObject(ctx, item.r2Key);
+			}
+			await ctx.db.delete(id);
+		}
+
+		return args.ids;
+	}
+});
+
 export const list = query({
 	args: {
 		limit: v.optional(v.number())

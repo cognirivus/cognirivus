@@ -28,7 +28,9 @@
 		Upload,
 		CheckCircle2,
 		AlertCircle,
-		Loader2
+		Loader2,
+		CheckSquare,
+		Square
 	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
@@ -68,6 +70,7 @@
 		if (newsQuery.data && !newsQuery.data.isDone) {
 			cursorHistory = [...cursorHistory, currentCursor ?? ''];
 			currentCursor = newsQuery.data.continueCursor;
+			selectedIds = new Set();
 			updateUrl();
 		}
 	}
@@ -77,6 +80,7 @@
 			const prev = cursorHistory[cursorHistory.length - 1];
 			cursorHistory = cursorHistory.slice(0, -1);
 			currentCursor = prev === '' ? null : prev;
+			selectedIds = new Set();
 			updateUrl();
 		}
 	}
@@ -97,6 +101,10 @@
 	let bulkTotal = $state(0);
 	let bulkStats = $state({ success: 0, skipped: 0, failed: 0 });
 	let showBulkSummary = $state(false);
+
+	// Bulk Delete States
+	let selectedIds = $state<Set<Id<'news'>>>(new Set());
+	let isDeleting = $state(false);
 
 	async function hashBody(text: string) {
 		const msgBuffer = new TextEncoder().encode(text);
@@ -244,6 +252,48 @@
 		if (str.length <= maxLen) return str;
 		return str.slice(0, maxLen) + '...';
 	}
+
+	function toggleSelect(id: Id<'news'>) {
+		const next = new Set(selectedIds);
+		if (next.has(id)) {
+			next.delete(id);
+		} else {
+			next.add(id);
+		}
+		selectedIds = next;
+	}
+
+	function toggleSelectAll() {
+		if (!newsQuery.data) return;
+		const allIds = newsQuery.data.page.map((item) => item._id);
+		if (selectedIds.size === allIds.length) {
+			selectedIds = new Set();
+		} else {
+			selectedIds = new Set(allIds);
+		}
+	}
+
+	async function handleBulkDelete() {
+		if (selectedIds.size === 0) return;
+		const count = selectedIds.size;
+		if (
+			!confirm(
+				`Are you sure you want to delete ${count} news item(s)? This will unlink associated content.`
+			)
+		)
+			return;
+
+		isDeleting = true;
+		try {
+			await client.mutation(api.news.removeBulk, { ids: Array.from(selectedIds) });
+			selectedIds = new Set();
+			toast.success(`Deleted ${count} news item(s)`);
+		} catch (e: any) {
+			toast.error(e.message || 'Failed to delete news items');
+		} finally {
+			isDeleting = false;
+		}
+	}
 </script>
 
 <div class="container mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -282,6 +332,22 @@
 					<Plus class="h-4 w-4" />
 					Add News
 				</Button>
+				{#if selectedIds.size > 0}
+					<Button
+						variant="destructive"
+						size="sm"
+						onclick={handleBulkDelete}
+						disabled={isDeleting}
+						class="gap-2 font-medium"
+					>
+						{#if isDeleting}
+							<Loader2 class="h-4 w-4 animate-spin" />
+						{:else}
+							<Trash2 class="h-4 w-4" />
+						{/if}
+						Delete ({selectedIds.size})
+					</Button>
+				{/if}
 			{/if}
 		</div>
 	</div>
@@ -483,12 +549,42 @@
 			<p class="mt-1 text-sm text-muted-foreground">Please try refreshing the page.</p>
 		</div>
 	{:else if newsQuery.data}
+		{#if newsQuery.data.page.length > 0}
+			<div class="mb-4 flex items-center gap-2">
+				<button
+					type="button"
+					onclick={toggleSelectAll}
+					class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+				>
+					{#if selectedIds.size === newsQuery.data.page.length}
+						<CheckSquare class="h-4 w-4 text-primary" />
+					{:else if selectedIds.size > 0}
+						<CheckSquare class="h-4 w-4 text-muted-foreground" />
+					{:else}
+						<Square class="h-4 w-4" />
+					{/if}
+					{selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select all'}
+				</button>
+			</div>
+		{/if}
 		<div class="space-y-4">
 			{#each newsQuery.data.page as item}
 				{@const isExpanded = expandedNewsId === item._id}
-				<div
-					class="overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:shadow-md"
-				>
+				<div class="flex items-start gap-3">
+					<button
+						type="button"
+						onclick={() => toggleSelect(item._id)}
+						class="mt-5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+					>
+						{#if selectedIds.has(item._id)}
+							<CheckSquare class="h-5 w-5 text-primary" />
+						{:else}
+							<Square class="h-5 w-5" />
+						{/if}
+					</button>
+					<div
+						class="flex-1 overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:shadow-md"
+					>
 					<div class="flex items-start justify-between gap-4 p-5">
 						<div class="min-w-0 flex-1">
 							<div class="mb-2 flex items-center gap-3">
@@ -591,8 +687,9 @@
 									{/each}
 								</div>
 							{/if}
-						</div>
+							</div>
 					{/if}
+					</div>
 				</div>
 			{:else}
 				<div

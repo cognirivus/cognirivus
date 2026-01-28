@@ -23,8 +23,11 @@
 		ChevronRight,
 		FileText,
 		RotateCcw,
-		Filter
+		Filter,
+		CheckSquare,
+		Square
 	} from '@lucide/svelte';
+	import { toast } from 'svelte-sonner';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 
 	const client = useConvexClient();
@@ -88,6 +91,7 @@
 		if (data && !data.isDone) {
 			cursorHistory = [...cursorHistory, currentCursor ?? ''];
 			currentCursor = data.continueCursor;
+			selectedIds = new Set();
 			updateUrl();
 		}
 	}
@@ -97,9 +101,15 @@
 			const prev = cursorHistory[cursorHistory.length - 1];
 			cursorHistory = cursorHistory.slice(0, -1);
 			currentCursor = prev === '' ? null : prev;
+			selectedIds = new Set();
 			updateUrl();
 		}
 	}
+
+	$effect(() => {
+		viewMode;
+		selectedIds = new Set();
+	});
 
 	function resetPagination() {
 		currentCursor = null;
@@ -118,6 +128,9 @@
 
 	let generatingContentId = $state<Id<'content'> | null>(null);
 	let generateError = $state('');
+
+	let selectedIds = $state<Set<Id<'flashcards'>>>(new Set());
+	let isBulkDeleting = $state(false);
 
 	const types = ['basic', 'cloze', 'mcq'];
 	const difficulties = [1, 2, 3, 4, 5];
@@ -167,6 +180,43 @@
 			} catch (e: any) {
 				alert(e.message || 'Failed to delete flashcard.');
 			}
+		}
+	}
+
+	function toggleSelect(id: Id<'flashcards'>) {
+		const next = new Set(selectedIds);
+		if (next.has(id)) {
+			next.delete(id);
+		} else {
+			next.add(id);
+		}
+		selectedIds = next;
+	}
+
+	function toggleSelectAll() {
+		if (!flashcardsQuery.data) return;
+		const allIds = flashcardsQuery.data.page.map((card) => card._id);
+		if (selectedIds.size === allIds.length) {
+			selectedIds = new Set();
+		} else {
+			selectedIds = new Set(allIds);
+		}
+	}
+
+	async function handleBulkDelete() {
+		if (selectedIds.size === 0) return;
+		const count = selectedIds.size;
+		if (!confirm(`Are you sure you want to delete ${count} flashcard(s)?`)) return;
+
+		isBulkDeleting = true;
+		try {
+			await client.mutation(api.flashcards.removeBulk, { ids: Array.from(selectedIds) });
+			selectedIds = new Set();
+			toast.success(`Deleted ${count} flashcard(s)`);
+		} catch (e: any) {
+			toast.error(e.message || 'Failed to delete flashcards');
+		} finally {
+			isBulkDeleting = false;
 		}
 	}
 
@@ -288,6 +338,23 @@
 					All Flashcards
 				</button>
 			</div>
+
+			{#if viewMode === 'flashcards' && selectedIds.size > 0}
+				<Button
+					variant="destructive"
+					size="sm"
+					onclick={handleBulkDelete}
+					disabled={isBulkDeleting}
+					class="gap-2 font-medium"
+				>
+					{#if isBulkDeleting}
+						<Loader variant="circular" size="sm" />
+					{:else}
+						<Trash2 class="h-4 w-4" />
+					{/if}
+					Delete ({selectedIds.size})
+				</Button>
+			{/if}
 		</div>
 	</div>
 
@@ -643,6 +710,21 @@
 				<table class="w-full text-left text-sm">
 					<thead>
 						<tr class="border-b bg-muted/40 transition-colors">
+							<th class="h-12 w-12 px-4 align-middle">
+								<button
+									type="button"
+									onclick={toggleSelectAll}
+									class="flex items-center justify-center"
+								>
+									{#if flashcardsQuery.data && selectedIds.size === flashcardsQuery.data.page.length}
+										<CheckSquare class="h-4 w-4 text-primary" />
+									{:else if selectedIds.size > 0}
+										<CheckSquare class="h-4 w-4 text-muted-foreground" />
+									{:else}
+										<Square class="h-4 w-4 text-muted-foreground" />
+									{/if}
+								</button>
+							</th>
 							<th class="h-12 px-6 font-medium text-muted-foreground">Front</th>
 							<th class="h-12 px-6 font-medium text-muted-foreground">Back</th>
 							<th class="h-12 px-6 font-medium text-muted-foreground">Content</th>
@@ -654,6 +736,19 @@
 					<tbody class="divide-y">
 						{#each flashcardsQuery.data.page as card}
 							<tr class="transition-colors hover:bg-muted/20">
+								<td class="w-12 px-4 py-4">
+									<button
+										type="button"
+										onclick={() => toggleSelect(card._id)}
+										class="flex items-center justify-center"
+									>
+										{#if selectedIds.has(card._id)}
+											<CheckSquare class="h-4 w-4 text-primary" />
+										{:else}
+											<Square class="h-4 w-4 text-muted-foreground hover:text-foreground" />
+										{/if}
+									</button>
+								</td>
 								<td class="max-w-[200px] px-6 py-4">
 									<span class="line-clamp-2 font-medium text-foreground" title={card.front}>
 										{truncateText(card.front, 50)}
@@ -705,7 +800,7 @@
 							</tr>
 						{:else}
 							<tr>
-								<td colspan="6" class="px-6 py-16 text-center">
+								<td colspan="7" class="px-6 py-16 text-center">
 									<div class="flex flex-col items-center gap-3">
 										<div class="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
 											<Brain class="h-6 w-6 text-muted-foreground/50" />
