@@ -247,9 +247,15 @@
 </script>
 
 <div class="container mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-	<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-		<div class="space-y-1">
-			<h1 class="text-3xl font-bold tracking-tight">News Management</h1>
+	<!-- Header -->
+	<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+		<div class="space-y-2">
+			<div class="flex items-center gap-2">
+				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+					<Newspaper class="h-4 w-4 text-primary" />
+				</div>
+				<h1 class="text-3xl font-semibold tracking-tight">News Management</h1>
+			</div>
 			<p class="text-muted-foreground">Manage daily news entries and view linked content.</p>
 		</div>
 		<div class="flex items-center gap-3">
@@ -262,11 +268,7 @@
 						class="absolute inset-0 z-10 cursor-pointer opacity-0"
 						disabled={isBulkUploading}
 					/>
-					<Button
-						variant="outline"
-						class="gap-2 border-primary/20 hover:bg-primary/5"
-						disabled={isBulkUploading}
-					>
+					<Button variant="outline" class="gap-2 font-medium" disabled={isBulkUploading}>
 						{#if isBulkUploading}
 							<Loader2 class="h-4 w-4 animate-spin" />
 							Uploading...
@@ -276,7 +278,7 @@
 						{/if}
 					</Button>
 				</div>
-				<Button onclick={startCreate} class="gap-2 shadow-md shadow-primary/20">
+				<Button onclick={startCreate} class="gap-2 font-medium shadow-sm">
 					<Plus class="h-4 w-4" />
 					Add News
 				</Button>
@@ -285,108 +287,117 @@
 	</div>
 
 	{#if isBulkUploading}
-		<Card.Root class="mb-8 border-primary/20 bg-primary/5">
-			<Card.Content class="pt-6">
-				<div class="flex flex-col gap-4">
-					<div class="flex items-center justify-between">
-						<div class="flex items-center gap-2">
-							<Loader2 class="h-5 w-5 animate-spin text-primary" />
-							<span class="font-semibold">Ingesting Data... ({bulkProgress} / {bulkTotal})</span>
-						</div>
-						<Badge variant="outline" class="bg-background"
-							>{Math.round((bulkProgress / bulkTotal) * 100)}%</Badge
-						>
+		<div class="mb-8 rounded-xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
+			<div class="flex flex-col gap-4">
+				<div class="flex items-center justify-between">
+					<div class="flex items-center gap-2">
+						<Loader2 class="h-5 w-5 animate-spin text-primary" />
+						<span class="font-semibold">Ingesting Data... ({bulkProgress} / {bulkTotal})</span>
 					</div>
-					<div class="h-2 overflow-hidden rounded-full bg-muted">
-						<div
-							class="h-full bg-primary transition-all duration-300"
-							style="width: {(bulkProgress / bulkTotal) * 100}%"
-						></div>
-					</div>
-					<div class="flex items-center gap-4 text-xs text-muted-foreground">
-						<span class="flex items-center gap-1"
-							><span class="h-2 w-2 rounded-full bg-green-500"></span>
-							{bulkStats.success} Success</span
-						>
-						<span class="flex items-center gap-1"
-							><span class="h-2 w-2 rounded-full bg-yellow-500"></span>
-							{bulkStats.skipped} Duplicates</span
-						>
-						<span class="flex items-center gap-1"
-							><span class="h-2 w-2 rounded-full bg-red-500"></span> {bulkStats.failed} Errors</span
-						>
-					</div>
+					<Badge variant="outline" class="bg-background font-mono tabular-nums"
+						>{Math.round((bulkProgress / bulkTotal) * 100)}%</Badge
+					>
 				</div>
-			</Card.Content>
-		</Card.Root>
+				<div class="h-2 overflow-hidden rounded-full bg-primary/10">
+					<div
+						class="h-full bg-primary transition-all duration-300 ease-out"
+						style="width: {(bulkProgress / bulkTotal) * 100}%"
+					></div>
+				</div>
+				<div class="flex items-center gap-4 text-xs font-medium text-muted-foreground">
+					<span class="flex items-center gap-1.5"
+						><span class="h-2 w-2 rounded-full bg-green-500"></span>
+						{bulkStats.success} Success</span
+					>
+					<span class="flex items-center gap-1.5"
+						><span class="h-2 w-2 rounded-full bg-yellow-500"></span>
+						{bulkStats.skipped} Duplicates</span
+					>
+					<span class="flex items-center gap-1.5"
+						><span class="h-2 w-2 rounded-full bg-red-500"></span> {bulkStats.failed} Errors</span
+					>
+				</div>
+			</div>
+		</div>
 	{/if}
 
 	{#if showBulkSummary}
-		<Card.Root class="mb-8 border-green-500/20 bg-green-500/5">
-			<Card.Header class="pb-2">
-				<div class="flex items-center justify-between">
-					<Card.Title class="flex items-center gap-2 text-green-700 dark:text-green-400">
-						<CheckCircle2 class="h-5 w-5" />
-						Upload Complete
-					</Card.Title>
-					<Button variant="ghost" size="icon-sm" onclick={() => (showBulkSummary = false)}>
-						<X class="h-4 w-4" />
-					</Button>
-				</div>
-			</Card.Header>
-			<Card.Content>
-				<p class="text-sm text-muted-foreground">
+		<div
+			class="mb-8 overflow-hidden rounded-xl border border-green-500/20 bg-green-500/5 shadow-sm"
+		>
+			<div class="flex items-center justify-between border-b border-green-500/10 px-6 py-4">
+				<h3 class="flex items-center gap-2 font-semibold text-green-700 dark:text-green-400">
+					<CheckCircle2 class="h-5 w-5" />
+					Upload Complete
+				</h3>
+				<Button
+					variant="ghost"
+					size="icon"
+					onclick={() => (showBulkSummary = false)}
+					class="h-8 w-8 text-green-700 hover:bg-green-500/10 hover:text-green-800"
+				>
+					<X class="h-4 w-4" />
+				</Button>
+			</div>
+			<div class="p-6">
+				<p class="mb-4 text-sm text-muted-foreground">
 					Successfully processed {bulkTotal} lines from the JSONL file.
 				</p>
-				<div class="mt-4 grid grid-cols-3 gap-4">
-					<div class="rounded-lg bg-background p-3 text-center shadow-sm">
-						<div class="text-2xl font-bold text-green-600">{bulkStats.success}</div>
-						<div class="text-xs text-muted-foreground uppercase">Saved</div>
+				<div class="grid grid-cols-3 gap-4">
+					<div class="rounded-lg border bg-card p-4 text-center shadow-sm">
+						<div class="text-3xl font-bold text-green-600 tabular-nums">{bulkStats.success}</div>
+						<div class="mt-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+							Saved
+						</div>
 					</div>
-					<div class="rounded-lg bg-background p-3 text-center shadow-sm">
-						<div class="text-2xl font-bold text-yellow-600">{bulkStats.skipped}</div>
-						<div class="text-xs text-muted-foreground uppercase">Skipped</div>
+					<div class="rounded-lg border bg-card p-4 text-center shadow-sm">
+						<div class="text-3xl font-bold text-yellow-600 tabular-nums">{bulkStats.skipped}</div>
+						<div class="mt-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+							Skipped
+						</div>
 					</div>
-					<div class="rounded-lg bg-background p-3 text-center shadow-sm">
-						<div class="text-2xl font-bold text-red-600">{bulkStats.failed}</div>
-						<div class="text-xs text-muted-foreground uppercase">Errors</div>
+					<div class="rounded-lg border bg-card p-4 text-center shadow-sm">
+						<div class="text-3xl font-bold text-red-600 tabular-nums">{bulkStats.failed}</div>
+						<div class="mt-1 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+							Errors
+						</div>
 					</div>
 				</div>
-			</Card.Content>
-		</Card.Root>
+			</div>
+		</div>
 	{/if}
 
 	{#if isEditing}
-		<Card.Root class="overflow-hidden border-primary/10 shadow-lg">
-			<Card.Header class="bg-muted/30 pb-4">
+		<div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+			<div class="border-b bg-muted/30 px-6 py-4">
 				<div class="flex items-center justify-between">
 					<div>
-						<Card.Title>{editingId ? 'Edit News' : 'Add News Entry'}</Card.Title>
-						<Card.Description>
+						<h2 class="text-lg font-semibold">{editingId ? 'Edit News' : 'Add News Entry'}</h2>
+						<p class="mt-0.5 text-sm text-muted-foreground">
 							{editingId ? 'Update the news details below.' : 'Add a new daily news entry.'}
-						</Card.Description>
+						</p>
 					</div>
 					<Button
 						variant="ghost"
 						size="icon"
 						onclick={() => (isEditing = false)}
-						class="rounded-full"
+						class="h-8 w-8 rounded-full"
 					>
 						<X class="h-4 w-4" />
 					</Button>
 				</div>
-			</Card.Header>
-			<Separator />
-			<Card.Content class="pt-6">
+			</div>
+
+			<div class="p-6">
 				<form onsubmit={handleSubmit} class="space-y-6">
 					<div class="space-y-2">
-						<label for="date" class="text-sm font-semibold">Date</label>
-						<Input type="date" id="date" bind:value={date} required />
+						<label for="date" class="text-sm font-medium">Date</label>
+						<Input type="date" id="date" bind:value={date} required class="max-w-xs" />
 					</div>
 
 					<div class="space-y-2">
 						<div class="flex items-center justify-between">
-							<label for="body" class="text-sm font-semibold">News Content</label>
+							<label for="body" class="text-sm font-medium">News Content</label>
 							{#if editingId && bodyUrl && body.length < 600}
 								<Button
 									type="button"
@@ -394,14 +405,14 @@
 									size="sm"
 									onclick={loadFullBody}
 									disabled={isLoadingFullBody}
-									class="h-7 gap-1 text-xs"
+									class="h-7 gap-1.5 text-xs font-medium"
 								>
 									{#if isLoadingFullBody}
 										<Loader2 class="h-3 w-3 animate-spin" />
 									{:else}
 										<Upload class="h-3 w-3" />
 									{/if}
-									Load Full Body from R2
+									Load Full Body
 								</Button>
 							{/if}
 						</div>
@@ -411,21 +422,19 @@
 							required
 							rows={15}
 							placeholder="Enter the full news content for this date..."
-							class="min-h-[300px] font-mono text-sm"
+							class="min-h-[300px] p-4 font-mono text-sm leading-relaxed"
 						/>
 					</div>
 
 					{#if error}
 						<div
-							class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+							class="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm font-medium text-destructive"
 						>
 							{error}
 						</div>
 					{/if}
 
-					<Separator />
-
-					<div class="flex flex-col-reverse justify-end gap-3 pt-2 sm:flex-row">
+					<div class="flex flex-col-reverse justify-end gap-3 border-t pt-6 sm:flex-row">
 						<Button
 							variant="outline"
 							onclick={() => (isEditing = false)}
@@ -437,7 +446,7 @@
 						<Button
 							type="submit"
 							disabled={isSaving}
-							class="w-full gap-2 shadow-md shadow-primary/20 sm:w-auto"
+							class="w-full gap-2 font-medium shadow-sm sm:w-auto"
 						>
 							{#if isSaving}
 								<Loader variant="circular" size="sm" />
@@ -449,153 +458,160 @@
 						</Button>
 					</div>
 				</form>
-			</Card.Content>
-		</Card.Root>
+			</div>
+		</div>
 	{:else if newsQuery.isLoading}
 		<div class="grid gap-4">
-			{#each Array(5) as _}
-				<Card.Root>
-					<Card.Content class="p-6">
-						<div class="flex items-center justify-between">
-							<div class="space-y-2">
-								<Skeleton class="h-6 w-[200px]" />
-								<Skeleton class="h-4 w-[400px]" />
-							</div>
-							<div class="flex gap-2">
-								<Skeleton class="h-9 w-9 rounded-md" />
-								<Skeleton class="h-9 w-9 rounded-md" />
-							</div>
+			{#each Array(3) as _}
+				<div class="rounded-xl border bg-card p-6">
+					<div class="flex items-center justify-between">
+						<div class="space-y-2">
+							<Skeleton class="h-6 w-[200px]" />
+							<Skeleton class="h-4 w-[400px]" />
 						</div>
-					</Card.Content>
-				</Card.Root>
+						<div class="flex gap-2">
+							<Skeleton class="h-9 w-9 rounded-md" />
+							<Skeleton class="h-9 w-9 rounded-md" />
+						</div>
+					</div>
+				</div>
 			{/each}
 		</div>
 	{:else if newsQuery.error}
-		<Card.Root class="border-destructive/20 bg-destructive/10">
-			<Card.Content class="pt-6 text-center text-destructive">
-				<p class="font-medium">Failed to load news</p>
-				<p class="mt-1 text-sm opacity-80">Please try refreshing the page.</p>
-			</Card.Content>
-		</Card.Root>
+		<div class="rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center">
+			<p class="font-medium text-destructive">Failed to load news</p>
+			<p class="mt-1 text-sm text-muted-foreground">Please try refreshing the page.</p>
+		</div>
 	{:else if newsQuery.data}
-		<div class="space-y-3">
+		<div class="space-y-4">
 			{#each newsQuery.data.page as item}
 				{@const isExpanded = expandedNewsId === item._id}
-				<Card.Root class="overflow-hidden transition-shadow hover:shadow-md">
-					<Card.Content class="p-0">
-						<div class="flex items-center justify-between gap-4 p-4">
-							<div class="min-w-0 flex-1">
-								<div class="mb-1 flex items-center gap-2">
+				<div
+					class="overflow-hidden rounded-xl border bg-card shadow-sm transition-all hover:shadow-md"
+				>
+					<div class="flex items-start justify-between gap-4 p-5">
+						<div class="min-w-0 flex-1">
+							<div class="mb-2 flex items-center gap-3">
+								<div class="flex items-center gap-1.5 text-sm font-semibold text-foreground">
 									<Calendar class="h-4 w-4 text-primary" />
-									<span class="font-semibold text-foreground">{formatDate(item.date)}</span>
-									{#if item.contentCount > 0}
-										<Badge variant="secondary" class="gap-1">
-											<FileText class="h-3 w-3" />
-											{item.contentCount} item{item.contentCount !== 1 ? 's' : ''}
-										</Badge>
-									{/if}
+									{formatDate(item.date)}
 								</div>
-								<p class="text-sm text-muted-foreground">
-									{truncateText(item.body)}
-								</p>
-							</div>
-							<div class="flex shrink-0 items-center gap-1">
 								{#if item.contentCount > 0}
-									<Button
-										variant="ghost"
-										size="icon-sm"
-										title={isExpanded ? 'Collapse' : 'Show linked content'}
-										onclick={() => toggleExpand(item._id)}
-										class="rounded-full"
-									>
-										{#if isExpanded}
-											<ChevronUp class="h-4 w-4" />
-										{:else}
-											<ChevronDown class="h-4 w-4" />
-										{/if}
-									</Button>
+									<Badge variant="secondary" class="gap-1 px-2 py-0.5 text-[10px] font-medium">
+										<FileText class="h-3 w-3 opacity-70" />
+										{item.contentCount} item{item.contentCount !== 1 ? 's' : ''}
+									</Badge>
 								{/if}
-								<Button
-									variant="ghost"
-									size="icon-sm"
-									title="Edit"
-									onclick={() => startEdit(item)}
-									class="rounded-full"
-								>
-									<Pencil class="h-4 w-4" />
-								</Button>
-								<Button
-									variant="ghost"
-									size="icon-sm"
-									title="Delete"
-									class="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
-									onclick={() => handleDelete(item._id, item.contentCount)}
-								>
-									<Trash2 class="h-4 w-4" />
-								</Button>
 							</div>
+							<p class="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+								{truncateText(item.body)}
+							</p>
 						</div>
-
-						{#if isExpanded}
-							<Separator />
-							<div class="bg-muted/30 p-4">
-								<h4 class="mb-3 text-sm font-semibold text-muted-foreground">Linked Content</h4>
-								{#if expandedNewsQuery.isLoading}
-									<div class="space-y-2">
-										<Skeleton class="h-10 w-full" />
-										<Skeleton class="h-10 w-full" />
-									</div>
-								{:else if expandedNewsQuery.data?.content}
-									<div class="space-y-2">
-										{#each expandedNewsQuery.data.content as contentItem}
-											<div
-												class="flex items-center justify-between rounded-md border bg-background p-3"
-											>
-												<div class="min-w-0 flex-1">
-													<div class="flex items-center gap-2">
-														<span class="font-medium">{contentItem.title}</span>
-														<Badge variant="outline" class="text-xs">{contentItem.topic}</Badge>
-														{#if contentItem.subject}
-															<Badge variant="secondary" class="text-xs"
-																>{contentItem.subject.name}</Badge
-															>
-														{/if}
-													</div>
-													<p class="mt-1 text-xs text-muted-foreground">
-														{truncateText(contentItem.body, 100)}
-													</p>
-												</div>
-												<a href="/admin/content" class="ml-2 text-xs text-primary hover:underline">
-													View
-												</a>
-											</div>
-										{:else}
-											<p class="text-sm text-muted-foreground">No content linked to this news.</p>
-										{/each}
-									</div>
-								{/if}
-							</div>
-						{/if}
-					</Card.Content>
-				</Card.Root>
-			{:else}
-				<Card.Root>
-					<Card.Content class="py-12 text-center">
-						<div class="flex flex-col items-center gap-2">
-							<Newspaper class="h-12 w-12 text-muted-foreground/20" />
-							<h3 class="font-semibold text-foreground">No news entries yet</h3>
-							<p class="text-sm text-muted-foreground">Start by adding your first news entry.</p>
-							<Button variant="outline" size="sm" onclick={startCreate} class="mt-2">
-								Add News
+						<div class="flex shrink-0 items-center gap-1">
+							{#if item.contentCount > 0}
+								<Button
+									variant="ghost"
+									size="icon-sm"
+									title={isExpanded ? 'Collapse' : 'Show linked content'}
+									onclick={() => toggleExpand(item._id)}
+									class="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+								>
+									{#if isExpanded}
+										<ChevronUp class="h-4 w-4" />
+									{:else}
+										<ChevronDown class="h-4 w-4" />
+									{/if}
+								</Button>
+							{/if}
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								title="Edit"
+								onclick={() => startEdit(item)}
+								class="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+							>
+								<Pencil class="h-4 w-4" />
+							</Button>
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								title="Delete"
+								class="h-8 w-8 rounded-full text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
+								onclick={() => handleDelete(item._id, item.contentCount)}
+							>
+								<Trash2 class="h-4 w-4" />
 							</Button>
 						</div>
-					</Card.Content>
-				</Card.Root>
+					</div>
+
+					{#if isExpanded}
+						<div class="animate-in border-t bg-muted/30 px-5 py-4 duration-200 slide-in-from-top-2">
+							<h4 class="mb-3 text-xs font-bold tracking-wider text-muted-foreground uppercase">
+								Linked Content
+							</h4>
+							{#if expandedNewsQuery.isLoading}
+								<div class="space-y-3">
+									<Skeleton class="h-12 w-full rounded-lg" />
+									<Skeleton class="h-12 w-full rounded-lg" />
+								</div>
+							{:else if expandedNewsQuery.data?.content}
+								<div class="space-y-2">
+									{#each expandedNewsQuery.data.content as contentItem}
+										<div
+											class="flex items-center justify-between rounded-lg border bg-background p-3 transition-colors hover:border-primary/30"
+										>
+											<div class="min-w-0 flex-1 pr-4">
+												<div class="mb-1 flex items-center gap-2">
+													<span class="truncate text-sm font-semibold">{contentItem.title}</span>
+													<Badge variant="outline" class="h-5 px-1.5 py-0 text-[10px]"
+														>{contentItem.topic}</Badge
+													>
+													{#if contentItem.subject}
+														<Badge variant="secondary" class="h-5 px-1.5 py-0 text-[10px]"
+															>{contentItem.subject.name}</Badge
+														>
+													{/if}
+												</div>
+												<p class="line-clamp-1 text-xs text-muted-foreground">
+													{truncateText(contentItem.body, 100)}
+												</p>
+											</div>
+											<a
+												href="/admin/content?q={encodeURIComponent(contentItem.title)}"
+												class="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+											>
+												View
+												<ChevronRight class="h-3 w-3" />
+											</a>
+										</div>
+									{:else}
+										<p class="text-sm text-muted-foreground italic">
+											No content linked to this news.
+										</p>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/if}
+				</div>
+			{:else}
+				<div
+					class="flex flex-col items-center justify-center py-16 text-center border rounded-xl border-dashed"
+				>
+					<div class="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+						<Newspaper class="h-6 w-6 text-muted-foreground/50" />
+					</div>
+					<h3 class="font-semibold text-foreground">No news entries yet</h3>
+					<p class="text-sm text-muted-foreground max-w-xs mx-auto mt-1">
+						Start by adding your first news entry.
+					</p>
+					<Button variant="outline" size="sm" onclick={startCreate} class="mt-4">Add News</Button>
+				</div>
 			{/each}
 		</div>
 
 		{#if newsQuery.data.page.length > 0}
-			<div class="mt-4 flex items-center justify-between px-2">
+			<div class="mt-6 flex items-center justify-between px-2">
 				<div class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
 					Page {cursorHistory.length + 1} · {newsQuery.data.page.length} entries
 				</div>

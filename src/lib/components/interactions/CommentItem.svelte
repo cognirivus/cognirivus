@@ -13,6 +13,7 @@
 	import { Textarea } from '$lib/components/ui/textarea/index.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import type { Comment } from './types.js';
+	import CommentItem from './CommentItem.svelte';
 
 	interface Props {
 		comment: Comment;
@@ -254,7 +255,7 @@
 				{#if hasChildren}
 					<div class="mt-2">
 						{#each comment.children as child (child._id)}
-							<svelte:self
+							<CommentItem
 								comment={child}
 								depth={depth + 1}
 								{isAuthenticated}

@@ -2,16 +2,17 @@
 	import { useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import * as Card from '$lib/components/ui/card';
-	import { Separator } from '$lib/components/ui/separator';
 	import {
 		BookCheck,
 		ChartLine,
-		Settings,
-		ChevronRight,
+		ArrowRight,
 		CheckCircle,
 		Zap,
 		Brain,
-		Highlighter
+		Highlighter,
+		MessageSquare,
+		TrendingUp,
+		Users
 	} from '@lucide/svelte';
 
 	const progressQuery = useQuery(api.content.getProgressAnalytics, {});
@@ -39,208 +40,201 @@
 	}
 </script>
 
-<div class="p-6">
-	<div class="mx-auto flex w-full max-w-6xl flex-col gap-8">
-		<!-- Header -->
-		<div class="space-y-4">
-			<div>
-				<h1 class="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
-				<p class="text-sm text-muted-foreground">
-					Overview of your learning progress and AI usage.
-				</p>
-			</div>
-			<Separator />
-		</div>
+<div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+	<!-- Header -->
+	<div class="mb-8">
+		<h1 class="text-2xl font-semibold tracking-tight text-foreground">Overview</h1>
+		<p class="mt-1 text-sm text-muted-foreground">Track your learning progress and AI usage</p>
+	</div>
 
-		<!-- Navigation Cards -->
-		<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-			<!-- Content Progress Card -->
-			<a href="/dashboard/content" class="group">
-				<Card.Root
-					class="h-full transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-lg"
-				>
-					<Card.Header class="pb-3">
-						<div class="flex items-center justify-between">
-							<div
-								class="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100 text-green-600 transition-colors group-hover:bg-green-600 group-hover:text-white dark:bg-green-900/30 dark:text-green-400"
-							>
-								<BookCheck class="h-6 w-6" />
-							</div>
-							<ChevronRight
-								class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary"
-							/>
+	<!-- Stats Grid -->
+	<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+		<!-- Content Progress Card -->
+		<a href="/dashboard/content" class="group">
+			<Card.Root
+				class="h-full border-border/50 transition-all duration-200 hover:border-border hover:shadow-sm"
+			>
+				<Card.Content class="p-5">
+					<div class="flex items-center justify-between">
+						<div
+							class="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600"
+						>
+							<BookCheck class="h-5 w-5" />
 						</div>
-					</Card.Header>
-					<Card.Content class="space-y-3">
-						<div>
-							<Card.Title class="text-lg">Content Progress</Card.Title>
-							<p class="text-sm text-muted-foreground">Track your learning across all content</p>
-						</div>
-
+						<ArrowRight
+							class="h-4 w-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+						/>
+					</div>
+					<div class="mt-4">
+						<p class="text-sm text-muted-foreground">Content Progress</p>
 						{#if progressStats}
-							<div class="space-y-2 rounded-lg bg-muted/50 p-3">
-								<div class="flex items-center justify-between text-sm">
-									<span class="flex items-center gap-2 text-muted-foreground">
-										<CheckCircle class="h-4 w-4 text-green-500" />
-										Completed
-									</span>
-									<span class="font-bold">
-										{progressStats.totalCompleted}/{progressStats.totalContent}
-									</span>
-								</div>
-								<div class="h-2 overflow-hidden rounded-full bg-muted">
-									<div
-										class="h-full bg-green-500 transition-all"
-										style="width: {getPercentage(
-											progressStats.totalCompleted,
-											progressStats.totalContent
-										)}%"
-									></div>
-								</div>
-								<div class="text-right text-xs font-medium text-green-600 dark:text-green-400">
-									{getPercentage(progressStats.totalCompleted, progressStats.totalContent)}%
-									complete
-								</div>
-							</div>
-						{:else}
-							<div class="rounded-lg bg-muted/50 p-3">
-								<p class="text-sm text-muted-foreground">Loading stats...</p>
-							</div>
-						{/if}
-					</Card.Content>
-				</Card.Root>
-			</a>
-
-			<!-- Highlights Card -->
-			<a href="/dashboard/highlights" class="group">
-				<Card.Root
-					class="h-full transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-lg"
-				>
-					<Card.Header class="pb-3">
-						<div class="flex items-center justify-between">
-							<div
-								class="flex h-12 w-12 items-center justify-center rounded-xl bg-yellow-100 text-yellow-600 transition-colors group-hover:bg-yellow-600 group-hover:text-white dark:bg-yellow-900/30 dark:text-yellow-400"
-							>
-								<Highlighter class="h-6 w-6" />
-							</div>
-							<ChevronRight
-								class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary"
-							/>
-						</div>
-					</Card.Header>
-					<Card.Content class="space-y-3">
-						<div>
-							<Card.Title class="text-lg">Highlights</Card.Title>
-							<p class="text-sm text-muted-foreground">Review your saved text highlights</p>
-						</div>
-
-						<div class="space-y-2 rounded-lg bg-muted/50 p-3">
-							<div class="flex items-center justify-between text-sm">
-								<span class="flex items-center gap-2 text-muted-foreground">
-									<Highlighter class="h-4 w-4 text-yellow-500" />
-									Saved
-								</span>
-								<span class="font-bold">{highlightsCount}</span>
-							</div>
-							<p class="text-xs text-muted-foreground">
-								Quickly access your notes and group discussions
+							<p class="mt-1 text-2xl font-semibold">
+								{getPercentage(progressStats.totalCompleted, progressStats.totalContent)}%
 							</p>
-						</div>
-					</Card.Content>
-				</Card.Root>
-			</a>
-
-			<!-- Usage Card -->
-			<a href="/dashboard/usage" class="group">
-				<Card.Root
-					class="h-full transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-lg"
-				>
-					<Card.Header class="pb-3">
-						<div class="flex items-center justify-between">
-							<div
-								class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600 transition-colors group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-900/30 dark:text-blue-400"
-							>
-								<ChartLine class="h-6 w-6" />
+							<div class="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+								<div
+									class="h-full rounded-full bg-emerald-500 transition-all duration-500"
+									style="width: {getPercentage(
+										progressStats.totalCompleted,
+										progressStats.totalContent
+									)}%"
+								></div>
 							</div>
-							<ChevronRight
-								class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary"
-							/>
-						</div>
-					</Card.Header>
-					<Card.Content class="space-y-3">
-						<div>
-							<Card.Title class="text-lg">Usage Statistics</Card.Title>
-							<p class="text-sm text-muted-foreground">Monitor AI consumption and costs</p>
-						</div>
+							<p class="mt-2 text-xs text-muted-foreground">
+								{progressStats.totalCompleted} of {progressStats.totalContent} completed
+							</p>
+						{:else}
+							<div class="mt-1 h-8 w-16 animate-pulse rounded bg-muted"></div>
+						{/if}
+					</div>
+				</Card.Content>
+			</Card.Root>
+		</a>
 
+		<!-- Highlights Card -->
+		<a href="/dashboard/highlights" class="group">
+			<Card.Root
+				class="h-full border-border/50 transition-all duration-200 hover:border-border hover:shadow-sm"
+			>
+				<Card.Content class="p-5">
+					<div class="flex items-center justify-between">
+						<div
+							class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600"
+						>
+							<Highlighter class="h-5 w-5" />
+						</div>
+						<ArrowRight
+							class="h-4 w-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+						/>
+					</div>
+					<div class="mt-4">
+						<p class="text-sm text-muted-foreground">Highlights</p>
+						<p class="mt-1 text-2xl font-semibold">{highlightsCount}</p>
+						<p class="mt-2 text-xs text-muted-foreground">Saved notes & insights</p>
+					</div>
+				</Card.Content>
+			</Card.Root>
+		</a>
+
+		<!-- Usage Card -->
+		<a href="/dashboard/usage" class="group">
+			<Card.Root
+				class="h-full border-border/50 transition-all duration-200 hover:border-border hover:shadow-sm"
+			>
+				<Card.Content class="p-5">
+					<div class="flex items-center justify-between">
+						<div
+							class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600"
+						>
+							<ChartLine class="h-5 w-5" />
+						</div>
+						<ArrowRight
+							class="h-4 w-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+						/>
+					</div>
+					<div class="mt-4">
+						<p class="text-sm text-muted-foreground">AI Usage</p>
 						{#if usageStats}
-							<div class="space-y-2 rounded-lg bg-muted/50 p-3">
-								<div class="flex items-center justify-between text-sm">
-									<span class="flex items-center gap-2 text-muted-foreground">
-										<Zap class="h-4 w-4 text-blue-500" />
-										Total Cost
-									</span>
-									<span class="font-bold">{formatCost(usageStats.summary.totalCost)}</span>
-								</div>
-								<div class="flex items-center justify-between text-sm">
-									<span class="text-muted-foreground">Tokens Used</span>
-									<span class="font-medium">
-										{usageStats.summary.totalTokens.toLocaleString()}
-									</span>
-								</div>
-								<div class="flex items-center justify-between text-sm">
-									<span class="text-muted-foreground">AI Responses</span>
-									<span class="font-medium">
-										{usageStats.summary.assistantMessageCount.toLocaleString()}
-									</span>
-								</div>
-							</div>
+							<p class="mt-1 text-2xl font-semibold">{formatCost(usageStats.summary.totalCost)}</p>
+							<p class="mt-2 text-xs text-muted-foreground">
+								{(usageStats.summary.totalTokens / 1000).toFixed(1)}k tokens used
+							</p>
 						{:else}
-							<div class="rounded-lg bg-muted/50 p-3">
-								<p class="text-sm text-muted-foreground">Loading stats...</p>
-							</div>
+							<div class="mt-1 h-8 w-20 animate-pulse rounded bg-muted"></div>
 						{/if}
-					</Card.Content>
-				</Card.Root>
+					</div>
+				</Card.Content>
+			</Card.Root>
+		</a>
+
+		<!-- Memories Card -->
+		<a href="/dashboard/memories" class="group">
+			<Card.Root
+				class="h-full border-border/50 transition-all duration-200 hover:border-border hover:shadow-sm"
+			>
+				<Card.Content class="p-5">
+					<div class="flex items-center justify-between">
+						<div
+							class="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600"
+						>
+							<Brain class="h-5 w-5" />
+						</div>
+						<ArrowRight
+							class="h-4 w-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+						/>
+					</div>
+					<div class="mt-4">
+						<p class="text-sm text-muted-foreground">AI Memories</p>
+						<p class="mt-1 text-2xl font-semibold">{memoriesCount}</p>
+						<p class="mt-2 text-xs text-muted-foreground">Personalization data</p>
+					</div>
+				</Card.Content>
+			</Card.Root>
+		</a>
+	</div>
+
+	<!-- Quick Actions -->
+	<div class="mt-10">
+		<h2 class="mb-4 text-sm font-medium text-muted-foreground">Quick Actions</h2>
+		<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+			<a
+				href="/chat"
+				class="group flex items-center gap-3 rounded-lg border border-border/50 bg-card p-4 transition-all duration-200 hover:border-border hover:shadow-sm"
+			>
+				<div
+					class="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground/5 text-foreground transition-colors group-hover:bg-foreground/10"
+				>
+					<MessageSquare class="h-4 w-4" />
+				</div>
+				<div>
+					<p class="text-sm font-medium">Start Chat</p>
+					<p class="text-xs text-muted-foreground">Ask AI anything</p>
+				</div>
 			</a>
 
-			<!-- Memories Card -->
-			<a href="/dashboard/memories" class="group">
-				<Card.Root
-					class="h-full transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-lg"
+			<a
+				href="/content"
+				class="group flex items-center gap-3 rounded-lg border border-border/50 bg-card p-4 transition-all duration-200 hover:border-border hover:shadow-sm"
+			>
+				<div
+					class="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground/5 text-foreground transition-colors group-hover:bg-foreground/10"
 				>
-					<Card.Header class="pb-3">
-						<div class="flex items-center justify-between">
-							<div
-								class="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-100 text-purple-600 transition-colors group-hover:bg-purple-600 group-hover:text-white dark:bg-purple-900/30 dark:text-purple-400"
-							>
-								<Brain class="h-6 w-6" />
-							</div>
-							<ChevronRight
-								class="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary"
-							/>
-						</div>
-					</Card.Header>
-					<Card.Content class="space-y-3">
-						<div>
-							<Card.Title class="text-lg">Memories</Card.Title>
-							<p class="text-sm text-muted-foreground">Manage AI personalization data</p>
-						</div>
+					<TrendingUp class="h-4 w-4" />
+				</div>
+				<div>
+					<p class="text-sm font-medium">Browse Content</p>
+					<p class="text-xs text-muted-foreground">Study materials</p>
+				</div>
+			</a>
 
-						<div class="space-y-2 rounded-lg bg-muted/50 p-3">
-							<div class="flex items-center justify-between text-sm">
-								<span class="flex items-center gap-2 text-muted-foreground">
-									<Brain class="h-4 w-4 text-purple-500" />
-									Stored Memories
-								</span>
-								<span class="font-bold">{memoriesCount}</span>
-							</div>
-							<p class="text-xs text-muted-foreground">
-								AI learns from your conversations to provide better responses
-							</p>
-						</div>
-					</Card.Content>
-				</Card.Root>
+			<a
+				href="/flashcards"
+				class="group flex items-center gap-3 rounded-lg border border-border/50 bg-card p-4 transition-all duration-200 hover:border-border hover:shadow-sm"
+			>
+				<div
+					class="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground/5 text-foreground transition-colors group-hover:bg-foreground/10"
+				>
+					<Zap class="h-4 w-4" />
+				</div>
+				<div>
+					<p class="text-sm font-medium">Flashcards</p>
+					<p class="text-xs text-muted-foreground">Review & test</p>
+				</div>
+			</a>
+
+			<a
+				href="/groups"
+				class="group flex items-center gap-3 rounded-lg border border-border/50 bg-card p-4 transition-all duration-200 hover:border-border hover:shadow-sm"
+			>
+				<div
+					class="flex h-9 w-9 items-center justify-center rounded-lg bg-foreground/5 text-foreground transition-colors group-hover:bg-foreground/10"
+				>
+					<Users class="h-4 w-4" />
+				</div>
+				<div>
+					<p class="text-sm font-medium">Study Groups</p>
+					<p class="text-xs text-muted-foreground">Collaborate</p>
+				</div>
 			</a>
 		</div>
 	</div>

@@ -9,9 +9,14 @@
 	import LayersMenu from './LayersMenu.svelte';
 	import { toast } from 'svelte-sonner';
 
-	const { authors = [], groupId = undefined } = $props<{
+	const {
+		authors = [],
+		groupId = undefined,
+		isAuthenticated = true
+	} = $props<{
 		authors?: { id: string; name: string; count: number }[];
 		groupId?: string;
+		isAuthenticated?: boolean;
 	}>();
 
 	const colors = [
@@ -31,6 +36,7 @@
 	}
 </script>
 
+{#if isAuthenticated}
 <div
 	class={cn(
 		'fixed bottom-4 left-1/2 z-[90] flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-2 rounded-full border bg-background/80 px-3 py-2 shadow-2xl ring-1 ring-border/50 backdrop-blur-md transition-all duration-300 sm:bottom-6 sm:max-w-none sm:gap-4 sm:px-6 sm:py-3',
@@ -105,3 +111,4 @@
 		</div>
 	{/if}
 </div>
+{/if}

@@ -200,38 +200,43 @@
 </script>
 
 {#if blogQuery.isLoading}
-	<article>
-		<header class="mb-8">
-			<Skeleton class="h-6 w-32" />
-			<Skeleton class="mt-4 h-12 w-3/4" />
-			<div class="mt-10 flex items-center gap-6 border-b border-border pb-6">
-				<Skeleton class="h-9 w-24" />
-				<Skeleton class="h-9 w-24" />
+	<article class="animate-pulse">
+		<header class="mb-10">
+			<Skeleton class="h-5 w-28 rounded-full" />
+			<Skeleton class="mt-5 h-10 w-4/5" />
+			<Skeleton class="mt-3 h-10 w-2/3" />
+			<div class="mt-8 flex items-center gap-4 border-b border-border/50 pb-6">
+				<Skeleton class="h-9 w-24 rounded-lg" />
+				<Skeleton class="h-9 w-24 rounded-lg" />
 			</div>
 		</header>
 		<div class="space-y-4">
 			<Skeleton class="h-4 w-full" />
 			<Skeleton class="h-4 w-full" />
-			<Skeleton class="h-4 w-2/3" />
+			<Skeleton class="h-4 w-3/4" />
+			<Skeleton class="mt-6 h-4 w-full" />
+			<Skeleton class="h-4 w-5/6" />
 		</div>
 	</article>
 {:else if blogQuery.error}
-	<div class="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-destructive">
-		Failed to load the blog post.
+	<div class="rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center">
+		<p class="text-sm text-destructive">Failed to load the blog post. Please try again.</p>
 	</div>
 {:else if blog}
 	<article>
-		<header class="mb-8">
-			<Badge variant="secondary" class="gap-1">
+		<!-- Header -->
+		<header class="mb-10">
+			<Badge variant="secondary" class="gap-1.5 px-2.5 py-1 text-xs">
 				<Calendar class="h-3 w-3" />
 				{formatDate(blog.createdAt)}
 			</Badge>
-			<h1 class="mt-4 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+			<h1 class="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
 				{blog.title}
 			</h1>
-			<!-- Like/Dislike Section -->
+
+			<!-- Reactions Bar -->
 			<div
-				class="mt-10 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-center sm:justify-between"
+				class="mt-8 flex flex-col gap-4 border-b border-border/50 pb-6 sm:flex-row sm:items-center sm:justify-between"
 			>
 				<ReactionsBar
 					likes={blog.likes}
@@ -244,28 +249,32 @@
 					onScrollToComments={scrollToComments}
 				/>
 
-				<div class="flex items-center gap-2">
+				{#if isAuthenticated}
 					<Button
-						variant="secondary"
+						variant="outline"
 						size="sm"
-						class="h-9 gap-2 px-4 font-bold"
+						class="gap-2 text-xs font-semibold"
 						onclick={handleShareToGroup}
 					>
-						<Share2 class="h-4 w-4" />
+						<Share2 class="h-3.5 w-3.5" />
 						Share to Group
 					</Button>
-				</div>
+				{/if}
 			</div>
 		</header>
 
+		<!-- Content -->
 		<HighlightWrapper
 			{highlights}
 			{currentUserId}
+			{isAuthenticated}
 			onAddHighlight={handleAddHighlight}
 			onRemoveHighlight={handleRemoveHighlight}
 			onAddComment={(id) => (activeCommentId = id)}
 		>
-			<div class="prose prose-neutral dark:prose-invert max-w-none">
+			<div
+				class="prose prose-neutral dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-p:leading-relaxed max-w-none"
+			>
 				<Markdown content={blog.body} />
 			</div>
 		</HighlightWrapper>
@@ -284,14 +293,15 @@
 			onCommentDislike={handleCommentDislike}
 		/>
 	</article>
-	<div class="h-32"></div>
+	<div class="h-24"></div>
 {:else}
-	<div class="flex h-32 items-center justify-center text-muted-foreground">
-		Blog post not found.
+	<div class="flex h-48 flex-col items-center justify-center text-center">
+		<p class="text-muted-foreground">Blog post not found.</p>
+		<Button href="/blog" variant="outline" class="mt-4">Back to Blog</Button>
 	</div>
 {/if}
 
-<FloatingToolbar {authors} />
+<FloatingToolbar {authors} {isAuthenticated} />
 
 {#if activeCommentId}
 	<InlineCommentPane highlightId={activeCommentId} onClose={() => (activeCommentId = null)} />

@@ -4,6 +4,7 @@
 	import { api } from '../../convex/_generated/api';
 	import { goto } from '$app/navigation';
 	import { useChatContext } from '$lib/chat-state.svelte';
+	import { Sparkles } from '@lucide/svelte';
 
 	const client = useConvexClient();
 	const chatState = useChatContext();
@@ -40,11 +41,18 @@
 	});
 </script>
 
-<div class="flex flex-1 flex-col items-center justify-center p-4">
-	<div class="mb-32 animate-in text-center duration-700 fade-in slide-in-from-bottom-4">
-		<h2 class="text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl">
-			Cognirivus
-		</h2>
-		<p class="mt-4 text-muted-foreground sm:text-lg">How can I help you today?</p>
+<div class="flex flex-1 flex-col items-center justify-center px-6">
+	<div class="mb-32 max-w-md text-center">
+		<div
+			class="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-foreground text-background"
+		>
+			<Sparkles class="h-6 w-6" />
+		</div>
+		<h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+			How can I help you today?
+		</h1>
+		<p class="mt-3 text-sm text-muted-foreground">
+			Ask me anything. I'm here to help you learn and understand.
+		</p>
 	</div>
 </div>

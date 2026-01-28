@@ -259,7 +259,7 @@
 				</div>
 			{:else}
 				<!-- Breadcrumb Context -->
-				<div class="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+				<div class="mb-6 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
 					<a
 						href={item.topic === 'Current Affairs' ? '/content?news=true' : '/content'}
 						class="hover:text-foreground hover:underline"
@@ -267,7 +267,7 @@
 						{item.topic === 'Current Affairs' ? 'Current Affairs' : 'Knowledge Base'}
 					</a>
 					{#if item.subject}
-						<ChevronRight class="h-3.5 w-3.5" />
+						<ChevronRight class="h-3 w-3" />
 						<a
 							href="/content?subject={item.subject._id}"
 							class="hover:text-foreground hover:underline"
@@ -275,31 +275,34 @@
 							{item.subject.name}
 						</a>
 					{/if}
-					<ChevronRight class="h-3.5 w-3.5" />
-					<span class="line-clamp-1 max-w-[200px] text-foreground">{item.title}</span>
+					<ChevronRight class="h-3 w-3" />
+					<span class="line-clamp-1 max-w-[200px] font-medium text-foreground">{item.title}</span>
 				</div>
 
-				<article class="space-y-6">
+				<article class="space-y-8">
 					<!-- Header -->
-					<header class="space-y-4">
+					<header class="space-y-6">
 						<!-- Tags Row -->
 						<div class="flex flex-wrap items-center gap-2">
 							{#if item.subject}
 								<Badge
 									variant="outline"
-									class="border-primary/20 bg-primary/5 text-[10px] font-bold text-primary uppercase"
+									class="border-primary/20 bg-primary/5 text-[10px] font-semibold text-primary uppercase"
 								>
-									GS-{item.subject.gsPaper} | {item.subject.name}
+									GS-{item.subject.gsPaper} • {item.subject.name}
 								</Badge>
 							{/if}
-							<Badge variant="secondary" class="flex items-center gap-1 text-[10px] uppercase">
-								<Tag class="h-3 w-3" />
+							<Badge
+								variant="secondary"
+								class="flex items-center gap-1.5 text-[10px] font-medium uppercase"
+							>
+								<Tag class="h-3 w-3 opacity-50" />
 								{item.topic}
 							</Badge>
 							{#if progressQuery.data?.[item._id]}
 								<Badge
 									variant="outline"
-									class="border-green-500/20 bg-green-500/5 text-[10px] font-bold text-green-600 uppercase"
+									class="border-emerald-500/20 bg-emerald-500/5 text-[10px] font-semibold text-emerald-600 uppercase"
 								>
 									<Check class="mr-1 h-3 w-3" />
 									Completed
@@ -308,23 +311,25 @@
 						</div>
 
 						<!-- Title -->
-						<h1 class="text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">
+						<h1
+							class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl"
+						>
 							{item.title}
 						</h1>
 
 						<!-- Meta Row -->
-						<div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+						<div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
 							{#if item.newsDate}
-								<div class="flex items-center gap-1.5">
-									<Calendar class="h-4 w-4 text-primary" />
-									<span class="font-medium">{item.newsDate}</span>
+								<div class="flex items-center gap-2">
+									<Calendar class="h-4 w-4 text-primary/70" />
+									<span class="font-medium tabular-nums">{item.newsDate}</span>
 								</div>
 							{/if}
 
 							{#if item.source}
-								<div class="flex items-center gap-1.5">
-									<Book class="h-4 w-4" />
-									<span>{item.source}</span>
+								<div class="flex items-center gap-2">
+									<Book class="h-4 w-4 text-primary/70" />
+									<span class="font-medium">{item.source}</span>
 								</div>
 							{/if}
 
@@ -337,7 +342,7 @@
 
 						<!-- Reactions Bar -->
 						<div
-							class="flex flex-col gap-4 border-t border-b border-border py-4 sm:flex-row sm:items-center sm:justify-between"
+							class="flex flex-col gap-4 border-t border-b border-border/50 py-5 sm:flex-row sm:items-center sm:justify-between"
 						>
 							<ReactionsBar
 								likes={reactions.likes}
@@ -350,23 +355,26 @@
 								onScrollToComments={scrollToComments}
 							/>
 
-							<div class="flex items-center gap-2">
-								<Button
-									variant="secondary"
-									size="sm"
-									class="h-9 gap-2 px-4 font-bold"
-									onclick={handleShareToGroup}
-								>
-									<Share2 class="h-4 w-4" />
-									Share to Group
-								</Button>
-							</div>
+							{#if isAuthenticated}
+								<div class="flex items-center gap-2">
+									<Button
+										variant="outline"
+										size="sm"
+										class="h-9 gap-2 px-4 text-xs font-semibold"
+										onclick={handleShareToGroup}
+									>
+										<Share2 class="h-4 w-4" />
+										Share to Group
+									</Button>
+								</div>
+							{/if}
 						</div>
 
 						<!-- Entities -->
 						{#if item.entities && item.entities.length > 0}
-							<div class="flex flex-wrap items-center gap-2 border-t pt-4">
-								<span class="text-[10px] font-bold tracking-wider text-muted-foreground uppercase"
+							<div class="flex flex-wrap items-center gap-2 pt-2">
+								<span
+									class="mr-1 text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
 									>Related:</span
 								>
 								{#each item.entities as ent}
@@ -375,12 +383,12 @@
 										href="/content/article?view=entity&type={encodeURIComponent(
 											ent.type
 										)}&slug={ent.slug}"
-										class="group flex items-center gap-1.5 rounded-full border bg-muted/30 px-2.5 py-1 text-xs font-medium transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+										class="group flex items-center gap-1.5 rounded-full border border-transparent bg-muted/50 px-3 py-1 text-xs font-medium transition-all hover:border-primary/20 hover:bg-primary/5 hover:text-primary"
 									>
-										<Icon class="h-3.5 w-3.5" />
+										<Icon class="h-3 w-3 opacity-70 group-hover:opacity-100" />
 										{ent.name}
 										<ChevronRight
-											class="h-3 w-3 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+											class="ml-0.5 h-3 w-3 text-muted-foreground opacity-50 transition-all group-hover:translate-x-0.5 group-hover:text-primary group-hover:opacity-100"
 										/>
 									</a>
 								{/each}
@@ -391,15 +399,19 @@
 					<!-- Flashcards CTA -->
 					{#if page.data.currentUser && flashcardsQuery.data && flashcardsQuery.data.length > 0}
 						<div
-							class="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 p-4"
+							class="flex items-center justify-between rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-5"
 						>
-							<div class="flex items-center gap-3">
-								<div class="rounded-full bg-primary/10 p-2 text-primary">
+							<div class="flex items-center gap-4">
+								<div
+									class="flex h-10 w-10 items-center justify-center rounded-lg bg-background text-primary shadow-sm"
+								>
 									<Brain class="h-5 w-5" />
 								</div>
 								<div>
-									<p class="text-sm font-semibold">{flashcardsQuery.data.length} Flashcards</p>
-									<p class="text-xs text-muted-foreground">Test your knowledge</p>
+									<p class="font-semibold text-foreground">
+										{flashcardsQuery.data.length} Flashcards Available
+									</p>
+									<p class="text-xs text-muted-foreground">Test your knowledge on this topic</p>
 								</div>
 							</div>
 							<Button href="/flashcards/study?contentId={item._id}" size="sm" class="gap-2">
@@ -413,12 +425,15 @@
 					<HighlightWrapper
 						{highlights}
 						{currentUserId}
+						{isAuthenticated}
 						onAddHighlight={handleAddHighlight}
 						onRemoveHighlight={handleRemoveHighlight}
 						onAddComment={(id) => (activeCommentId = id)}
 					>
-						<div class="rounded-lg border bg-card p-6 shadow-sm">
-							<div class="prose prose-zinc dark:prose-invert max-w-none">
+						<div class="rounded-xl border bg-card p-8 shadow-sm">
+							<div
+								class="prose prose-zinc dark:prose-invert prose-headings:font-semibold prose-p:leading-relaxed max-w-none"
+							>
 								<Markdown content={item.body} />
 							</div>
 						</div>
@@ -427,7 +442,7 @@
 					<!-- Footer -->
 					{#if item.subject}
 						<footer
-							class="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3"
+							class="flex items-center justify-between rounded-xl border bg-muted/20 px-5 py-4"
 						>
 							<p class="text-xs text-muted-foreground">
 								Part of <span class="font-semibold text-foreground">{item.subject.name}</span>
@@ -436,7 +451,7 @@
 								variant="ghost"
 								size="sm"
 								href="/content?subject={item.subject._id}"
-								class="h-8 gap-1 text-xs"
+								class="h-8 gap-1.5 text-xs font-semibold"
 							>
 								View all {item.subject.name}
 								<ChevronRight class="h-3.5 w-3.5" />
@@ -444,7 +459,7 @@
 						</footer>
 					{/if}
 
-					<div id="comments">
+					<div id="comments" class="pt-4">
 						<CommentsSection
 							{comments}
 							isLoading={commentsQuery.isLoading}
@@ -464,7 +479,7 @@
 	</div>
 </div>
 
-<FloatingToolbar {authors} />
+<FloatingToolbar {authors} {isAuthenticated} />
 
 {#if activeCommentId}
 	<InlineCommentPane highlightId={activeCommentId} onClose={() => (activeCommentId = null)} />

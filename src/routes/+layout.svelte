@@ -16,19 +16,23 @@
 		getServerState: () => data.authState
 	});
 
-	const showNavbar = $derived(!page.url.pathname.startsWith('/chat'));
+	const showNavbar = $derived(
+		!page.url.pathname.startsWith('/chat') && !page.url.pathname.startsWith('/image')
+	);
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 <ModeWatcher />
 
-{#if showNavbar}
-	<Navbar />
-{:else}
-	<div class="fixed top-1 right-1 z-50 lg:top-2 lg:right-2">
-		<ThemeToggle />
-	</div>
-{/if}
+<div class="flex h-screen flex-col overflow-hidden">
+	{#if showNavbar}
+		<Navbar />
+	{:else}
+		<div class="fixed top-1 right-1 z-50 lg:top-2 lg:right-2">
+			<ThemeToggle />
+		</div>
+	{/if}
 
-{@render children()}
+	{@render children()}
+</div>
 <Toaster />

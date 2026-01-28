@@ -4,7 +4,7 @@
 	import { page } from '$app/state';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
-	import { Calendar, Users, MessageSquare, ArrowLeft, ChevronRight, Share2 } from '@lucide/svelte';
+	import { Calendar, Users, MessageSquare, ArrowLeft, ChevronRight, Globe } from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader';
 	import { Markdown } from '$lib/components/prompt-kit/markdown';
 	import { ReactionsBar, CommentsSection } from '$lib/components/interactions';
@@ -206,7 +206,7 @@
 				</div>
 			{:else}
 				<!-- Breadcrumb Context -->
-				<div class="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+				<div class="mb-6 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
 					<Button
 						variant="ghost"
 						size="sm"
@@ -216,34 +216,39 @@
 						<ArrowLeft class="h-3.5 w-3.5" />
 						{group?.name || 'Group'}
 					</Button>
-					<ChevronRight class="h-3.5 w-3.5" />
+					<ChevronRight class="h-3 w-3" />
 					<a href="/blog" class="hover:text-foreground hover:underline">Blog</a>
-					<ChevronRight class="h-3.5 w-3.5" />
-					<span class="line-clamp-1 max-w-[200px] text-foreground">{blog.title}</span>
+					<ChevronRight class="h-3 w-3" />
+					<span class="line-clamp-1 max-w-[200px] font-medium text-foreground">{blog.title}</span>
 				</div>
 
-				<article class="space-y-6">
-					<header class="space-y-4">
+				<article class="space-y-8">
+					<header class="space-y-6">
 						<div class="flex flex-wrap items-center gap-2">
-							<Badge variant="secondary" class="gap-1 text-[10px] uppercase">
-								<Calendar class="h-3 w-3" />
+							<Badge
+								variant="secondary"
+								class="gap-1.5 px-2.5 py-1 text-[10px] font-medium uppercase"
+							>
+								<Calendar class="h-3 w-3 opacity-70" />
 								{formatDate(blog.createdAt)}
 							</Badge>
 							<Badge
 								variant="outline"
-								class="border-primary/20 bg-primary/5 text-[10px] font-bold text-primary uppercase"
+								class="border-indigo-500/20 bg-indigo-500/5 text-[10px] font-semibold text-indigo-600 uppercase"
 							>
-								<Users class="mr-1 h-3 w-3" />
+								<Users class="mr-1.5 h-3 w-3" />
 								Group Exclusive
 							</Badge>
 						</div>
 
-						<h1 class="text-2xl font-extrabold tracking-tight sm:text-3xl lg:text-4xl">
+						<h1
+							class="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl lg:text-5xl"
+						>
 							{blog.title}
 						</h1>
 
 						<div
-							class="flex flex-col gap-4 border-t border-b border-border py-4 sm:flex-row sm:items-center sm:justify-between"
+							class="flex flex-col gap-4 border-t border-b border-border/50 py-5 sm:flex-row sm:items-center sm:justify-between"
 						>
 							<ReactionsBar
 								likes={reactions.likes}
@@ -260,10 +265,10 @@
 								<Button
 									variant="ghost"
 									size="sm"
-									class="h-9 gap-2 px-3 text-muted-foreground"
+									class="h-9 gap-2 px-3 text-xs font-semibold text-muted-foreground hover:text-foreground"
 									href="/blog/{blog._id}"
 								>
-									<Share2 class="h-4 w-4" />
+									<Globe class="h-4 w-4" />
 									View Public
 								</Button>
 							</div>
@@ -274,35 +279,40 @@
 						{highlights}
 						{currentUserId}
 						{groupId}
+						{isAuthenticated}
 						onAddHighlight={handleAddHighlight}
 						onRemoveHighlight={handleRemoveHighlight}
 						onAddComment={(id) => (activeCommentId = id)}
 					>
-						<div class="rounded-lg border bg-card p-6 shadow-sm">
-							<div class="prose prose-zinc dark:prose-invert max-w-none">
+						<div class="rounded-xl border bg-card p-8 shadow-sm">
+							<div
+								class="prose prose-zinc dark:prose-invert prose-headings:font-semibold prose-p:leading-relaxed max-w-none"
+							>
 								<Markdown content={blog.body} />
 							</div>
 						</div>
 					</HighlightWrapper>
 
 					<!-- Group Info (Bottom) -->
-					<div class="rounded-xl border border-primary/20 bg-primary/5 p-6">
-						<div class="flex items-center gap-3">
-							<div class="rounded-full border border-primary/20 bg-primary/10 p-2 text-primary">
-								<MessageSquare class="h-5 w-5" />
+					<div class="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-6">
+						<div class="flex items-center gap-4">
+							<div
+								class="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600"
+							>
+								<MessageSquare class="h-6 w-6" />
 							</div>
 							<div>
-								<p class="text-sm font-bold">Group Feed</p>
-								<p class="text-xs text-muted-foreground">
-									Your comments and reactions here are only visible to <span
-										class="font-bold text-primary">{group?.name}</span
+								<p class="font-semibold text-indigo-900 dark:text-indigo-200">Group Feed</p>
+								<p class="text-xs text-indigo-700/80 dark:text-indigo-300/80">
+									Your comments and reactions here are only visible to <span class="font-semibold"
+										>{group?.name}</span
 									> members.
 								</p>
 							</div>
 						</div>
 					</div>
 
-					<div id="comments" class="scroll-mt-20">
+					<div id="comments" class="scroll-mt-20 pt-4">
 						<CommentsSection
 							{comments}
 							isLoading={commentsQuery.isLoading}
@@ -323,7 +333,7 @@
 	</div>
 </div>
 
-<FloatingToolbar {authors} {groupId} />
+<FloatingToolbar {authors} {groupId} {isAuthenticated} />
 
 {#if activeCommentId}
 	<InlineCommentPane highlightId={activeCommentId} onClose={() => (activeCommentId = null)} />

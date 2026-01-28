@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { cn } from "$lib/utils";
-	import type { Snippet } from "svelte";
-	import type { HTMLAttributes } from "svelte/elements";
-	import HighlightedMarkdown from "$lib/components/prompt-kit/markdown/HighlightedMarkdown.svelte";
+	import { cn } from '$lib/utils';
+	import type { Snippet } from 'svelte';
+	import type { HTMLAttributes } from 'svelte/elements';
+	import HighlightedMarkdown from '$lib/components/prompt-kit/markdown/HighlightedMarkdown.svelte';
 
 	let {
 		markdown = false,
@@ -17,9 +17,8 @@
 		children?: Snippet;
 	} & HTMLAttributes<HTMLDivElement> = $props();
 
-	const classNames = cn(
-		"text-foreground bg-secondary prose rounded-lg p-2 break-words whitespace-normal",
-		className
+	const classNames = $derived(
+		cn('text-foreground bg-secondary prose rounded-lg p-2 break-words whitespace-normal', className)
 	);
 </script>
 

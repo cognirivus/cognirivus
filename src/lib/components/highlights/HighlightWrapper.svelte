@@ -17,6 +17,7 @@
 		highlights: any[];
 		currentUserId?: string;
 		groupId?: string;
+		isAuthenticated?: boolean;
 		onAddHighlight: (
 			color: string,
 			serializedRange: string,
@@ -32,6 +33,7 @@
 		highlights = [],
 		currentUserId,
 		groupId,
+		isAuthenticated = true,
 		onAddHighlight,
 		onRemoveHighlight,
 		onAddComment,
@@ -54,7 +56,7 @@
 	);
 
 	function handleSelection(e?: Event) {
-		if (!highlightStore.enabled) return;
+		if (!highlightStore.enabled || !isAuthenticated) return;
 
 		// If click originated in popup, don't clear context or update selection
 		const target = e?.target as HTMLElement;
@@ -299,10 +301,20 @@
 	}
 </script>
 
-<div bind:this={containerEl} class="highlight-container relative" onclick={handleContainerClick}>
+<div
+	bind:this={containerEl}
+	class="highlight-container relative"
+	onclick={handleContainerClick}
+	onkeydown={(e) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			handleContainerClick(e as any);
+		}
+	}}
+	role="presentation"
+>
 	{@render children()}
 
-	{#if highlightStore.selectionContext && !highlightStore.activeColor}
+	{#if isAuthenticated && highlightStore.selectionContext && !highlightStore.activeColor}
 		<SelectionPopup
 			onHighlight={async (color) => {
 				const context = highlightStore.selectionContext;

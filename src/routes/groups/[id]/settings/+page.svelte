@@ -13,11 +13,9 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import {
 		Settings,
-		ArrowLeft,
 		Save,
 		Trash2,
 		AlertTriangle,
-		LoaderCircle,
 		Users,
 		Check,
 		X,
@@ -145,7 +143,7 @@
 	}
 </script>
 
-<div class="p-6">
+<div class="p-6 lg:p-8">
 	{#if groupQuery.isLoading}
 		<div class="flex h-[50vh] items-center justify-center">
 			<Loader variant="circular" size="lg" />
@@ -157,79 +155,90 @@
 			<Button href="/groups/{groupId}" variant="outline" class="mt-4">Back to Group</Button>
 		</div>
 	{:else}
-		<div class="mx-auto flex w-full max-w-4xl flex-col gap-8 pb-20">
-			<header>
+		<div class="mx-auto flex w-full max-w-4xl flex-col gap-10 pb-20">
+			<header class="space-y-2">
 				<div
-					class="mb-1 flex items-center gap-2 text-sm font-bold tracking-wider text-primary uppercase"
+					class="flex items-center gap-2.5 text-xs font-bold tracking-widest text-primary uppercase"
 				>
-					<Settings class="h-4 w-4" />
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+						<Settings class="h-4 w-4" />
+					</div>
 					Group Settings
 				</div>
-				<h1 class="text-3xl font-extrabold tracking-tight">{group.name}</h1>
+				<h1 class="text-3xl font-semibold tracking-tight">{group.name}</h1>
 				<p class="font-mono text-xs text-muted-foreground">@{group.groupname}</p>
 			</header>
 
-			<Separator />
-
-			<div class="grid gap-8 lg:grid-cols-2">
+			<div class="grid gap-10 lg:grid-cols-2">
 				<div class="space-y-8">
 					<!-- General Settings -->
-					<Card.Root>
-						<Card.Header>
-							<Card.Title>General Info</Card.Title>
-							<Card.Description>Update name and description.</Card.Description>
-						</Card.Header>
-						<Card.Content class="space-y-4">
+					<div class="rounded-xl border bg-card">
+						<div class="border-b px-6 py-4">
+							<h3 class="font-semibold">General Info</h3>
+							<p class="text-xs text-muted-foreground">Update name and description.</p>
+						</div>
+						<div class="space-y-4 p-6">
 							<div class="space-y-2">
-								<Label for="name">Group Name</Label>
-								<Input id="name" bind:value={name} placeholder="Enter group name" />
+								<Label for="name" class="text-xs font-semibold text-muted-foreground uppercase"
+									>Group Name</Label
+								>
+								<Input id="name" bind:value={name} placeholder="Enter group name" class="h-10" />
 							</div>
 							<div class="space-y-2">
-								<Label for="description">Description</Label>
+								<Label
+									for="description"
+									class="text-xs font-semibold text-muted-foreground uppercase">Description</Label
+								>
 								<Textarea
 									id="description"
 									bind:value={description}
 									placeholder="What is this group about?"
 									rows={4}
+									class="resize-none"
 								/>
 							</div>
-						</Card.Content>
-						<Card.Footer class="flex justify-end border-t p-4">
+						</div>
+						<div class="flex justify-end border-t bg-muted/20 px-6 py-3">
 							<Button onclick={handleUpdate} disabled={isSaving || !name.trim()} size="sm">
-								{isSaving ? 'Saving...' : 'Save Changes'}
+								{#if isSaving}
+									<Loader variant="circular" size="sm" class="mr-2" />
+								{:else}
+									<Save class="mr-2 h-3.5 w-3.5" />
+								{/if}
+								Save Changes
 							</Button>
-						</Card.Footer>
-					</Card.Root>
+						</div>
+					</div>
 
-					<!-- Invite Code (Admin Only) -->
-					{#if isAdmin}
-						<Card.Root>
-							<Card.Header>
-								<Card.Title>Invite Peer</Card.Title>
-								<Card.Description>Share this code to let others join your group.</Card.Description>
-							</Card.Header>
-							<Card.Content>
-								<div class="flex items-center justify-between rounded-lg border bg-muted/20 p-4">
-									<code class="font-mono text-xl font-black text-primary"
-										>{group?.inviteCode || '...'}</code
-									>
-									<Button variant="outline" size="sm" onclick={copyInviteCode} class="gap-2">
-										<Copy class="h-4 w-4" />
-										Copy Code
-									</Button>
-								</div>
-							</Card.Content>
-						</Card.Root>
-					{/if}
+					<!-- Invite Code -->
+					<div class="rounded-xl border bg-card">
+						<div class="border-b px-6 py-4">
+							<h3 class="font-semibold">Invite Peer</h3>
+							<p class="text-xs text-muted-foreground">Share this code to let others join.</p>
+						</div>
+						<div class="p-6">
+							<div
+								class="flex items-center justify-between rounded-lg border-2 border-dashed bg-muted/30 p-4"
+							>
+								<code class="font-mono text-2xl font-black tracking-wider text-primary"
+									>{group?.inviteCode || '...'}</code
+								>
+								<Button variant="outline" size="sm" onclick={copyInviteCode} class="gap-2">
+									<Copy class="h-4 w-4" />
+									Copy
+								</Button>
+							</div>
+						</div>
+					</div>
 
-					<!-- Privacy Settings -->
-					<Card.Root>
-						<Card.Header>
-							<Card.Title>Privacy & Access</Card.Title>
-							<Card.Description>Control how people find and join.</Card.Description>
-						</Card.Header>
-						<Card.Content class="space-y-4">
-							<div class="flex items-center justify-between rounded-lg border bg-muted/20 p-4">
+					<!-- Privacy -->
+					<div class="rounded-xl border bg-card">
+						<div class="border-b px-6 py-4">
+							<h3 class="font-semibold">Privacy & Access</h3>
+							<p class="text-xs text-muted-foreground">Control how people find and join.</p>
+						</div>
+						<div class="space-y-4 p-6">
+							<div class="flex items-center justify-between rounded-lg border bg-muted/30 p-4">
 								<div class="space-y-1">
 									<div class="flex items-center gap-2">
 										{#if isPublic}
@@ -240,10 +249,10 @@
 											<span class="font-bold">Private Group</span>
 										{/if}
 									</div>
-									<p class="text-xs leading-snug text-muted-foreground">
+									<p class="max-w-[180px] text-[10px] leading-snug text-muted-foreground">
 										{isPublic
-											? 'Anyone can find and join this group automatically.'
-											: 'Only people with the invite code can request to join. Admin approval required.'}
+											? 'Anyone can join automatically.'
+											: 'Admin approval required to join.'}
 									</p>
 								</div>
 								<Switch
@@ -254,43 +263,37 @@
 									}}
 								/>
 							</div>
-						</Card.Content>
-						<Card.Footer class="flex justify-end border-t p-4">
-							<Badge variant="outline" class="text-[10px] uppercase">
-								{isPublic ? 'Public' : 'Private'}
-							</Badge>
-						</Card.Footer>
-					</Card.Root>
+						</div>
+					</div>
 				</div>
 
 				<div class="space-y-8">
 					<!-- Pending Requests -->
-					<Card.Root
-						class={pendingMembers.length > 0 ? 'border-primary/30 ring-1 ring-primary/10' : ''}
+					<div
+						class="rounded-xl border bg-card {pendingMembers.length > 0
+							? 'border-primary/30 ring-1 ring-primary/10'
+							: ''}"
 					>
-						<Card.Header>
-							<div class="flex items-center justify-between">
-								<Card.Title class="flex items-center gap-2 text-lg font-bold">
-									<Users class="h-5 w-5" />
-									Pending Requests
-								</Card.Title>
-								{#if pendingMembers.length > 0}
-									<Badge variant="destructive" class="animate-pulse">{pendingMembers.length}</Badge>
-								{/if}
+						<div class="flex items-center justify-between border-b px-6 py-4">
+							<div>
+								<h3 class="font-semibold">Pending Requests</h3>
+								<p class="text-xs text-muted-foreground">Review users waiting to join.</p>
 							</div>
-							<Card.Description>Review users waiting to join.</Card.Description>
-						</Card.Header>
-						<Card.Content>
+							{#if pendingMembers.length > 0}
+								<Badge variant="destructive" class="animate-pulse">{pendingMembers.length}</Badge>
+							{/if}
+						</div>
+						<div class="p-6">
 							{#if pendingMembers.length === 0}
-								<div class="flex flex-col items-center justify-center py-8 text-center opacity-50">
+								<div class="flex flex-col items-center justify-center py-8 text-center opacity-40">
 									<Users class="mb-2 h-8 w-8" />
 									<p class="text-xs">No pending requests</p>
 								</div>
 							{:else}
-								<div class="space-y-4">
+								<div class="space-y-3">
 									{#each pendingMembers as member}
 										<div
-											class="flex items-center justify-between rounded-lg border bg-muted/30 p-3"
+											class="flex items-center justify-between rounded-lg border bg-muted/20 p-3"
 										>
 											<div class="min-w-0 flex-1">
 												<p class="truncate text-sm font-bold">{member.userName}</p>
@@ -318,20 +321,17 @@
 									{/each}
 								</div>
 							{/if}
-						</Card.Content>
-					</Card.Root>
+						</div>
+					</div>
 
-					<!-- Active Members Management -->
-					<Card.Root>
-						<Card.Header>
-							<Card.Title class="flex items-center gap-2 text-lg font-bold">
-								<Shield class="h-5 w-5 text-primary" />
-								Active Members
-							</Card.Title>
-							<Card.Description>Manage who is in this group.</Card.Description>
-						</Card.Header>
-						<Card.Content>
-							<div class="space-y-4">
+					<!-- Active Members -->
+					<div class="rounded-xl border bg-card">
+						<div class="border-b px-6 py-4">
+							<h3 class="font-semibold">Active Members</h3>
+							<p class="text-xs text-muted-foreground">Manage who is in this group.</p>
+						</div>
+						<div class="p-6">
+							<div class="space-y-3">
 								{#each members as member}
 									<div class="flex items-center justify-between rounded-lg border bg-muted/10 p-3">
 										<div class="flex min-w-0 flex-1 items-center gap-3">
@@ -346,19 +346,14 @@
 													{#if member.userId === group.ownerId}
 														<Badge
 															variant="outline"
-															class="ml-1 border-amber-600/30 px-1 py-0 text-[8px] font-black text-amber-600 uppercase"
+															class="ml-1 h-4 border-amber-600/30 px-1 py-0 text-[8px] font-black text-amber-600 uppercase"
 															>Owner</Badge
 														>
 													{/if}
-													{#if member.userId === (page.data.currentUser as any)?.id || member.userId === (page.data.currentUser as any)?._id}
-														<Badge
-															variant="outline"
-															class="ml-1 border-primary/30 px-1 py-0 text-[8px] font-black text-primary uppercase"
-															>You</Badge
-														>
-													{/if}
 												</p>
-												<p class="text-[10px] text-muted-foreground uppercase">{member.role}</p>
+												<p class="text-[9px] tracking-wider text-muted-foreground uppercase">
+													{member.role}
+												</p>
 											</div>
 										</div>
 
@@ -378,62 +373,66 @@
 									</div>
 								{/each}
 							</div>
-						</Card.Content>
-					</Card.Root>
-				</div>
-			</div>
+						</div>
+					</div>
 
-			<!-- Danger Zone -->
-			<Card.Root class="border-destructive/20 bg-destructive/5">
-				<Card.Header>
-					<Card.Title class="flex items-center gap-2 text-destructive">
-						<AlertTriangle class="h-5 w-5" />
-						Danger Zone
-					</Card.Title>
-				</Card.Header>
-				<Card.Content>
-					{#if !showDeleteConfirm}
-						<Button
-							variant="destructive"
-							size="sm"
-							class="w-full gap-2"
-							onclick={() => (showDeleteConfirm = true)}
-						>
-							<Trash2 class="h-4 w-4" />
-							Delete Group
-						</Button>
-					{:else}
-						<div class="animate-in space-y-4 fade-in slide-in-from-top-2">
-							<p class="text-xs text-muted-foreground">
-								Type <strong>{group.name}</strong> to confirm.
-							</p>
-							<Input placeholder="Group name" bind:value={confirmName} class="h-8 text-xs" />
-							<div class="flex gap-2">
+					<!-- Danger Zone -->
+					<div class="overflow-hidden rounded-xl border border-destructive/20 bg-destructive/5">
+						<div class="border-b border-destructive/10 bg-destructive/10 px-6 py-4">
+							<h3 class="flex items-center gap-2 font-semibold text-destructive">
+								<AlertTriangle class="h-4 w-4" />
+								Danger Zone
+							</h3>
+						</div>
+						<div class="p-6">
+							{#if !showDeleteConfirm}
 								<Button
 									variant="destructive"
 									size="sm"
-									class="flex-1"
-									onclick={handleDelete}
-									disabled={isDeleting || !isDeleteEnabled}
+									class="w-full gap-2 font-semibold"
+									onclick={() => (showDeleteConfirm = true)}
 								>
-									Confirm
+									<Trash2 class="h-4 w-4" />
+									Delete Group
 								</Button>
-								<Button
-									variant="outline"
-									size="sm"
-									class="flex-1"
-									onclick={() => {
-										showDeleteConfirm = false;
-										confirmName = '';
-									}}
-								>
-									Cancel
-								</Button>
-							</div>
+							{:else}
+								<div class="animate-in space-y-4 fade-in slide-in-from-top-2">
+									<p class="text-xs font-medium text-destructive/80">
+										Type <strong class="text-destructive">{group.name}</strong> to confirm.
+									</p>
+									<Input
+										placeholder="Group name"
+										bind:value={confirmName}
+										class="h-9 border-destructive/30 text-xs focus-visible:ring-destructive/30"
+									/>
+									<div class="flex gap-3">
+										<Button
+											variant="destructive"
+											size="sm"
+											class="flex-1 font-semibold"
+											onclick={handleDelete}
+											disabled={isDeleting || !isDeleteEnabled}
+										>
+											Confirm Delete
+										</Button>
+										<Button
+											variant="outline"
+											size="sm"
+											class="flex-1 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive"
+											onclick={() => {
+												showDeleteConfirm = false;
+												confirmName = '';
+											}}
+										>
+											Cancel
+										</Button>
+									</div>
+								</div>
+							{/if}
 						</div>
-					{/if}
-				</Card.Content>
-			</Card.Root>
+					</div>
+				</div>
+			</div>
 		</div>
 	{/if}
 </div>

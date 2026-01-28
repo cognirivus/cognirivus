@@ -72,85 +72,89 @@
 	};
 </script>
 
-<div class="container mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
-	<div class="mb-8 sm:mb-10">
-		<h1 class="text-3xl font-extrabold tracking-tight sm:text-4xl">Your Profile</h1>
-		<p class="mt-2 text-sm text-muted-foreground sm:text-base">
-			Manage your account details and preferences.
-		</p>
+<div class="container mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:py-12">
+	<!-- Page Header -->
+	<div class="mb-10">
+		<div class="flex items-center gap-2.5">
+			<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+				<User class="h-4 w-4 text-primary" />
+			</div>
+			<span class="text-xs font-bold tracking-widest text-muted-foreground uppercase">Account</span>
+		</div>
+		<h1 class="mt-3 text-3xl font-semibold tracking-tight">Your Profile</h1>
+		<p class="mt-2 text-muted-foreground">Manage your account details and preferences.</p>
 	</div>
 
 	{#if user}
-		<div class="grid gap-8 md:grid-cols-3">
+		<div class="grid gap-8 lg:grid-cols-3">
 			<!-- Profile Card -->
-			<div class="md:col-span-1">
-				<Card.Root class="overflow-hidden border-none shadow-lg">
-					<div class="h-32 bg-linear-to-br from-primary/20 via-primary/10 to-transparent"></div>
-					<Card.Content class="relative px-6 pb-6 text-center">
-						<div class="absolute -top-16 left-1/2 -translate-x-1/2">
-							<Avatar.Root class="h-32 w-32 border-4 border-background shadow-xl">
+			<div class="lg:col-span-1">
+				<div class="overflow-hidden rounded-xl border bg-card">
+					<div class="h-24 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent"></div>
+					<div class="relative px-6 pb-6 text-center">
+						<div class="absolute -top-28 left-1/2 -translate-x-1/2">
+							<Avatar.Root class="h-24 w-24 border-4 border-background shadow-lg">
 								<Avatar.Image src={user.image} alt={user.name} />
-								<Avatar.Fallback class="bg-muted text-4xl font-bold">
+								<Avatar.Fallback class="bg-muted text-3xl font-semibold">
 									{user.name?.charAt(0) || 'U'}
 								</Avatar.Fallback>
 							</Avatar.Root>
 						</div>
-						<div class="mt-20 px-2">
-							<h2 class="truncate text-2xl font-bold tracking-tight" title={user.name}>
+						<div class="mt-16">
+							<h2 class="truncate text-xl font-semibold" title={user.name}>
 								{user.name}
 							</h2>
-							<p class="truncate text-sm text-muted-foreground" title={user.email}>{user.email}</p>
+							<p class="mt-1 truncate text-sm text-muted-foreground" title={user.email}>
+								{user.email}
+							</p>
 
-							<div class="mt-4 flex flex-wrap justify-center gap-2">
+							<div class="mt-4">
 								<Badge
 									variant={user.role === 'admin' ? 'default' : 'secondary'}
 									class="gap-1.5 px-3 py-1"
 								>
 									{#if user.role === 'admin'}
-										<ShieldCheck class="h-3.5 w-3.5" />
+										<ShieldCheck class="h-3 w-3" />
 									{:else}
-										<User class="h-3.5 w-3.5" />
+										<User class="h-3 w-3" />
 									{/if}
-									{user.role || 'regular'}
+									<span class="capitalize">{user.role || 'regular'}</span>
 								</Badge>
 							</div>
 						</div>
-					</Card.Content>
-					<Separator />
-					<div class="bg-muted/50 p-4">
-						<Button
-							variant="destructive"
-							class="w-full gap-2 font-medium transition-all duration-200 hover:shadow-lg hover:shadow-destructive/20 active:scale-95"
-							onclick={signOut}
-						>
+					</div>
+					<div class="border-t bg-muted/20 p-4">
+						<Button variant="destructive" class="w-full gap-2" onclick={signOut}>
 							<LogOut class="h-4 w-4" />
 							Sign Out
 						</Button>
 					</div>
-				</Card.Root>
+				</div>
 			</div>
 
 			<!-- Details Section -->
-			<div class="space-y-6 md:col-span-2">
-				<Card.Root>
-					<Card.Header>
-						<Card.Title>Account Information</Card.Title>
-						<Card.Description
-							>Your private details used for authentication and identification.</Card.Description
-						>
-					</Card.Header>
-					<Card.Content class="space-y-4">
+			<div class="space-y-6 lg:col-span-2">
+				<div class="rounded-xl border bg-card">
+					<div class="border-b px-6 py-4">
+						<h3 class="text-sm font-semibold">Account Information</h3>
+						<p class="mt-0.5 text-xs text-muted-foreground">
+							Your private details used for authentication and identification.
+						</p>
+					</div>
+					<div class="space-y-3 p-6">
 						{#if user.role === 'admin'}
 							<div
-								class="flex items-center gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:p-4"
+								class="flex items-center gap-4 rounded-xl bg-muted/30 p-4 transition-colors hover:bg-muted/40"
 							>
 								<div
 									class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background shadow-sm"
 								>
-									<Shield class="h-5 w-5 text-primary" />
+									<Shield class="h-4 w-4 text-primary" />
 								</div>
 								<div class="min-w-0 flex-1">
-									<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+									<p
+										class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase"
+									>
 										System Identifier
 									</p>
 									<p class="truncate font-mono text-xs">{user.id}</p>
@@ -159,182 +163,179 @@
 						{/if}
 
 						<div
-							class="flex items-center gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:p-4"
+							class="flex items-center gap-4 rounded-xl bg-muted/30 p-4 transition-colors hover:bg-muted/40"
 						>
 							<div
 								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background shadow-sm"
 							>
-								<User class="h-5 w-5 text-primary" />
+								<User class="h-4 w-4 text-primary" />
 							</div>
 							<div class="min-w-0 flex-1">
-								<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+								<p
+									class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase"
+								>
 									Display Name
 								</p>
-								<p class="truncate font-medium">{user.name || 'Not provided'}</p>
+								<p class="truncate text-sm font-medium">{user.name || 'Not provided'}</p>
 							</div>
 						</div>
 
 						<div
-							class="flex items-center gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:p-4"
+							class="flex items-center gap-4 rounded-xl bg-muted/30 p-4 transition-colors hover:bg-muted/40"
 						>
 							<div
 								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background shadow-sm"
 							>
-								<Mail class="h-5 w-5 text-primary" />
+								<Mail class="h-4 w-4 text-primary" />
 							</div>
 							<div class="min-w-0 flex-1">
-								<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+								<p
+									class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase"
+								>
 									Verified Email
 								</p>
-								<p class="truncate font-medium">{user.email}</p>
+								<p class="truncate text-sm font-medium">{user.email}</p>
 							</div>
 						</div>
 
-						<Separator class="my-2" />
+						<Separator class="my-3" />
 
-						<div class="grid gap-3 sm:grid-cols-2 sm:gap-4">
+						<div class="grid gap-3 sm:grid-cols-2">
 							<div
-								class="flex items-center gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:p-4"
+								class="flex items-center gap-4 rounded-xl bg-muted/30 p-4 transition-colors hover:bg-muted/40"
 							>
 								<div
 									class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background shadow-sm"
 								>
-									<Calendar class="h-5 w-5 text-primary" />
+									<Calendar class="h-4 w-4 text-primary" />
 								</div>
 								<div class="min-w-0 flex-1">
-									<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+									<p
+										class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase"
+									>
 										Member Since
 									</p>
-									<p class="truncate font-medium">{formatDate(user.createdAt)}</p>
+									<p class="truncate text-sm font-medium">{formatDate(user.createdAt)}</p>
 								</div>
 							</div>
 
 							<div
-								class="flex items-center gap-3 rounded-xl border bg-muted/20 p-3 transition-colors hover:bg-muted/30 sm:gap-4 sm:p-4"
+								class="flex items-center gap-4 rounded-xl bg-muted/30 p-4 transition-colors hover:bg-muted/40"
 							>
 								<div
 									class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-background shadow-sm"
 								>
-									<Clock class="h-5 w-5 text-primary" />
+									<Clock class="h-4 w-4 text-primary" />
 								</div>
 								<div class="min-w-0 flex-1">
-									<p class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+									<p
+										class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase"
+									>
 										Last Modified
 									</p>
-									<p class="truncate font-medium">{formatDate(user.updatedAt)}</p>
+									<p class="truncate text-sm font-medium">{formatDate(user.updatedAt)}</p>
 								</div>
 							</div>
 						</div>
-					</Card.Content>
-				</Card.Root>
+					</div>
+				</div>
 
 				{#if user.role === 'admin'}
-					<Card.Root class="border-primary/20 bg-primary/5">
-						<Card.Header class="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-center">
+					<div class="rounded-xl border border-primary/20 bg-primary/5 p-5">
+						<div class="flex items-start gap-4">
 							<div
-								class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/20"
+								class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15"
 							>
-								<ShieldCheck class="h-6 w-6 text-primary" />
+								<ShieldCheck class="h-5 w-5 text-primary" />
 							</div>
 							<div class="flex-1">
-								<Card.Title class="text-primary">Admin Privileges Active</Card.Title>
-								<Card.Description class="text-primary/70">
+								<h4 class="text-sm font-semibold text-primary">Admin Privileges Active</h4>
+								<p class="mt-1 text-xs text-primary/70">
 									You have full access to manage the system and its resources.
-								</Card.Description>
+								</p>
+								<Button href="/admin" class="mt-4 gap-2" size="sm">
+									<ExternalLink class="h-3.5 w-3.5" />
+									Access Control Panel
+								</Button>
 							</div>
-						</Card.Header>
-						<Card.Footer>
-							<Button href="/admin" class="w-full gap-2 shadow-md shadow-primary/20 sm:w-auto">
-								<ExternalLink class="h-4 w-4" />
-								Access Control Panel
-							</Button>
-						</Card.Footer>
-					</Card.Root>
+						</div>
+					</div>
 				{/if}
 
 				<!-- Danger Zone -->
-				<Card.Root class="border-destructive/30 bg-destructive/5">
-					<Card.Header class="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-center">
+				<div class="rounded-xl border border-destructive/20 bg-destructive/5 p-5">
+					<div class="flex items-start gap-4">
 						<div
-							class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-destructive/10"
+							class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-destructive/15"
 						>
-							<AlertTriangle class="h-6 w-6 text-destructive" />
+							<AlertTriangle class="h-5 w-5 text-destructive" />
 						</div>
 						<div class="flex-1">
-							<Card.Title class="text-destructive">Danger Zone</Card.Title>
-							<Card.Description class="text-destructive/70">
+							<h4 class="text-sm font-semibold text-destructive">Danger Zone</h4>
+							<p class="mt-1 text-xs text-destructive/70">
 								Irreversible actions related to your data.
-							</Card.Description>
-						</div>
-					</Card.Header>
-					<Card.Content class="space-y-4">
-						<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-							<div class="space-y-1">
-								<p class="font-medium text-foreground">Delete All Chat History</p>
-								<p class="text-xs text-muted-foreground">
-									Permanently remove all threads and messages.
-								</p>
+							</p>
+							<div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+								<div>
+									<p class="text-xs font-medium text-foreground">Delete All Chat History</p>
+									<p class="text-[10px] text-muted-foreground">
+										Permanently remove all threads and messages.
+									</p>
+								</div>
+								<Button
+									variant="destructive"
+									size="sm"
+									class="gap-2"
+									onclick={handleDeleteAllChats}
+								>
+									<Trash2 class="h-3.5 w-3.5" />
+									Delete Everything
+								</Button>
 							</div>
-							<Button
-								variant="destructive"
-								class="w-full gap-2 sm:w-auto"
-								onclick={handleDeleteAllChats}
-							>
-								<Trash2 class="h-4 w-4" />
-								Delete Everything
-							</Button>
 						</div>
-					</Card.Content>
-				</Card.Root>
+					</div>
+				</div>
 			</div>
 		</div>
 	{:else if $session.isPending}
-		<div class="grid gap-8 md:grid-cols-3">
-			<div class="md:col-span-1">
-				<Card.Root class="overflow-hidden border-none shadow-lg">
-					<Skeleton class="h-32 w-full" />
-					<Card.Content class="relative px-6 pb-6 text-center">
-						<div class="absolute -top-16 left-1/2 -translate-x-1/2">
-							<Skeleton class="h-32 w-32 rounded-full border-4 border-background shadow-xl" />
+		<div class="grid gap-8 lg:grid-cols-3">
+			<div class="lg:col-span-1">
+				<div class="overflow-hidden rounded-xl border bg-card">
+					<Skeleton class="h-24 w-full" />
+					<div class="relative px-6 pb-6 text-center">
+						<div class="absolute -top-12 left-1/2 -translate-x-1/2">
+							<Skeleton class="h-24 w-24 rounded-full border-4 border-background" />
 						</div>
-						<div class="mt-20 flex flex-col items-center space-y-2 px-2">
-							<Skeleton class="h-7 w-32" />
+						<div class="mt-16 flex flex-col items-center space-y-2">
+							<Skeleton class="h-6 w-32" />
 							<Skeleton class="h-4 w-48" />
-							<div class="mt-2">
-								<Skeleton class="h-6 w-20 rounded-full" />
-							</div>
+							<Skeleton class="mt-2 h-6 w-20 rounded-full" />
 						</div>
-					</Card.Content>
-				</Card.Root>
+					</div>
+				</div>
 			</div>
-			<div class="md:col-span-2">
-				<Card.Root>
-					<Card.Header>
-						<Skeleton class="h-6 w-48" />
-						<Skeleton class="h-4 w-64" />
-					</Card.Header>
-					<Card.Content class="space-y-4">
+			<div class="lg:col-span-2">
+				<div class="rounded-xl border bg-card p-6">
+					<Skeleton class="mb-2 h-5 w-40" />
+					<Skeleton class="h-4 w-64" />
+					<div class="mt-6 space-y-3">
 						{#each Array(4) as _}
-							<Skeleton class="h-20 w-full rounded-xl" />
+							<Skeleton class="h-16 w-full rounded-xl" />
 						{/each}
-					</Card.Content>
-				</Card.Root>
+					</div>
+				</div>
 			</div>
 		</div>
 	{:else}
-		<Card.Root class="flex flex-col items-center justify-center border-dashed py-12 text-center">
-			<Card.Content class="flex flex-col items-center pt-6">
-				<div class="mb-4 rounded-full bg-muted p-6 text-muted-foreground/20">
-					<User class="h-16 w-16" />
-				</div>
-				<Card.Title class="text-2xl font-bold">Please sign in</Card.Title>
-				<Card.Description class="mt-2 max-w-xs text-balance">
-					You need to be logged in to view and manage your profile details.
-				</Card.Description>
-			</Card.Content>
-			<Card.Footer>
-				<Button href="/signin" size="lg" class="px-8">Sign In to Account</Button>
-			</Card.Footer>
-		</Card.Root>
+		<div class="rounded-xl border border-dashed bg-card p-16 text-center">
+			<div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+				<User class="h-8 w-8 text-muted-foreground" />
+			</div>
+			<h3 class="text-lg font-semibold">Please sign in</h3>
+			<p class="mx-auto mt-2 max-w-xs text-sm text-muted-foreground">
+				You need to be logged in to view and manage your profile details.
+			</p>
+			<Button href="/signin" size="lg" class="mt-6">Sign In to Account</Button>
+		</div>
 	{/if}
 </div>

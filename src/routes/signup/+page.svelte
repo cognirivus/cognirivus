@@ -3,6 +3,10 @@
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import { ArrowRight } from '@lucide/svelte';
 
 	const auth = useAuth();
 	const redirectTo = page.url.searchParams.get('redirectTo') || '/';
@@ -17,10 +21,12 @@
 	let email = $state('');
 	let password = $state('');
 	let error = $state('');
+	let isLoading = $state(false);
 
 	async function handleSubmit(event: Event) {
 		event.preventDefault();
 		error = '';
+		isLoading = true;
 		try {
 			await authClient.signUp.email(
 				{ name, email, password },
@@ -32,73 +38,102 @@
 			);
 		} catch (e: any) {
 			error = e.message || 'An error occurred during sign up.';
+		} finally {
+			isLoading = false;
 		}
 	}
 </script>
 
-<div class="flex min-h-screen flex-col items-center justify-center bg-background p-4 text-foreground">
-	<div class="w-full max-w-md rounded-xl border border-border bg-card p-8 shadow-2xl">
-		<h1 class="mb-2 text-center text-3xl font-bold">Create Account</h1>
-		<p class="mb-8 text-center text-muted-foreground">Join Cognirivus today</p>
-
-		<form onsubmit={handleSubmit} class="space-y-6">
-			<div class="space-y-2">
-				<label for="name" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Name</label>
-				<input
-					type="text"
-					id="name"
-					bind:value={name}
-					required
-					placeholder="Your name"
-					class="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-				/>
-			</div>
-
-			<div class="space-y-2">
-				<label for="email" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Email</label>
-				<input
-					type="email"
-					id="email"
-					bind:value={email}
-					required
-					placeholder="name@example.com"
-					class="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-				/>
-			</div>
-
-			<div class="space-y-2">
-				<label for="password" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Password</label>
-				<input
-					type="password"
-					id="password"
-					bind:value={password}
-					required
-					placeholder="••••••••"
-					class="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-				/>
-			</div>
-
-			{#if error}
-				<p class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
-					{error}
+<div class="flex min-h-0 flex-1">
+	<!-- Left side - Form -->
+	<div class="flex w-full flex-col justify-center px-6 py-8 lg:w-1/2 lg:px-12">
+		<div class="mx-auto w-full max-w-sm">
+			<div class="mb-8">
+				<h1 class="text-2xl font-semibold tracking-tight text-foreground">Create an account</h1>
+				<p class="mt-2 text-sm text-muted-foreground">
+					Start your learning journey with Cognirivus
 				</p>
-			{/if}
+			</div>
 
-			<button
-				type="submit"
-				class="inline-flex h-12 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all duration-200 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]"
-			>
-				Sign Up
-			</button>
-		</form>
+			<form onsubmit={handleSubmit} class="space-y-4">
+				<div class="space-y-2">
+					<Label for="name">Name</Label>
+					<Input
+						type="text"
+						id="name"
+						bind:value={name}
+						required
+						placeholder="Your name"
+						class="h-11"
+					/>
+				</div>
 
-		<div class="mt-8 border-t border-border pt-6 text-center">
-			<p class="text-muted-foreground">
+				<div class="space-y-2">
+					<Label for="email">Email</Label>
+					<Input
+						type="email"
+						id="email"
+						bind:value={email}
+						required
+						placeholder="name@example.com"
+						class="h-11"
+					/>
+				</div>
+
+				<div class="space-y-2">
+					<Label for="password">Password</Label>
+					<Input
+						type="password"
+						id="password"
+						bind:value={password}
+						required
+						placeholder="Create a password"
+						class="h-11"
+					/>
+				</div>
+
+				{#if error}
+					<div
+						class="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+					>
+						{error}
+					</div>
+				{/if}
+
+				<Button type="submit" class="group h-11 w-full gap-2" disabled={isLoading}>
+					{#if isLoading}
+						Creating account...
+					{:else}
+						Create Account
+						<ArrowRight class="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+					{/if}
+				</Button>
+			</form>
+
+			<p class="mt-6 text-center text-sm text-muted-foreground">
 				Already have an account?
-				<a href="/signin" class="ml-1 font-medium text-primary transition hover:underline">
+				<a href="/signin" class="font-medium text-foreground underline-offset-4 hover:underline">
 					Sign in
 				</a>
 			</p>
+			<p class="text-center text-xs text-muted-foreground">
+				By continuing, you agree to our Terms of Service.
+			</p>
+		</div>
+	</div>
+
+	<!-- Right side - Decorative -->
+	<div class="hidden bg-foreground lg:flex lg:w-1/2 lg:items-center lg:justify-center">
+		<div class="max-w-md px-12 text-center">
+			<blockquote class="space-y-4">
+				<p class="text-xl leading-relaxed font-medium text-background/90">
+					"All that we are is the result of what we have thought: it is founded on our thoughts, it
+					is made up of our thoughts."
+				</p>
+				<footer class="text-sm text-background/60">
+					<cite>Dhammapada</cite>, Chapter I - The Twin-Verses<br />
+				</footer>
+			</blockquote>
 		</div>
 	</div>
 </div>

@@ -208,7 +208,7 @@
 	<title>Intelligence Center - Cognirivus</title>
 </svelte:head>
 
-<div class="flex h-[calc(100vh-40px)] w-full max-w-full overflow-hidden bg-background">
+<div class="flex h-[calc(100vh-56px)] w-full max-w-full overflow-hidden bg-background">
 	<!-- Mobile Overlay -->
 	{#if (isSidebarOpen || isRightSidebarOpen) && isMobile}
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -224,42 +224,46 @@
 
 	<!-- Left Sidebar Filters -->
 	<aside
-		class="fixed inset-y-0 left-0 z-50 flex h-full flex-col border-r bg-sidebar transition-[transform,opacity,width] duration-300 ease-in-out lg:relative
+		class="fixed inset-y-0 left-0 z-50 flex h-full flex-col border-r bg-background transition-[transform,opacity,width] duration-300 ease-in-out lg:relative
         {isSidebarOpen ? 'translate-x-0 opacity-100' : '-translate-x-full opacity-0'}
         {isSidebarOpen ? 'w-72' : 'lg:w-0 lg:overflow-hidden lg:border-transparent'}"
 	>
-		<div class="flex h-10 items-center justify-between gap-2 border-b px-4">
-			<div class="flex items-center gap-2">
+		<div class="flex h-14 items-center justify-between gap-2 border-b px-5">
+			<div class="flex items-center gap-2.5">
 				{#if includeNews}
-					<Zap class="h-3.5 w-3.5 fill-orange-500/20 text-orange-500" />
+					<div class="flex h-7 w-7 items-center justify-center rounded-md bg-amber-500/10">
+						<Zap class="h-3.5 w-3.5 text-amber-600" />
+					</div>
 				{:else}
-					<Library class="h-3.5 w-3.5 text-primary" />
+					<div class="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+						<Library class="h-3.5 w-3.5 text-primary" />
+					</div>
 				{/if}
-				<h2 class="text-[11px] font-bold tracking-tight text-foreground/80 uppercase">
-					{includeNews ? 'Current Affairs Filters' : 'Knowledge Filters'}
+				<h2 class="text-xs font-semibold text-foreground">
+					{includeNews ? 'Current Affairs' : 'Knowledge Base'}
 				</h2>
 			</div>
 			<button
-				class="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 				onclick={() => (isSidebarOpen = false)}
 			>
 				<PanelLeft class="h-4 w-4" />
 			</button>
 		</div>
 
-		<div class="flex-1 space-y-6 overflow-y-auto p-6">
+		<div class="flex-1 space-y-6 overflow-y-auto p-5">
 			<!-- GS Papers Section -->
 			<div class="space-y-3">
-				<h3 class="text-[10px] font-black tracking-widest text-muted-foreground uppercase">
+				<h3 class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
 					GS Papers
 				</h3>
 				<div class="grid grid-cols-2 gap-2">
 					{#each [1, 2, 3, 4] as paper}
 						<button
 							onclick={() => toggleGsPaper(paper)}
-							class="flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-bold transition-all hover:bg-accent
+							class="flex items-center justify-between rounded-lg border px-3 py-2.5 text-xs font-semibold transition-all hover:bg-accent
                             {selectedGsPapers.includes(paper)
-								? 'border-primary bg-primary/5 text-primary'
+								? 'border-primary/30 bg-primary/5 text-primary'
 								: 'bg-background text-muted-foreground'}"
 						>
 							GS {paper}
@@ -271,18 +275,18 @@
 				</div>
 			</div>
 
-			<Separator class="opacity-50" />
+			<Separator class="opacity-40" />
 
 			<!-- Status Section -->
 			<div class="space-y-3">
-				<h3 class="text-[10px] font-black tracking-widest text-muted-foreground uppercase">
+				<h3 class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
 					Read Status
 				</h3>
 				<div class="space-y-1">
 					{#each ['all', 'completed', 'incomplete'] as s}
 						<button
 							onclick={() => setStatus(s)}
-							class="flex w-full items-center justify-between rounded-md px-3 py-2 text-xs font-bold transition-colors hover:bg-accent
+							class="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-xs font-semibold transition-colors hover:bg-accent
                             {status === s
 								? 'bg-accent text-foreground'
 								: 'text-muted-foreground hover:text-foreground'}"
@@ -296,18 +300,18 @@
 				</div>
 			</div>
 
-			<Separator class="opacity-50" />
+			<Separator class="opacity-40" />
 
 			<!-- Subjects Section -->
 			<div class="space-y-3">
 				<div class="flex items-center justify-between">
-					<h3 class="text-[10px] font-black tracking-widest text-muted-foreground uppercase">
+					<h3 class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
 						Subjects
 					</h3>
 					{#if selectedSubjectIds.length > 0}
 						<button
 							onclick={() => updateParams({ subject: null })}
-							class="text-[10px] font-bold text-primary uppercase hover:underline"
+							class="text-[10px] font-semibold text-primary hover:underline"
 						>
 							Clear
 						</button>
@@ -319,7 +323,7 @@
 							<Button
 								variant="outline"
 								size="sm"
-								class="w-full justify-between px-3 text-xs font-bold ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+								class="w-full justify-between px-3 text-xs font-semibold"
 								{...props}
 							>
 								<div class="flex items-center gap-2 truncate">
@@ -347,18 +351,18 @@
 				</DropdownMenu.Root>
 			</div>
 
-			<Separator class="opacity-50" />
+			<Separator class="opacity-40" />
 
 			<!-- Entity Types Section -->
 			<div class="space-y-3">
 				<div class="flex items-center justify-between">
-					<h3 class="text-[10px] font-black tracking-widest text-muted-foreground uppercase">
+					<h3 class="text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
 						Entity Type
 					</h3>
 					{#if selectedEntityTypes.length > 0}
 						<button
 							onclick={() => updateParams({ entityType: null, entity: null })}
-							class="text-[10px] font-bold text-primary uppercase hover:underline"
+							class="text-[10px] font-semibold text-primary hover:underline"
 						>
 							Clear
 						</button>
@@ -370,12 +374,12 @@
 						{@const isSelected = selectedEntityTypes.includes(type)}
 						<button
 							onclick={() => selectEntityType(type)}
-							class="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-bold transition-all hover:bg-accent
+							class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-xs font-semibold transition-all hover:bg-accent
 							{isSelected ? 'bg-accent text-primary' : 'text-muted-foreground hover:text-foreground'}"
 						>
 							<Icon class="h-3.5 w-3.5" />
 							<span class="capitalize">{type}</span>
-							<span class="ml-auto text-[10px] opacity-50">{count}</span>
+							<span class="ml-auto text-[10px] tabular-nums opacity-50">{count}</span>
 						</button>
 					{/each}
 				</div>
@@ -383,14 +387,10 @@
 		</div>
 
 		{#if hasFilters}
-			<div class="border-t bg-muted/20 p-4">
-				<Button
-					variant="outline"
-					class="w-full gap-2 text-xs font-bold tracking-tighter uppercase"
-					onclick={clearFilters}
-				>
+			<div class="border-t bg-muted/10 p-4">
+				<Button variant="outline" class="w-full gap-2 text-xs font-semibold" onclick={clearFilters}>
 					<RotateCcw class="h-3.5 w-3.5" />
-					Reset Filters
+					Reset All Filters
 				</Button>
 			</div>
 		{/if}
@@ -401,7 +401,7 @@
 		{#if !isSidebarOpen}
 			<button
 				onclick={toggleSidebar}
-				class="absolute top-0 left-0 z-50 flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				class="absolute top-0 left-0 z-50 flex h-14 w-12 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 				title="Open Filters"
 			>
 				<PanelLeft class="h-4 w-4" />
@@ -411,7 +411,7 @@
 		{#if !isRightSidebarOpen && isMobile}
 			<button
 				onclick={toggleRightSidebar}
-				class="absolute top-0 right-0 z-50 flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				class="absolute top-0 right-0 z-50 flex h-14 w-12 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 				title="Open Analysis"
 			>
 				<PanelRight class="h-4 w-4" />
@@ -420,12 +420,12 @@
 
 		<!-- Main Header / Search -->
 		<header
-			class="flex h-12 shrink-0 items-center justify-center gap-4 bg-background px-4 lg:h-10 {isSidebarOpen
+			class="flex h-14 shrink-0 items-center justify-center gap-4 border-b bg-background px-4 {isSidebarOpen
 				? ''
 				: 'pl-12'} {isRightSidebarOpen || !isMobile ? '' : 'pr-12'}"
 		>
 			<div class="flex min-w-0 items-center gap-4 sm:gap-8">
-				<div class="flex min-w-0 items-center gap-2 sm:max-w-xl sm:gap-4">
+				<div class="flex min-w-0 items-center gap-2 sm:max-w-xl sm:gap-3">
 					<div class="relative min-w-0 flex-1">
 						<Search
 							class="absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
@@ -435,7 +435,7 @@
 							placeholder={isMobile ? 'Search...' : 'Search knowledge center...'}
 							bind:value={searchInput}
 							onkeydown={(e) => e.key === 'Enter' && handleSearch()}
-							class="h-8 w-full border-none bg-muted/30 pr-10 pl-9 text-xs ring-offset-background transition-all focus-visible:ring-primary/20"
+							class="h-9 w-full border-none bg-muted/30 pr-10 pl-9 text-sm ring-offset-background transition-all focus-visible:ring-primary/20"
 						/>
 						{#if searchInput}
 							<button
@@ -443,29 +443,25 @@
 									searchInput = '';
 									handleSearch();
 								}}
-								class="absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+								class="absolute top-1/2 right-2.5 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
 							>
 								<X class="h-3 w-3" />
 							</button>
 						{/if}
 					</div>
-					<Button
-						onclick={handleSearch}
-						size="sm"
-						class="h-8 px-2 text-xs font-bold tracking-tight uppercase sm:px-4"
-					>
+					<Button onclick={handleSearch} size="sm" class="h-9 px-3 text-xs font-semibold sm:px-4">
 						<Search class="h-3.5 w-3.5 sm:mr-2" />
 						<span class="hidden sm:inline">Search</span>
 					</Button>
 				</div>
 
-				<div class="flex shrink-0 items-center space-x-1.5 border-l pl-4 sm:space-x-2 sm:pl-8">
+				<div class="flex shrink-0 items-center space-x-2 border-l pl-4 sm:pl-6">
 					<Label
 						for="news-toggle"
-						class="flex cursor-pointer items-center gap-1.5 text-[10px] font-bold tracking-tight text-muted-foreground uppercase"
+						class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-muted-foreground"
 					>
-						<Zap class="h-3.5 w-3.5 {includeNews ? 'fill-orange-500/20 text-orange-500' : ''}" />
-						<span class="hidden sm:inline {includeNews ? 'text-orange-500' : ''}">
+						<Zap class="h-3.5 w-3.5 {includeNews ? 'text-amber-500' : ''}" />
+						<span class="hidden sm:inline {includeNews ? 'text-amber-600' : ''}">
 							Current Affairs
 						</span>
 					</Label>
@@ -495,7 +491,7 @@
 
 	<!-- Right Sidebar -->
 	<aside
-		class="fixed inset-y-0 right-0 z-50 flex h-full flex-col border-l bg-sidebar transition-[transform,opacity,width] duration-300 ease-in-out lg:relative
+		class="fixed inset-y-0 right-0 z-50 flex h-full flex-col border-l bg-background transition-[transform,opacity,width] duration-300 ease-in-out lg:relative
         {isRightSidebarOpen || !isMobile
 			? 'translate-x-0 opacity-100'
 			: 'translate-x-full opacity-0'}
@@ -503,30 +499,30 @@
 			? 'w-72'
 			: 'lg:w-0 lg:overflow-hidden lg:border-transparent'}"
 	>
-		<div class="flex h-10 items-center justify-between gap-2 border-b px-4">
+		<div class="flex h-14 items-center justify-between gap-2 border-b px-5">
 			{#if isMobile}
 				<button
-					class="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 					onclick={() => (isRightSidebarOpen = false)}
 				>
 					<PanelRight class="h-4 w-4" />
 				</button>
 			{/if}
-			<div class="flex flex-1 items-center justify-end gap-2">
-				<h2 class="text-[11px] font-bold tracking-tight text-foreground/80 uppercase">
-					Analysis & Details
-				</h2>
-				<Info class="h-3.5 w-3.5 text-primary" />
+			<div class="flex flex-1 items-center justify-end gap-2.5">
+				<h2 class="text-xs font-semibold text-foreground">Analysis & Details</h2>
+				<div class="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+					<Info class="h-3.5 w-3.5 text-primary" />
+				</div>
 			</div>
 		</div>
 
-		<div class="flex-1 space-y-6 overflow-y-auto p-6">
+		<div class="flex-1 space-y-6 overflow-y-auto p-5">
 			{#if contentItem}
 				<!-- Related Articles -->
 				{#if entitiesWithArticles.length > 0}
 					<div class="space-y-4">
 						<h3
-							class="flex items-center gap-2 text-[10px] font-black tracking-widest text-muted-foreground uppercase"
+							class="flex items-center gap-2 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase"
 						>
 							<FileText class="h-3 w-3" />
 							Knowledge Articles
@@ -534,53 +530,49 @@
 						<div class="space-y-3">
 							{#each entitiesWithArticles as ent}
 								<div
-									class="group space-y-3 rounded-xl border bg-card p-4 transition-all hover:border-primary/30 hover:shadow-md"
+									class="group space-y-3 rounded-xl border bg-card p-4 transition-all hover:border-primary/20 hover:shadow-sm"
 								>
 									<div class="flex items-center justify-between">
-										<Badge variant="outline" class="h-4 px-1.5 text-[8px] font-bold uppercase">
+										<Badge variant="secondary" class="text-[9px] font-semibold uppercase">
 											{ent.type}
 										</Badge>
-										<Sparkles class="h-3 w-3 text-primary opacity-50" />
+										<Sparkles class="h-3 w-3 text-primary/50" />
 									</div>
-									<h4 class="text-xs font-bold tracking-tight">{ent.name} Article</h4>
-									<p class="line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
-										UPSC analysis incorporating this segment and {ent.segmentCount - 1} others.
-									</p>
-									<div class="pt-1">
-										<Button
-											href="/content/article?view=entity&type={encodeURIComponent(
-												ent.type
-											)}&slug={ent.slug}"
-											variant="secondary"
-											size="sm"
-											class="h-7 w-full gap-2 text-[10px] font-bold uppercase transition-all group-hover:bg-primary group-hover:text-primary-foreground"
-										>
-											<FileText class="h-3 w-3" />
-											Read Article
-										</Button>
-									</div>
+									<h4 class="text-xs font-semibold">{ent.name} Article</h4>
+
+									<Button
+										href="/content/article?view=entity&type={encodeURIComponent(
+											ent.type
+										)}&slug={ent.slug}"
+										variant="secondary"
+										size="sm"
+										class="h-8 w-full gap-2 text-[10px] font-semibold transition-all group-hover:bg-primary group-hover:text-primary-foreground hover:!bg-primary/90 hover:!text-primary-foreground"
+									>
+										<FileText class="h-3 w-3" />
+										Read Article
+									</Button>
 								</div>
 							{/each}
 						</div>
 					</div>
 				{:else}
 					<div class="flex h-full flex-col items-center justify-center py-20 text-center">
-						<div class="rounded-full bg-muted p-5">
-							<Info class="size-10 text-muted-foreground" />
+						<div class="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+							<Info class="h-6 w-6 text-muted-foreground" />
 						</div>
-						<h3 class="mt-5 text-base font-medium text-foreground">Analysis & Details</h3>
-						<p class="mt-1 text-sm text-muted-foreground">
+						<h3 class="mt-5 text-sm font-semibold">Analysis & Details</h3>
+						<p class="mt-1.5 max-w-[180px] text-xs text-muted-foreground">
 							Select a news segment or entity to see detailed analysis.
 						</p>
 					</div>
 				{/if}
 			{:else}
 				<div class="flex h-full flex-col items-center justify-center py-20 text-center">
-					<div class="rounded-full bg-muted p-5">
-						<Info class="size-10 text-muted-foreground" />
+					<div class="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+						<Info class="h-6 w-6 text-muted-foreground" />
 					</div>
-					<h3 class="mt-5 text-base font-medium text-foreground">Analysis & Details</h3>
-					<p class="mt-1 text-sm text-muted-foreground">
+					<h3 class="mt-5 text-sm font-semibold">Analysis & Details</h3>
+					<p class="mt-1.5 max-w-[180px] text-xs text-muted-foreground">
 						Select a news segment or entity to see detailed analysis.
 					</p>
 				</div>
@@ -589,8 +581,4 @@
 	</aside>
 </div>
 
-<style>
-	:global(main) {
-		scrollbar-gutter: stable;
-	}
-</style>
+

@@ -9,8 +9,6 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	// import * as Select from '$lib/components/ui/select';
-	// import { Checkbox } from '$lib/components/ui/checkbox';
 	import {
 		Play,
 		RefreshCw,
@@ -22,9 +20,7 @@
 		Database,
 		Sparkles,
 		ListChecks,
-		ChevronDown,
-		ChevronUp,
-		Eye
+		ChevronDown
 	} from '@lucide/svelte';
 
 	const client = useConvexClient();
@@ -201,8 +197,13 @@
 
 <div class="container mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 	<!-- Header -->
-	<div class="mb-8 space-y-1">
-		<h1 class="text-3xl font-bold tracking-tight">Extraction Center</h1>
+	<div class="mb-8 space-y-2">
+		<div class="flex items-center gap-2">
+			<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+				<Sparkles class="h-4 w-4 text-primary" />
+			</div>
+			<h1 class="text-3xl font-semibold tracking-tight">Extraction Center</h1>
+		</div>
 		<p class="text-muted-foreground">
 			Run AI-powered extractions on source data to generate structured content.
 		</p>
@@ -211,77 +212,79 @@
 	<!-- Stats Bar -->
 	{#if statsQuery.data}
 		<div class="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
-			<Card.Root class="border-none bg-muted/50">
-				<Card.Content class="p-4">
-					<div class="text-2xl font-bold">{statsQuery.data.todayTotal}</div>
-					<div class="text-xs text-muted-foreground">Today's Jobs</div>
-				</Card.Content>
-			</Card.Root>
-			<Card.Root class="border-none bg-yellow-500/10">
-				<Card.Content class="p-4">
-					<div class="text-2xl font-bold text-yellow-600">{statsQuery.data.pending}</div>
-					<div class="text-xs text-muted-foreground">Pending</div>
-				</Card.Content>
-			</Card.Root>
-			<Card.Root class="border-none bg-blue-500/10">
-				<Card.Content class="p-4">
-					<div class="text-2xl font-bold text-blue-600">{statsQuery.data.running}</div>
-					<div class="text-xs text-muted-foreground">Running</div>
-				</Card.Content>
-			</Card.Root>
-			<Card.Root class="border-none bg-green-500/10">
-				<Card.Content class="p-4">
-					<div class="text-2xl font-bold text-green-600">{statsQuery.data.completed}</div>
-					<div class="text-xs text-muted-foreground">Completed</div>
-				</Card.Content>
-			</Card.Root>
-			<Card.Root class="border-none bg-red-500/10">
-				<Card.Content class="p-4">
-					<div class="text-2xl font-bold text-red-600">{statsQuery.data.failed}</div>
-					<div class="text-xs text-muted-foreground">Failed</div>
-				</Card.Content>
-			</Card.Root>
-			<Card.Root class="border-none bg-primary/10">
-				<Card.Content class="p-4">
-					<div class="text-2xl font-bold text-primary">{statsQuery.data.total}</div>
-					<div class="text-xs text-muted-foreground">Total Jobs</div>
-				</Card.Content>
-			</Card.Root>
+			<div class="rounded-xl border border-muted bg-card p-4 shadow-sm">
+				<div class="text-2xl font-bold tabular-nums">{statsQuery.data.todayTotal}</div>
+				<div class="text-xs font-medium text-muted-foreground">Today's Jobs</div>
+			</div>
+			<div class="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 shadow-sm">
+				<div class="text-2xl font-bold text-yellow-600 tabular-nums dark:text-yellow-400">
+					{statsQuery.data.pending}
+				</div>
+				<div class="text-xs font-medium text-muted-foreground">Pending</div>
+			</div>
+			<div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 shadow-sm">
+				<div class="text-2xl font-bold text-blue-600 tabular-nums dark:text-blue-400">
+					{statsQuery.data.running}
+				</div>
+				<div class="text-xs font-medium text-muted-foreground">Running</div>
+			</div>
+			<div class="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 shadow-sm">
+				<div class="text-2xl font-bold text-emerald-600 tabular-nums dark:text-emerald-400">
+					{statsQuery.data.completed}
+				</div>
+				<div class="text-xs font-medium text-muted-foreground">Completed</div>
+			</div>
+			<div class="rounded-xl border border-red-500/20 bg-red-500/5 p-4 shadow-sm">
+				<div class="text-2xl font-bold text-red-600 tabular-nums dark:text-red-400">
+					{statsQuery.data.failed}
+				</div>
+				<div class="text-xs font-medium text-muted-foreground">Failed</div>
+			</div>
+			<div class="rounded-xl border border-primary/20 bg-primary/5 p-4 shadow-sm">
+				<div class="text-2xl font-bold text-primary tabular-nums">{statsQuery.data.total}</div>
+				<div class="text-xs font-medium text-muted-foreground">Total Jobs</div>
+			</div>
 		</div>
 	{:else}
 		<div class="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
 			{#each Array(6) as _}
-				<Skeleton class="h-20 w-full" />
+				<Skeleton class="h-20 w-full rounded-xl" />
 			{/each}
 		</div>
 	{/if}
 
 	<div class="grid gap-8 lg:grid-cols-2">
 		<!-- New Extraction Form -->
-		<Card.Root class="overflow-hidden border-primary/10 shadow-lg">
-			<Card.Header class="bg-muted/30 pb-4">
+		<div class="rounded-xl border bg-card shadow-sm">
+			<div class="border-b px-6 py-4">
 				<div class="flex items-center gap-2">
-					<Sparkles class="h-5 w-5 text-primary" />
-					<Card.Title>New Extraction</Card.Title>
+					<Sparkles class="h-4 w-4 text-primary" />
+					<h2 class="font-semibold">New Extraction</h2>
 				</div>
-				<Card.Description>Configure and run a new extraction job</Card.Description>
-			</Card.Header>
-			<Card.Content class="space-y-6 p-6">
+				<p class="mt-1 text-xs text-muted-foreground">Configure and run a new extraction job</p>
+			</div>
+			<div class="space-y-6 p-6">
 				<!-- Source Type -->
 				<div class="space-y-2">
-					<label for="sourceType" class="text-sm font-semibold">Source Type</label>
-					<select
-						id="sourceType"
-						class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-						onchange={(e) => handleSourceTypeChange(e.currentTarget.value)}
-						value={sourceType}
-					>
-						{#each sourceTypes as src}
-							<option value={src.value}>{src.label}</option>
-						{/each}
-					</select>
+					<label for="sourceType" class="text-sm font-medium">Source Type</label>
+					<div class="relative">
+						<select
+							id="sourceType"
+							class="flex h-10 w-full appearance-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+							onchange={(e) => handleSourceTypeChange(e.currentTarget.value)}
+							value={sourceType}
+						>
+							{#each sourceTypes as src}
+								<option value={src.value}>{src.label}</option>
+							{/each}
+						</select>
+						<ChevronDown
+							class="pointer-events-none absolute top-3 right-3 h-4 w-4 text-muted-foreground"
+						/>
+					</div>
 					{#if sourceCountQuery.data !== undefined}
-						<p class="text-xs text-muted-foreground">
+						<p class="flex items-center gap-1 text-xs text-muted-foreground">
+							<Database class="h-3 w-3" />
 							{sourceCountQuery.data} items available
 						</p>
 					{/if}
@@ -289,13 +292,14 @@
 
 				<!-- Fields to Extract From -->
 				<div class="space-y-2">
-					<p class="text-sm font-semibold">Fields to Extract From</p>
+					<p class="text-sm font-medium">Fields to Extract From</p>
 					<div class="flex flex-wrap gap-2">
 						{#each availableFields as field}
 							<Button
 								variant={selectedFields.includes(field.key) ? 'default' : 'outline'}
 								size="sm"
 								onclick={() => toggleField(field.key)}
+								class="h-8 text-xs"
 							>
 								{field.label}
 							</Button>
@@ -306,34 +310,37 @@
 				<Separator />
 
 				<!-- Extraction Types -->
-				<div class="space-y-2">
-					<p class="text-sm font-semibold">Extraction Types</p>
-					<div class="grid gap-2 sm:grid-cols-2">
+				<div class="space-y-3">
+					<p class="text-sm font-medium">Extraction Types</p>
+					<div class="grid gap-3 sm:grid-cols-2">
 						{#if extractionTypesQuery.data}
 							{#each extractionTypesQuery.data as ext}
 								<button
-									class="flex items-start gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 {selectedExtractionTypes.includes(
+									class="flex items-start gap-3 rounded-lg border p-3 text-left transition-all hover:border-primary/30 hover:bg-muted/50 {selectedExtractionTypes.includes(
 										ext.type
 									)
-										? 'border-primary bg-primary/5'
+										? 'border-primary bg-primary/5 ring-1 ring-primary/20'
 										: 'border-border'}"
 									onclick={() => toggleExtractionType(ext.type)}
 								>
-									<input
-										type="checkbox"
-										class="mt-1"
-										checked={selectedExtractionTypes.includes(ext.type)}
-										readonly
-									/>
+									<div
+										class="flex h-5 w-5 items-center justify-center rounded border border-primary/20 bg-background"
+									>
+										{#if selectedExtractionTypes.includes(ext.type)}
+											<div class="h-3 w-3 rounded-sm bg-primary"></div>
+										{/if}
+									</div>
 									<div>
-										<div class="font-medium">{ext.name}</div>
-										<div class="text-xs text-muted-foreground">{ext.description}</div>
+										<div class="text-sm font-medium">{ext.name}</div>
+										<div class="mt-0.5 text-xs leading-snug text-muted-foreground">
+											{ext.description}
+										</div>
 									</div>
 								</button>
 							{/each}
 						{:else}
-							{#each Array(6) as _}
-								<Skeleton class="h-16 w-full" />
+							{#each Array(4) as _}
+								<Skeleton class="h-20 w-full rounded-lg" />
 							{/each}
 						{/if}
 					</div>
@@ -343,21 +350,23 @@
 
 				<!-- Batch Size -->
 				<div class="space-y-2">
-					<label for="batchSize" class="text-sm font-semibold">Batch Size</label>
-					<Input
-						id="batchSize"
-						type="number"
-						bind:value={batchSize}
-						min={1}
-						max={100}
-						class="w-32"
-					/>
-					<p class="text-xs text-muted-foreground">Number of items to process</p>
+					<label for="batchSize" class="text-sm font-medium">Batch Size</label>
+					<div class="flex items-center gap-4">
+						<Input
+							id="batchSize"
+							type="number"
+							bind:value={batchSize}
+							min={1}
+							max={100}
+							class="h-9 w-32"
+						/>
+						<span class="text-xs text-muted-foreground">Items per batch (1-100)</span>
+					</div>
 				</div>
 
 				{#if error}
 					<div
-						class="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive"
+						class="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm font-medium text-destructive"
 					>
 						{error}
 					</div>
@@ -365,7 +374,7 @@
 
 				<!-- Submit Button -->
 				<Button
-					class="w-full gap-2"
+					class="w-full gap-2 font-semibold shadow-sm"
 					size="lg"
 					onclick={startExtraction}
 					disabled={isSubmitting || selectedExtractionTypes.length === 0}
@@ -378,101 +387,119 @@
 						Start Extraction
 					{/if}
 				</Button>
-			</Card.Content>
-		</Card.Root>
+			</div>
+		</div>
 
 		<!-- Job Queue -->
-		<Card.Root class="overflow-hidden border-primary/10 shadow-lg">
-			<Card.Header class="bg-muted/30 pb-4">
+		<div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+			<div class="border-b bg-muted/30 px-6 py-4">
 				<div class="flex items-center gap-2">
 					<ListChecks class="h-5 w-5 text-primary" />
-					<Card.Title>Job Queue</Card.Title>
+					<h2 class="font-semibold">Job Queue</h2>
 				</div>
-				<Card.Description>Recent and active extraction jobs</Card.Description>
-			</Card.Header>
-			<Card.Content class="p-0">
-				{#if jobsQuery.data}
-					{#if jobsQuery.data.length === 0}
-						<div class="flex flex-col items-center justify-center py-12 text-center">
-							<Database class="mb-4 h-12 w-12 text-muted-foreground/30" />
-							<p class="text-muted-foreground">No extraction jobs yet</p>
-							<p class="text-sm text-muted-foreground/70">Start your first extraction above</p>
-						</div>
-					{:else}
-						<div class="divide-y">
-							{#each jobsQuery.data as job}
-								{@const statusInfo = getStatusInfo(job.status)}
-								{@const StatusIcon = statusInfo.icon}
-								<div class="flex items-center gap-4 p-4 hover:bg-muted/30">
-									<div
-										class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full {statusInfo.bg}"
-									>
-										<StatusIcon
-											class="h-5 w-5 {statusInfo.color} {statusInfo.animate ? 'animate-spin' : ''}"
-										/>
-									</div>
-									<div class="min-w-0 flex-1">
-										<div class="flex items-center gap-2">
-											<span class="truncate font-medium capitalize"
-												>{job.extractionType.replace('_', ' ')}</span
-											>
-											<Badge variant="outline" class="shrink-0">{job.sourceType}</Badge>
-										</div>
-										<div class="flex items-center gap-2 text-xs text-muted-foreground">
-											<span>
-												{job.processedItems}/{job.totalItems} items
-											</span>
-											<span>-</span>
-											<span>{job.extractedCount} extracted</span>
-											{#if job.completedAt}
-												<span>-</span>
-												<span>{formatRelativeTime(job.completedAt)}</span>
-											{:else if job.createdAt}
-												<span>-</span>
-												<span>{formatRelativeTime(job.createdAt)}</span>
-											{/if}
-										</div>
-									</div>
-									<div class="flex shrink-0 gap-1">
-										{#if job.status === 'running' || job.status === 'pending'}
-											<Button
-												variant="ghost"
-												size="icon-sm"
-												title="Cancel"
-												onclick={() => cancelJob(job._id)}
-												class="text-destructive hover:bg-destructive/10"
-											>
-												<XCircle class="h-4 w-4" />
-											</Button>
-										{:else if job.status === 'failed' || job.status === 'cancelled'}
-											<Button
-												variant="ghost"
-												size="icon-sm"
-												title="Retry"
-												onclick={() => retryJob(job._id)}
-											>
-												<RefreshCw class="h-4 w-4" />
-											</Button>
-										{/if}
-									</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
+				<p class="mt-1 text-xs text-muted-foreground">Recent and active extraction jobs</p>
+			</div>
+
+			{#if jobsQuery.data}
+				{#if jobsQuery.data.length === 0}
+					<div class="flex flex-col items-center justify-center py-12 text-center">
+						<Database class="mb-3 h-10 w-10 text-muted-foreground/30" />
+						<p class="font-medium text-muted-foreground">No extraction jobs yet</p>
+						<p class="text-sm text-muted-foreground/70">
+							Start your first extraction to see it here
+						</p>
+					</div>
 				{:else}
 					<div class="divide-y">
-						{#each Array(5) as _}
-							<div class="flex items-center gap-4 p-4">
-								<Skeleton class="h-10 w-10 rounded-full" />
-								<div class="flex-1 space-y-2">
-									<Skeleton class="h-4 w-32" />
-									<Skeleton class="h-3 w-48" />
+						{#each jobsQuery.data as job}
+							{@const statusInfo = getStatusInfo(job.status)}
+							{@const StatusIcon = statusInfo.icon}
+							<div class="flex items-start gap-4 p-4 transition-colors hover:bg-muted/30">
+								<div
+									class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {statusInfo.bg}"
+								>
+									<StatusIcon
+										class="h-4.5 w-4.5 {statusInfo.color} {statusInfo.animate
+											? 'animate-spin'
+											: ''}"
+									/>
+								</div>
+								<div class="min-w-0 flex-1 space-y-1">
+									<div class="flex items-center gap-2">
+										<span class="truncate text-sm font-semibold capitalize"
+											>{job.extractionType.replace('_', ' ')}</span
+										>
+										<Badge
+											variant="secondary"
+											class="h-5 px-1.5 text-[10px] font-bold tracking-wider uppercase"
+											>{job.sourceType}</Badge
+										>
+									</div>
+									<div
+										class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"
+									>
+										<span class="font-medium text-foreground/80 tabular-nums">
+											{job.processedItems}/{job.totalItems} processed
+										</span>
+										<span>•</span>
+										<span class="tabular-nums">{job.extractedCount} extracted</span>
+										{#if job.completedAt}
+											<span>•</span>
+											<span>{formatRelativeTime(job.completedAt)}</span>
+										{:else if job.createdAt}
+											<span>•</span>
+											<span>{formatRelativeTime(job.createdAt)}</span>
+										{/if}
+									</div>
+									{#if job.status === 'running' || job.status === 'pending'}
+										<div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+											<div
+												class="h-full bg-primary transition-all duration-500"
+												style="width: {(job.processedItems / (job.totalItems || 1)) * 100}%"
+											></div>
+										</div>
+									{/if}
+								</div>
+								<div class="flex shrink-0 gap-1">
+									{#if job.status === 'running' || job.status === 'pending'}
+										<Button
+											variant="ghost"
+											size="icon-sm"
+											title="Cancel"
+											onclick={() => cancelJob(job._id)}
+											class="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+										>
+											<XCircle class="h-4 w-4" />
+										</Button>
+									{:else if job.status === 'failed' || job.status === 'cancelled'}
+										<Button
+											variant="ghost"
+											size="icon-sm"
+											title="Retry"
+											onclick={() => retryJob(job._id)}
+											class="h-8 w-8 text-muted-foreground hover:text-foreground"
+										>
+											<RefreshCw class="h-4 w-4" />
+										</Button>
+									{/if}
 								</div>
 							</div>
 						{/each}
 					</div>
 				{/if}
-			</Card.Content>
-		</Card.Root>
+			{:else}
+				<div class="space-y-4 divide-y p-4">
+					{#each Array(5) as _}
+						<div class="flex items-center gap-4">
+							<Skeleton class="h-10 w-10 rounded-lg" />
+							<div class="flex-1 space-y-2">
+								<Skeleton class="h-4 w-32" />
+								<Skeleton class="h-3 w-48" />
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	</div>
 </div>

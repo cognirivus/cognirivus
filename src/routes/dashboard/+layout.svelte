@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { ChartLine, Settings, BookCheck, Highlighter } from '@lucide/svelte';
-	import { buttonVariants } from '$lib/components/ui/button/index.js';
+	import { ChartLine, BookCheck, Highlighter, Brain } from '@lucide/svelte';
 	import { cn } from '$lib/utils.js';
 
 	let { children } = $props();
@@ -25,38 +24,57 @@
 		{
 			name: 'Memories',
 			href: '/dashboard/memories',
-			icon: Settings
+			icon: Brain
 		}
 	];
 
 	const activePath = $derived(page.url.pathname);
 </script>
 
-<div class="flex h-[calc(100vh-2.5rem)] w-full flex-col bg-background">
-	<!-- Sub-navigation Navbar -->
-	<header class="bg-background/80 backdrop-blur-md">
-		<div
-			class="mx-auto flex h-auto min-h-[2.5rem] max-w-6xl flex-col items-start justify-center gap-2 px-4 py-2 sm:h-10 sm:flex-row sm:items-center sm:justify-between sm:py-0"
-		>
-			<div class="flex w-full items-center justify-between gap-8 sm:w-auto sm:justify-start">
+<div class="flex min-h-[calc(100vh-3.5rem)] w-full flex-col bg-background">
+	<!-- Sub-navigation Header -->
+	<header class="sticky top-14 z-30 border-b border-border/40 bg-background/80 backdrop-blur-xl">
+		<div class="mx-auto flex h-12 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+			<div class="flex items-center gap-6">
 				<a
 					href="/dashboard"
-					class="text-sm font-bold tracking-tight text-foreground hover:text-primary">Dashboard</a
+					class="text-sm font-semibold text-foreground transition-colors hover:text-foreground/80"
 				>
-				<!-- Hidden on desktop, shown on mobile for compact menu -->
+					Dashboard
+				</a>
+
+				<nav class="hidden items-center gap-1 sm:flex">
+					{#each navItems as item}
+						{@const isActive = activePath === item.href}
+						<a
+							href={item.href}
+							class={cn(
+								'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+								isActive
+									? 'bg-accent text-foreground'
+									: 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+							)}
+						>
+							<item.icon class="h-4 w-4" />
+							{item.name}
+						</a>
+					{/each}
+				</nav>
 			</div>
-			<nav class="flex w-full items-center gap-0.5 overflow-x-auto pb-1 sm:w-auto sm:pb-0">
+		</div>
+
+		<!-- Mobile navigation -->
+		<div class="border-t border-border/40 sm:hidden">
+			<nav class="flex items-center gap-1 overflow-x-auto px-4 py-2">
 				{#each navItems as item}
 					{@const isActive = activePath === item.href}
 					<a
 						href={item.href}
 						class={cn(
-							buttonVariants({
-								variant: isActive ? 'secondary' : 'ghost',
-								size: 'sm'
-							}),
-							'flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-bold tracking-tight uppercase transition-colors',
-							isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground'
+							'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+							isActive
+								? 'bg-accent text-foreground'
+								: 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
 						)}
 					>
 						<item.icon class="h-3.5 w-3.5" />
@@ -68,7 +86,7 @@
 	</header>
 
 	<!-- Main Content area -->
-	<main class="flex-1 overflow-y-auto">
+	<main class="flex-1">
 		{@render children()}
 	</main>
 </div>

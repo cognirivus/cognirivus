@@ -218,30 +218,30 @@
 
 {#snippet contentCard(item: any)}
 	<article
-		class="group relative flex w-full min-w-0 flex-col gap-2 rounded-lg border-b border-border/40 px-3 py-6 transition-colors last:border-0 hover:bg-muted/30 sm:px-4"
+		class="group relative flex w-full min-w-0 flex-col gap-3 rounded-xl border-b border-border/40 px-4 py-5 transition-all last:border-0 hover:bg-muted/40 sm:px-6"
 	>
-		<div class="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+		<div class="flex min-w-0 flex-wrap items-center gap-2">
 			{#if item.subject}
 				<Badge
 					variant="outline"
-					class="h-auto border-primary/20 bg-primary/5 text-[10px] font-bold tracking-wider whitespace-normal text-primary uppercase"
+					class="border-primary/20 bg-primary/5 text-[10px] font-semibold text-primary uppercase"
 				>
-					GS {item.subject.gsPaper} | {item.subject.name}
+					GS {item.subject.gsPaper} • {item.subject.name}
 				</Badge>
 			{/if}
 			<Badge
 				variant="secondary"
-				class="flex h-auto items-center gap-1 text-[10px] whitespace-normal uppercase"
+				class="flex h-auto items-center gap-1 text-[10px] font-medium uppercase"
 			>
-				<Tag class="h-2.5 w-2.5" />
+				<Tag class="h-3 w-3 opacity-50" />
 				{item.topic}
 			</Badge>
 			{#if progressQuery.data?.[item._id]}
 				<Badge
 					variant="outline"
-					class="border-green-500/20 bg-green-500/5 text-[10px] font-bold text-green-600 uppercase"
+					class="border-emerald-500/20 bg-emerald-500/5 text-[10px] font-semibold text-emerald-600 uppercase"
 				>
-					<Check class="mr-1 h-2.5 w-2.5" />
+					<Check class="mr-1 h-3 w-3" />
 					Done
 				</Badge>
 			{/if}
@@ -258,18 +258,20 @@
 		</div>
 
 		<div class="flex items-start justify-between gap-4">
-			<div class="min-w-0 flex-1 space-y-2">
+			<div class="min-w-0 flex-1 space-y-1.5">
 				<a
 					href="/content/{item._id}"
-					class="block text-lg leading-snug font-bold tracking-tight break-words text-foreground/90 transition-colors group-hover:text-primary sm:text-xl"
+					class="block text-base font-semibold tracking-tight text-foreground transition-colors group-hover:text-primary sm:text-lg"
 				>
 					{item.title}
 				</a>
-				<p class="line-clamp-2 text-sm leading-relaxed break-words text-muted-foreground">
+				<p class="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
 					{item.body}
 				</p>
 
-				<div class="flex items-center gap-4 pt-1 text-[10px] text-muted-foreground uppercase">
+				<div
+					class="flex items-center gap-4 pt-1.5 text-[10px] font-medium text-muted-foreground uppercase"
+				>
 					<div class="flex items-center gap-1">
 						<ThumbsUp class="h-3 w-3" />
 						{item.likes}
@@ -287,9 +289,9 @@
 
 			<Button
 				variant="ghost"
-				size="sm"
+				size="icon"
 				href="/content/{item._id}"
-				class="mt-1 h-8 w-8 shrink-0 p-0"
+				class="mt-0.5 h-8 w-8 shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100"
 			>
 				<ChevronRight class="h-4 w-4" />
 			</Button>
@@ -298,22 +300,22 @@
 {/snippet}
 
 <div class="flex h-full flex-col">
-	<div class="flex-1 overflow-x-hidden overflow-y-auto px-3 py-6 sm:px-6">
+	<div class="flex-1 overflow-x-hidden overflow-y-auto px-4 py-6 sm:px-8">
 		<!-- Active Filters Header -->
 		{#if hasActiveFilters}
-			<div class="mb-6 rounded-lg border bg-muted/30 p-4">
+			<div class="mb-6 rounded-xl border bg-muted/20 p-4">
 				<div class="flex flex-wrap items-center gap-2">
-					<span class="text-xs font-bold tracking-wider text-muted-foreground uppercase"
-						>Showing:</span
+					<span class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase"
+						>Active Filters:</span
 					>
 
 					{#if searchQuery}
-						<Badge variant="secondary" class="gap-1.5 pr-1">
-							<Search class="h-3 w-3" />
+						<Badge variant="secondary" class="gap-1.5 px-2 py-1 text-xs">
+							<Search class="h-3 w-3 opacity-50" />
 							"{searchQuery}"
 							<button
 								onclick={() => removeFilter('q')}
-								class="ml-1 rounded-full p-0.5 hover:bg-muted"
+								class="ml-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10"
 							>
 								<X class="h-3 w-3" />
 							</button>
@@ -321,11 +323,11 @@
 					{/if}
 
 					{#each selectedGsPapers as gs}
-						<Badge variant="secondary" class="gap-1.5 pr-1">
+						<Badge variant="secondary" class="gap-1.5 px-2 py-1 text-xs">
 							GS Paper {gs}
 							<button
 								onclick={() => removeFilter('gs', String(gs))}
-								class="ml-1 rounded-full p-0.5 hover:bg-muted"
+								class="ml-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10"
 							>
 								<X class="h-3 w-3" />
 							</button>
@@ -334,11 +336,11 @@
 
 					{#each selectedSubjectNames as name}
 						{@const subjectId = allSubjects.find((s: any) => s.name === name)?._id}
-						<Badge variant="secondary" class="gap-1.5 pr-1 whitespace-normal">
+						<Badge variant="secondary" class="gap-1.5 px-2 py-1 text-xs">
 							{name}
 							<button
 								onclick={() => removeFilter('subject', subjectId)}
-								class="ml-1 rounded-full p-0.5 hover:bg-muted"
+								class="ml-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10"
 							>
 								<X class="h-3 w-3" />
 							</button>
@@ -351,24 +353,24 @@
 						<div class="flex items-center gap-1.5">
 							<Badge
 								variant="outline"
-								class="gap-1 border-primary/30 bg-primary/5 pr-1 text-primary"
+								class="gap-1.5 border-primary/20 bg-primary/5 px-2 py-1 text-xs text-primary"
 							>
 								<Icon class="h-3 w-3" />
 								<button
 									onclick={() => removeFilter('entityType', singleEntityType)}
-									class="capitalize hover:underline"
+									class="font-semibold capitalize hover:underline"
 								>
 									{singleEntityType}s
 								</button>
 								<button
 									onclick={() => removeFilter('entityType', singleEntityType)}
-									class="ml-1 rounded-full p-0.5 hover:bg-primary/10"
+									class="ml-1 rounded-full hover:bg-primary/10"
 								>
 									<X class="h-3 w-3" />
 								</button>
 							</Badge>
 
-							<ChevronRight class="h-3.5 w-3.5 text-muted-foreground/50" />
+							<ChevronRight class="h-3.5 w-3.5 text-muted-foreground/30" />
 
 							<DropdownMenu.Root>
 								<DropdownMenu.Trigger>
@@ -376,7 +378,7 @@
 										<Button
 											variant="outline"
 											size="sm"
-											class="h-7 gap-1 px-2 text-[10px] font-bold"
+											class="h-7 gap-1.5 px-2.5 text-xs font-semibold"
 											{...props}
 										>
 											{#if selectedEntityIds.length === 0}
@@ -409,24 +411,39 @@
 											</DropdownMenu.CheckboxItem>
 										{/each}
 									{/if}
+									{#if entitiesQuery.isLoading}
+										<div class="flex items-center justify-center py-4">
+											<Loader variant="circular" size="sm" />
+										</div>
+									{:else if availableEntities.length === 0}
+										<div class="px-2 py-4 text-center text-xs text-muted-foreground">
+											No entities found
+										</div>
+									{:else}
+										{#each availableEntities as ent}
+											<DropdownMenu.CheckboxItem
+												checked={selectedEntityIds.includes(ent._id)}
+												onCheckedChange={() => toggleEntity(ent._id)}
+											>
+												{ent.name}
+											</DropdownMenu.CheckboxItem>
+										{/each}
+									{/if}
 								</DropdownMenu.Content>
 							</DropdownMenu.Root>
 						</div>
 
 						<!-- Selected Entity Badges -->
 						{#if selectedEntityIds.length > 0}
-							<div class="ml-2 flex flex-wrap items-center gap-1.5 border-l pl-3">
+							<div class="ml-2 flex flex-wrap items-center gap-1.5 border-l border-border/50 pl-3">
 								{#each selectedEntityIds as id}
 									{@const ent = availableEntities.find((e) => e._id === id)}
 									{#if ent}
-										<Badge
-											variant="secondary"
-											class="h-auto gap-1 px-2 text-[10px] whitespace-normal"
-										>
+										<Badge variant="secondary" class="gap-1.5 px-2 py-1 text-xs">
 											{ent.name}
 											<button
 												onclick={() => removeFilter('entity', id)}
-												class="ml-1 rounded-full p-0.5 hover:bg-muted"
+												class="ml-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10"
 											>
 												<X class="h-3 w-3" />
 											</button>
@@ -441,13 +458,13 @@
 							{@const Icon = getEntityIcon(type)}
 							<Badge
 								variant="outline"
-								class="gap-1.5 border-primary/30 bg-primary/5 pr-1 text-primary"
+								class="gap-1.5 border-primary/20 bg-primary/5 px-2 py-1 text-xs text-primary"
 							>
 								<Icon class="h-3 w-3" />
-								<span class="capitalize">{type}s</span>
+								<span class="font-semibold capitalize">{type}s</span>
 								<button
 									onclick={() => removeFilter('entityType', type)}
-									class="ml-1 rounded-full p-0.5 hover:bg-primary/10"
+									class="ml-1 rounded-full hover:bg-primary/10"
 								>
 									<X class="h-3 w-3" />
 								</button>
@@ -458,7 +475,7 @@
 					{#if selectedStatus !== 'all'}
 						<Badge
 							variant="outline"
-							class="gap-1.5 border-green-500/30 bg-green-500/5 pr-1 text-green-600"
+							class="gap-1.5 border-emerald-500/20 bg-emerald-500/5 px-2 py-1 text-xs text-emerald-600"
 						>
 							{#if selectedStatus === 'completed'}
 								<Check class="h-3 w-3" />
@@ -468,7 +485,7 @@
 							{/if}
 							<button
 								onclick={() => removeFilter('status')}
-								class="ml-1 rounded-full p-0.5 hover:bg-green-500/10"
+								class="ml-1 rounded-full hover:bg-emerald-500/10"
 							>
 								<X class="h-3 w-3" />
 							</button>
@@ -478,20 +495,25 @@
 					{#if includeNews}
 						<Badge
 							variant="outline"
-							class="gap-1.5 border-orange-500/30 bg-orange-500/5 pr-1 text-orange-600"
+							class="gap-1.5 border-amber-500/20 bg-amber-500/5 px-2 py-1 text-xs text-amber-600"
 						>
-							<Zap class="h-3 w-3 fill-orange-500" />
+							<Zap class="h-3 w-3 fill-amber-500" />
 							Current Affairs
 							<button
 								onclick={() => removeFilter('news')}
-								class="ml-1 rounded-full p-0.5 hover:bg-orange-500/10"
+								class="ml-1 rounded-full hover:bg-amber-500/10"
 							>
 								<X class="h-3 w-3" />
 							</button>
 						</Badge>
 					{/if}
 
-					<Button variant="ghost" size="sm" class="ml-auto h-7 text-xs" onclick={clearFilters}>
+					<Button
+						variant="ghost"
+						size="sm"
+						class="ml-auto h-7 text-xs font-semibold text-muted-foreground hover:text-foreground"
+						onclick={clearFilters}
+					>
 						Clear all
 					</Button>
 				</div>
@@ -499,12 +521,12 @@
 		{/if}
 
 		{#if contentQuery.isLoading}
-			<div class="space-y-1">
+			<div class="space-y-4">
 				{#each Array(5) as _}
-					<div class="flex flex-col gap-3 rounded-lg border-b border-border/40 px-3 py-6 sm:px-4">
+					<div class="flex flex-col gap-3 rounded-xl border border-transparent p-4 sm:px-6">
 						<div class="flex gap-2">
-							<div class="h-4 w-24 animate-pulse rounded bg-muted"></div>
-							<div class="h-4 w-20 animate-pulse rounded bg-muted"></div>
+							<div class="h-5 w-24 animate-pulse rounded bg-muted"></div>
+							<div class="h-5 w-20 animate-pulse rounded bg-muted"></div>
 						</div>
 						<div class="flex items-start justify-between gap-4">
 							<div class="flex-1 space-y-3">
@@ -520,40 +542,42 @@
 				{/each}
 			</div>
 		{:else if contentItems.length === 0}
-			<div class="flex flex-col items-center justify-center py-20 text-center">
-				<div class="mb-4 rounded-full bg-muted p-4">
-					<Filter class="h-8 w-8 text-muted-foreground" />
+			<div class="flex flex-col items-center justify-center py-24 text-center">
+				<div class="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+					<Filter class="h-7 w-7 text-muted-foreground" />
 				</div>
-				<p class="text-lg font-medium text-foreground">No insights found</p>
-				<p class="text-muted-foreground">Try adjusting your filters or search query.</p>
-				<Button variant="outline" class="mt-4" onclick={clearFilters}>Clear Filters</Button>
+				<p class="text-lg font-semibold text-foreground">No insights found</p>
+				<p class="mt-1 text-sm text-muted-foreground">
+					Try adjusting your filters or search query.
+				</p>
+				<Button variant="outline" class="mt-6" onclick={clearFilters}>Clear Filters</Button>
 			</div>
 		{:else if shouldGroupByEntity && groupedByEntity}
 			<!-- GROUPED BY ENTITY VIEW -->
-			<div class="space-y-4">
+			<div class="space-y-6">
 				{#each groupedByEntity as { entity, items }}
 					{@const Icon = getEntityIcon(entity.type)}
 					{@const isCollapsed = collapsedGroups.has(entity._id)}
 					{@const isOther = entity._id === '__other__'}
 
-					<div class="overflow-hidden rounded-lg border shadow-sm">
+					<div class="overflow-hidden rounded-xl border bg-card shadow-sm">
 						<!-- Entity Group Header -->
 						<button
 							onclick={() => toggleGroup(entity._id)}
-							class="flex w-full items-center justify-between bg-muted/50 px-4 py-3 transition-colors hover:bg-muted/70"
+							class="flex w-full items-center justify-between border-b bg-muted/30 px-5 py-4 transition-colors hover:bg-muted/50"
 						>
-							<div class="flex min-w-0 items-center gap-3">
+							<div class="flex min-w-0 items-center gap-4">
 								<div
-									class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
+									class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-background text-primary shadow-sm"
 								>
-									<Icon class="h-4 w-4" />
+									<Icon class="h-5 w-5" />
 								</div>
 								<div class="min-w-0 text-left">
-									<h3 class="truncate font-bold text-foreground">{entity.name}</h3>
-									<p class="truncate text-[10px] font-medium text-muted-foreground uppercase">
+									<h3 class="truncate font-semibold text-foreground">{entity.name}</h3>
+									<p class="truncate text-xs font-medium text-muted-foreground">
 										{items.length} item{items.length !== 1 ? 's' : ''}
 										{#if !isOther}
-											<span class="mx-1">•</span>
+											<span class="mx-1.5 opacity-50">•</span>
 											<span class="capitalize">{entity.type}</span>
 										{/if}
 									</p>
@@ -564,7 +588,7 @@
 									<Button
 										variant="ghost"
 										size="sm"
-										class="h-8 gap-1.5 text-xs text-primary"
+										class="h-8 gap-2 px-3 text-xs font-semibold text-primary hover:bg-primary/10 hover:text-primary"
 										onclick={(e) => {
 											e.stopPropagation();
 											viewEntityArticle(entity);
@@ -576,7 +600,7 @@
 									<Button
 										variant="outline"
 										size="sm"
-										class="h-8 gap-1.5 text-xs"
+										class="h-8 gap-2 px-3 text-xs font-semibold"
 										onclick={(e) => {
 											e.stopPropagation();
 											viewAllForEntity(entity._id);
@@ -601,11 +625,11 @@
 									{@render contentCard(item)}
 								{/each}
 								{#if items.length > 5}
-									<div class="bg-muted/10 p-3 text-center">
+									<div class="bg-muted/10 p-4 text-center">
 										<Button
 											variant="ghost"
 											size="sm"
-											class="h-7 gap-1 text-xs text-primary"
+											class="gap-2 text-xs font-semibold text-primary hover:text-primary"
 											onclick={() => viewAllForEntity(entity._id)}
 										>
 											View all {items.length} items
@@ -631,24 +655,24 @@
 	<!-- Sticky Pagination -->
 	{#if contentItems.length > 0}
 		<footer
-			class="mt-auto border-t bg-background px-4 py-2 shadow-[0_-4px_12px_rgba(0,0,0,0.02)] sm:px-6"
+			class="mt-auto border-t bg-background px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.02)] sm:px-8"
 		>
 			<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-				<div class="min-w-0 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
-					Page <span class="text-foreground">{currentIndex + 1}</span>
+				<div class="min-w-0 text-xs font-medium text-muted-foreground">
+					Page <span class="font-bold text-foreground">{currentIndex + 1}</span>
 					{#if shouldGroupByEntity && groupedByEntity}
-						<span class="ml-2 hidden font-normal normal-case sm:inline">
+						<span class="ml-2 hidden sm:inline">
 							({groupedByEntity.length} group{groupedByEntity.length !== 1 ? 's' : ''})
 						</span>
 					{/if}
 				</div>
-				<div class="flex items-center gap-1.5">
+				<div class="flex items-center gap-2">
 					<Button
 						variant="outline"
 						size="sm"
 						onclick={() => goToPage(false)}
 						disabled={!hasPrevPage}
-						class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
+						class="h-8 gap-1.5 px-3 text-xs font-semibold"
 					>
 						<ChevronLeft class="h-3.5 w-3.5" />
 						Prev
@@ -658,7 +682,7 @@
 						size="sm"
 						onclick={() => goToPage(true)}
 						disabled={!hasNextPage}
-						class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
+						class="h-8 gap-1.5 px-3 text-xs font-semibold"
 					>
 						Next
 						<ChevronRight class="h-3.5 w-3.5" />

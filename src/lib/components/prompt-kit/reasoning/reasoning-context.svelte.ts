@@ -1,12 +1,12 @@
-import { getContext } from "svelte";
+import { getContext } from 'svelte';
 
 class ReasoningContext {
 	private _isOpen = $state(false);
-	private _onOpenChange?: (open: boolean) => void;
-	private _isControlled = false;
+	private _onOpenChange = $state<(open: boolean) => void>();
+	private _isControlled = $state(false);
 	wasAutoOpened = $state(false);
 
-	constructor(open?: boolean, onOpenChange?: (open: boolean) => void, isStreaming?: boolean) {
+	constructor(open?: boolean, onOpenChange?: (open: boolean) => void) {
 		this._isControlled = open !== undefined;
 		this._isOpen = open ?? false;
 		this._onOpenChange = onOpenChange;
@@ -14,6 +14,14 @@ class ReasoningContext {
 
 	get isOpen() {
 		return this._isOpen;
+	}
+
+	set isControlled(value: boolean) {
+		this._isControlled = value;
+	}
+
+	set onOpenChange(fn: ((open: boolean) => void) | undefined) {
+		this._onOpenChange = fn;
 	}
 
 	setOpen(newOpen: boolean) {
@@ -28,18 +36,14 @@ class ReasoningContext {
 	}
 }
 
-export function createReasoningContext(
-	open?: boolean,
-	onOpenChange?: (open: boolean) => void,
-	isStreaming?: boolean
-) {
-	return new ReasoningContext(open, onOpenChange, isStreaming);
+export function createReasoningContext(open?: boolean, onOpenChange?: (open: boolean) => void) {
+	return new ReasoningContext(open, onOpenChange);
 }
 
 export function getReasoningContext(): ReasoningContext {
-	const context = getContext<ReasoningContext>("reasoning");
+	const context = getContext<ReasoningContext>('reasoning');
 	if (!context) {
-		throw new Error("getReasoningContext must be used within a Reasoning component");
+		throw new Error('getReasoningContext must be used within a Reasoning component');
 	}
 	return context;
 }

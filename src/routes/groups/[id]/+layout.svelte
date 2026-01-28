@@ -126,13 +126,15 @@
 
 <div class="flex h-[calc(100vh-40px)] w-full max-w-full overflow-hidden bg-background">
 	{#if (isSidebarOpen || isRightSidebarOpen) && isMobile}
-		<div
+		<button
+			type="button"
+			aria-label="Close sidebars"
 			onclick={() => {
 				isSidebarOpen = false;
 				isRightSidebarOpen = false;
 			}}
 			class="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm transition-opacity duration-300 lg:hidden"
-		></div>
+		></button>
 	{/if}
 
 	<!-- Left Sidebar -->
@@ -450,8 +452,4 @@
 	</aside>
 </div>
 
-<style>
-	:global(main) {
-		scrollbar-gutter: stable;
-	}
-</style>
+

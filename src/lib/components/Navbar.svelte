@@ -18,8 +18,6 @@
 		Brain,
 		X,
 		ChevronDown,
-		Newspaper,
-		GraduationCap,
 		Library
 	} from '@lucide/svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -77,32 +75,28 @@
 	}
 </script>
 
-<nav class="sticky top-0 z-40 w-full bg-background/80 backdrop-blur-md">
-	<div
-		class="container mx-auto flex h-10 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8"
-	>
+<nav class="sticky top-0 z-40 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
+	<div class="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
 		<!-- Logo -->
-		<div class="origin-left scale-90">
-			<Logo />
-		</div>
+		<Logo />
 
 		<!-- Desktop Navigation -->
-		<div class="hidden md:flex md:items-center md:gap-0.5">
+		<div class="hidden items-center gap-1 md:flex">
 			{#if auth.isLoading && !user}
-				<div class="flex items-center gap-2">
-					<div class="h-7 w-12 animate-pulse rounded bg-muted/60"></div>
-					<div class="h-7 w-12 animate-pulse rounded bg-muted/60"></div>
-					<div class="h-7 w-16 animate-pulse rounded bg-muted/60"></div>
+				<div class="flex items-center gap-1">
+					<div class="h-8 w-14 animate-pulse rounded-md bg-muted"></div>
+					<div class="h-8 w-14 animate-pulse rounded-md bg-muted"></div>
+					<div class="h-8 w-16 animate-pulse rounded-md bg-muted"></div>
 				</div>
 			{:else}
 				<!-- Only show content links here, management links go to dropdown -->
 				{#each desktopNavItems as item}
 					<a
 						href={item.href}
-						class="rounded px-2.5 py-1 text-[11px] font-bold tracking-tight uppercase transition-colors hover:bg-accent hover:text-accent-foreground {page
-							.url.pathname === item.href
-							? 'text-primary'
-							: 'text-muted-foreground'}"
+						class="rounded-md px-3 py-2 text-sm font-medium transition-colors duration-150 {page.url
+							.pathname === item.href
+							? 'bg-accent text-foreground'
+							: 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}"
 					>
 						{item.name}
 					</a>
@@ -116,25 +110,24 @@
 								<Button
 									variant="ghost"
 									size="sm"
-									class="h-7 gap-1.5 px-2.5 text-[11px] font-bold tracking-tight uppercase {prepItems.some(
+									class="h-9 gap-1.5 px-3 text-sm font-medium {prepItems.some(
 										(i) => page.url.pathname === i.href
 									)
-										? 'text-primary'
-										: 'text-muted-foreground'}"
+										? 'bg-accent text-foreground'
+										: 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}"
 									{...props}
 								>
-									<GraduationCap class="h-3.5 w-3.5" />
 									Prep
-									<ChevronDown class="h-3 w-3 opacity-50" />
+									<ChevronDown class="h-3.5 w-3.5 opacity-60" />
 								</Button>
 							{/snippet}
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content align="start" class="w-48">
 							{#each prepItems as item}
 								<DropdownMenu.Item>
-									<a href={item.href} class="flex w-full items-center gap-2">
-										<item.icon class="h-4 w-4" />
-										<span class="text-xs">{item.name}</span>
+									<a href={item.href} class="flex w-full items-center gap-2.5">
+										<item.icon class="h-4 w-4 text-muted-foreground" />
+										<span>{item.name}</span>
 									</a>
 								</DropdownMenu.Item>
 							{/each}
@@ -142,101 +135,99 @@
 					</DropdownMenu.Root>
 				{/if}
 			{/if}
+		</div>
 
-			<div class="ml-2 flex items-center gap-2">
-				{#if auth.isLoading && !user}
-					<div class="flex items-center gap-2">
-						<div class="h-7 w-20 animate-pulse rounded bg-muted/60"></div>
-					</div>
-				{:else if user}
-					<!-- User Dropdown Menu -->
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger>
-							{#snippet child({ props })}
-								<Button
-									variant="ghost"
-									size="sm"
-									class="h-7 gap-1.5 px-2.5 text-[11px] font-bold tracking-tight uppercase"
-									{...props}
-								>
-									<User class="h-3.5 w-3.5" />
-									<span class="max-w-25 truncate">{user.name ?? 'Account'}</span>
-									<ChevronDown class="h-3 w-3 opacity-50" />
-								</Button>
-							{/snippet}
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content align="end" class="w-56">
-							<DropdownMenu.Label>
-								<div class="flex flex-col space-y-1">
-									<p class="text-sm leading-none font-medium">{user.name}</p>
-									<p class="text-xs leading-none text-muted-foreground">
-										{user.email}
-									</p>
-								</div>
-							</DropdownMenu.Label>
-							<DropdownMenu.Separator />
-							<DropdownMenu.Group>
-								<DropdownMenu.Item>
-									<a href="/dashboard" class="flex w-full items-center">
-										<LayoutDashboard class="mr-2 h-4 w-4" />
-										<span>Dashboard</span>
-									</a>
-								</DropdownMenu.Item>
-								{#if isAdmin}
-									<DropdownMenu.Item>
-										<a href="/admin" class="flex w-full items-center">
-											<ShieldCheck class="mr-2 h-4 w-4" />
-											<span>Admin</span>
-										</a>
-									</DropdownMenu.Item>
-								{/if}
-								<DropdownMenu.Item>
-									<a href="/profile" class="flex w-full items-center">
-										<User class="mr-2 h-4 w-4" />
-										<span>Profile</span>
-									</a>
-								</DropdownMenu.Item>
-							</DropdownMenu.Group>
-							<DropdownMenu.Separator />
-							<DropdownMenu.Item onclick={signOut}>
-								<LogOut class="mr-2 h-4 w-4" />
-								<span>Sign Out</span>
-							</DropdownMenu.Item>
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
-				{:else}
-					<Button
-						variant="default"
-						size="sm"
-						href="/signin"
-						class="h-7 gap-1.5 px-3 text-[11px] font-bold tracking-tight uppercase shadow-sm"
-					>
-						<LogIn class="h-3.5 w-3.5" />
-						<span>Sign In</span>
-					</Button>
-				{/if}
-				<div class="origin-right scale-75">
-					<ThemeToggle />
+		<!-- Right side actions -->
+		<div class="hidden items-center gap-2 md:flex">
+			{#if auth.isLoading && !user}
+				<div class="flex items-center gap-2">
+					<div class="h-8 w-20 animate-pulse rounded-md bg-muted"></div>
 				</div>
-			</div>
+			{:else if user}
+				<!-- User Dropdown Menu -->
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger>
+						{#snippet child({ props })}
+							<Button
+								variant="ghost"
+								size="sm"
+								class="h-9 gap-2 px-3 text-sm font-medium text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+								{...props}
+							>
+								<div class="flex h-6 w-6 items-center justify-center rounded-full bg-foreground/10">
+									<User class="h-3.5 w-3.5" />
+								</div>
+								<span class="max-w-24 truncate">{user.name ?? 'Account'}</span>
+								<ChevronDown class="h-3.5 w-3.5 opacity-60" />
+							</Button>
+						{/snippet}
+					</DropdownMenu.Trigger>
+					<DropdownMenu.Content align="end" class="w-56">
+						<DropdownMenu.Label>
+							<div class="flex flex-col space-y-1">
+								<p class="text-sm leading-none font-medium">{user.name}</p>
+								<p class="text-xs leading-none text-muted-foreground">
+									{user.email}
+								</p>
+							</div>
+						</DropdownMenu.Label>
+						<DropdownMenu.Separator />
+						<DropdownMenu.Group>
+							<DropdownMenu.Item>
+								<a href="/dashboard" class="flex w-full items-center">
+									<LayoutDashboard class="mr-2.5 h-4 w-4 text-muted-foreground" />
+									<span>Dashboard</span>
+								</a>
+							</DropdownMenu.Item>
+							{#if isAdmin}
+								<DropdownMenu.Item>
+									<a href="/admin" class="flex w-full items-center">
+										<ShieldCheck class="mr-2.5 h-4 w-4 text-muted-foreground" />
+										<span>Admin</span>
+									</a>
+								</DropdownMenu.Item>
+							{/if}
+							<DropdownMenu.Item>
+								<a href="/profile" class="flex w-full items-center">
+									<User class="mr-2.5 h-4 w-4 text-muted-foreground" />
+									<span>Profile</span>
+								</a>
+							</DropdownMenu.Item>
+						</DropdownMenu.Group>
+						<DropdownMenu.Separator />
+						<DropdownMenu.Item onclick={signOut}>
+							<LogOut class="mr-2.5 h-4 w-4 text-muted-foreground" />
+							<span>Sign Out</span>
+						</DropdownMenu.Item>
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			{:else}
+				<Button
+					variant="default"
+					size="sm"
+					href="/signin"
+					class="h-9 gap-2 px-4 text-sm font-medium"
+				>
+					<span>Sign In</span>
+				</Button>
+			{/if}
+			<ThemeToggle />
 		</div>
 
 		<!-- Mobile Menu Button -->
-		<div class="flex items-center gap-1 md:hidden">
-			<div class="origin-right scale-75">
-				<ThemeToggle />
-			</div>
+		<div class="flex items-center gap-2 md:hidden">
+			<ThemeToggle />
 			<Button
 				variant="ghost"
 				size="icon"
-				class="h-8 w-8"
+				class="h-9 w-9"
 				onclick={() => (isMobileMenuOpen = !isMobileMenuOpen)}
 				aria-label="Toggle menu"
 			>
 				{#if isMobileMenuOpen}
-					<X class="h-4 w-4" />
+					<X class="h-5 w-5" />
 				{:else}
-					<Menu class="h-4 w-4" />
+					<Menu class="h-5 w-5" />
 				{/if}
 			</Button>
 		</div>
@@ -244,23 +235,23 @@
 
 	<!-- Mobile Navigation -->
 	{#if isMobileMenuOpen}
-		<div class="border-b border-border bg-background/95 backdrop-blur-md md:hidden">
-			<div class="space-y-0.5 px-4 py-3">
+		<div class="border-t border-border/40 bg-background md:hidden">
+			<div class="space-y-1 px-4 py-4">
 				{#if auth.isLoading && !user}
-					<div class="space-y-2 py-2">
-						<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
-						<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
-						<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
+					<div class="space-y-2">
+						<div class="h-11 w-full animate-pulse rounded-lg bg-muted"></div>
+						<div class="h-11 w-full animate-pulse rounded-lg bg-muted"></div>
+						<div class="h-11 w-full animate-pulse rounded-lg bg-muted"></div>
 					</div>
 				{:else}
 					<!-- In mobile, show items grouped logically -->
 					{#each filteredNavItems.filter((item) => !item.inPrep) as item}
 						<a
 							href={item.href}
-							class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent {page
+							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors {page
 								.url.pathname === item.href
-								? 'bg-accent/50 text-primary'
-								: 'text-muted-foreground'}"
+								? 'bg-accent text-foreground'
+								: 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}"
 							onclick={() => (isMobileMenuOpen = false)}
 						>
 							<item.icon class="h-4 w-4" />
@@ -268,38 +259,40 @@
 						</a>
 					{/each}
 
-					<div class="mt-4 mb-1 px-3">
-						<p class="text-[10px] font-bold tracking-widest text-muted-foreground/60 uppercase">
-							Prep Tools
-						</p>
-					</div>
+					{#if prepItems.length > 0}
+						<div class="pt-4 pb-1">
+							<p class="px-3 text-xs font-medium tracking-wide text-muted-foreground/60 uppercase">
+								Prep Tools
+							</p>
+						</div>
 
-					{#each prepItems as item}
-						<a
-							href={item.href}
-							class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent {page
-								.url.pathname === item.href
-								? 'bg-accent/50 text-primary'
-								: 'text-muted-foreground'}"
-							onclick={() => (isMobileMenuOpen = false)}
-						>
-							<item.icon class="h-4 w-4" />
-							{item.name}
-						</a>
-					{/each}
+						{#each prepItems as item}
+							<a
+								href={item.href}
+								class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors {page
+									.url.pathname === item.href
+									? 'bg-accent text-foreground'
+									: 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}"
+								onclick={() => (isMobileMenuOpen = false)}
+							>
+								<item.icon class="h-4 w-4" />
+								{item.name}
+							</a>
+						{/each}
+					{/if}
 				{/if}
 
-				<Separator class="my-2" />
+				<Separator class="my-3" />
 
 				<div>
 					{#if auth.isLoading && !user}
-						<div class="mt-2 space-y-2">
-							<div class="h-12 w-full animate-pulse rounded-lg bg-muted/60"></div>
+						<div class="mt-2">
+							<div class="h-11 w-full animate-pulse rounded-lg bg-muted"></div>
 						</div>
 					{:else if user}
 						<a
 							href="/profile"
-							class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent"
+							class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
 							onclick={() => (isMobileMenuOpen = false)}
 						>
 							<User class="h-4 w-4" />
@@ -310,7 +303,7 @@
 								signOut();
 								isMobileMenuOpen = false;
 							}}
-							class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+							class="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
 						>
 							<LogOut class="h-4 w-4" />
 							Sign Out
@@ -318,7 +311,7 @@
 					{:else}
 						<a
 							href="/signin"
-							class="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+							class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-accent/50"
 							onclick={() => (isMobileMenuOpen = false)}
 						>
 							<LogIn class="h-4 w-4" />

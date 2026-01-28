@@ -22,7 +22,8 @@
 		Sparkles,
 		ChevronLeft,
 		ChevronRight,
-		Tag
+		Tag,
+		ChevronDown
 	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { Markdown } from '$lib/components/prompt-kit/markdown/index.js';
@@ -148,73 +149,85 @@
 </script>
 
 <div class="container mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-	<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-		<div class="space-y-1">
-			<h1 class="text-3xl font-bold tracking-tight">Article Management</h1>
+	<!-- Header -->
+	<div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+		<div class="space-y-2">
+			<div class="flex items-center gap-2">
+				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+					<FileText class="h-4 w-4 text-primary" />
+				</div>
+				<h1 class="text-3xl font-semibold tracking-tight">Article Management</h1>
+			</div>
 			<p class="text-muted-foreground">Manage AI-synthesized articles for entities.</p>
 		</div>
 	</div>
 
 	{#if isEditing}
 		<div class="space-y-6">
-			<Card.Root class="overflow-hidden border-primary/10 shadow-lg">
-				<Card.Header class="bg-muted/30 pb-4">
-					<div class="flex items-center justify-between">
-						<div>
-							<Card.Title>Edit Article: {editingEntity.name}</Card.Title>
-							<Card.Description>
-								{editingEntity.type} • {editingEntity.segmentCount} segments linked
-							</Card.Description>
-						</div>
-						<div class="flex gap-2">
-							<Button
-								variant="outline"
-								size="sm"
-								onclick={handleGenerate}
-								disabled={isGenerating}
-								class="gap-2"
-							>
-								{#if isGenerating}
-									<Loader variant="circular" size="sm" />
-									Generating...
-								{:else}
-									<Sparkles class="h-4 w-4" />
-									Regenerate with AI
-								{/if}
-							</Button>
-							<Button
-								variant="ghost"
-								size="icon"
-								onclick={() => (isEditing = false)}
-								class="rounded-full"
-							>
-								<X class="h-4 w-4" />
-							</Button>
-						</div>
+			<div
+				class="overflow-hidden rounded-xl border border-primary/20 bg-card shadow-sm ring-1 ring-primary/5"
+			>
+				<div class="flex items-center justify-between border-b bg-muted/30 px-6 py-4">
+					<div>
+						<h2 class="flex items-center gap-2 text-lg font-semibold">
+							Edit Article: {editingEntity.name}
+						</h2>
+						<p class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+							<Badge variant="outline" class="h-5 px-1.5 capitalize">{editingEntity.type}</Badge>
+							<span>•</span>
+							<span>{editingEntity.segmentCount} segments linked</span>
+						</p>
 					</div>
-				</Card.Header>
-				<Separator />
-				<Card.Content class="pt-6">
-					<div class="mb-4 flex items-center gap-2">
+					<div class="flex items-center gap-2">
 						<Button
-							variant={showPreview ? 'outline' : 'default'}
+							variant="outline"
 							size="sm"
+							onclick={handleGenerate}
+							disabled={isGenerating}
+							class="h-9 gap-2 font-medium"
+						>
+							{#if isGenerating}
+								<Loader variant="circular" size="sm" />
+								Generating...
+							{:else}
+								<Sparkles class="h-4 w-4" />
+								Regenerate with AI
+							{/if}
+						</Button>
+						<Button
+							variant="ghost"
+							size="icon"
+							onclick={() => (isEditing = false)}
+							class="h-9 w-9 rounded-full"
+						>
+							<X class="h-4 w-4" />
+						</Button>
+					</div>
+				</div>
+
+				<div class="p-6">
+					<div class="mb-6 flex w-fit items-center gap-2 rounded-lg bg-muted/20 p-1">
+						<button
+							class="rounded-md px-4 py-1.5 text-sm font-medium transition-all {!showPreview
+								? 'bg-background text-foreground shadow-sm'
+								: 'text-muted-foreground hover:text-foreground'}"
 							onclick={() => (showPreview = false)}
 						>
 							Edit
-						</Button>
-						<Button
-							variant={showPreview ? 'default' : 'outline'}
-							size="sm"
+						</button>
+						<button
+							class="rounded-md px-4 py-1.5 text-sm font-medium transition-all {showPreview
+								? 'bg-background text-foreground shadow-sm'
+								: 'text-muted-foreground hover:text-foreground'}"
 							onclick={() => (showPreview = true)}
 						>
 							Preview
-						</Button>
+						</button>
 					</div>
 
 					{#if showPreview}
 						<div
-							class="prose prose-zinc dark:prose-invert min-h-[400px] max-w-none rounded-md border p-6"
+							class="prose prose-zinc dark:prose-invert min-h-[500px] max-w-none rounded-xl border bg-muted/10 p-8"
 						>
 							<Markdown content={articleContent} />
 						</div>
@@ -222,13 +235,13 @@
 						<Textarea
 							bind:value={articleContent}
 							placeholder="Article content in Markdown..."
-							class="min-h-[500px] font-mono text-sm leading-relaxed"
+							class="min-h-[600px] resize-y p-6 font-mono text-sm leading-relaxed"
 						/>
 					{/if}
 
-					<div class="mt-6 flex justify-end gap-3">
+					<div class="mt-6 flex justify-end gap-3 border-t pt-6">
 						<Button variant="outline" onclick={() => (isEditing = false)}>Cancel</Button>
-						<Button onclick={handleSave} disabled={isSaving} class="gap-2">
+						<Button onclick={handleSave} disabled={isSaving} class="min-w-[120px] gap-2">
 							{#if isSaving}
 								<Loader variant="circular" size="sm" />
 								Saving...
@@ -238,55 +251,76 @@
 							{/if}
 						</Button>
 					</div>
-				</Card.Content>
-			</Card.Root>
+				</div>
+			</div>
 		</div>
 	{:else}
-		<Card.Root class="mb-6">
-			<Card.Header class="pb-4">
-				<Card.Title>Filters</Card.Title>
-			</Card.Header>
-			<Card.Content>
-				<div class="flex flex-col gap-4 sm:flex-row">
-					<div class="relative flex-1">
+		<div class="mb-8 rounded-xl border bg-card p-5 shadow-sm">
+			<div class="mb-4 flex items-center gap-2 border-b pb-4">
+				<Search class="h-4 w-4 text-muted-foreground" />
+				<h3 class="font-semibold">Filters</h3>
+			</div>
+
+			<div class="flex flex-col items-end gap-4 sm:flex-row">
+				<div class="relative w-full flex-1">
+					<label
+						for="search"
+						class="mb-1.5 block text-xs font-medium tracking-wide text-muted-foreground uppercase"
+						>Search Entity</label
+					>
+					<div class="relative">
 						<Search
 							class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
 						/>
 						<Input
+							id="search"
 							type="text"
 							placeholder="Search entities (local)..."
 							bind:value={searchQuery}
-							class="pl-10"
+							class="h-10 pl-9"
 						/>
-					</div>
-					<select
-						bind:value={selectedType}
-						onchange={applyFilters}
-						class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none sm:w-[200px]"
-					>
-						<option value="">All Types</option>
-						{#if typesQuery.data}
-							{#each typesQuery.data as t}
-								<option value={t.type}>{t.type}</option>
-							{/each}
-						{/if}
-					</select>
-
-					<div class="flex items-center gap-2 px-2">
-						<input
-							type="checkbox"
-							id="onlyGenerated"
-							bind:checked={onlyGenerated}
-							onchange={applyFilters}
-							class="h-4 w-4 rounded border-input"
-						/>
-						<label for="onlyGenerated" class="text-sm font-medium whitespace-nowrap">
-							Generated Only
-						</label>
 					</div>
 				</div>
-			</Card.Content>
-		</Card.Root>
+				<div class="w-full sm:w-[240px]">
+					<label
+						for="type"
+						class="mb-1.5 block text-xs font-medium tracking-wide text-muted-foreground uppercase"
+						>Entity Type</label
+					>
+					<div class="relative">
+						<select
+							id="type"
+							bind:value={selectedType}
+							onchange={applyFilters}
+							class="flex h-10 w-full appearance-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+						>
+							<option value="">All Types</option>
+							{#if typesQuery.data}
+								{#each typesQuery.data as t}
+									<option value={t.type}>{t.type}</option>
+								{/each}
+							{/if}
+						</select>
+						<ChevronDown
+							class="pointer-events-none absolute top-3 right-3 h-4 w-4 text-muted-foreground"
+						/>
+					</div>
+				</div>
+
+				<div class="flex h-10 items-center gap-2 px-2 pb-1">
+					<input
+						type="checkbox"
+						id="onlyGenerated"
+						bind:checked={onlyGenerated}
+						onchange={applyFilters}
+						class="h-4 w-4 rounded border-input text-primary focus:ring-primary/20"
+					/>
+					<label for="onlyGenerated" class="text-sm font-medium whitespace-nowrap">
+						Generated Only
+					</label>
+				</div>
+			</div>
+		</div>
 
 		{#if entitiesQuery.isLoading}
 			<div class="grid gap-4">
@@ -298,101 +332,108 @@
 			{@const filtered = entitiesQuery.data.page.filter(
 				(e: any) => !searchQuery || e.name.toLowerCase().includes(searchQuery.toLowerCase())
 			)}
-			<Card.Root>
-				<Card.Content class="p-0">
-					<div class="overflow-x-auto">
-						<table class="w-full text-left text-sm">
-							<thead>
-								<tr class="border-b bg-muted/50">
-									<th class="h-12 px-4 font-medium text-muted-foreground">Entity Name</th>
-									<th class="h-12 px-4 font-medium text-muted-foreground">Type</th>
-									<th class="h-12 px-4 font-medium text-muted-foreground">Segments</th>
-									<th class="h-12 px-4 font-medium text-muted-foreground">Status</th>
-									<th class="h-12 px-4 font-medium text-muted-foreground">Last Updated</th>
-									<th class="h-12 px-4 text-right font-medium text-muted-foreground">Actions</th>
-								</tr>
-							</thead>
-							<tbody class="divide-y">
-								{#each filtered as entity}
-									<tr class="transition-colors hover:bg-muted/30">
-										<td class="px-4 py-3 font-semibold">{entity.name}</td>
-										<td class="px-4 py-3">
-											<Badge variant="outline" class="capitalize">{entity.type}</Badge>
-										</td>
-										<td class="px-4 py-3 text-muted-foreground">{entity.segmentCount}</td>
-										<td class="px-4 py-3">
+			<div class="overflow-hidden rounded-xl border bg-card shadow-sm">
+				<div class="overflow-x-auto">
+					<table class="w-full text-left text-sm">
+						<thead>
+							<tr class="border-b bg-muted/30">
+								<th class="px-6 py-4 font-semibold text-muted-foreground">Entity Name</th>
+								<th class="px-6 py-4 font-semibold text-muted-foreground">Type</th>
+								<th class="px-6 py-4 font-semibold text-muted-foreground">Segments</th>
+								<th class="px-6 py-4 font-semibold text-muted-foreground">Status</th>
+								<th class="px-6 py-4 font-semibold text-muted-foreground">Last Updated</th>
+								<th class="px-6 py-4 text-right font-semibold text-muted-foreground">Actions</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y">
+							{#each filtered as entity (entity._id)}
+								<tr class="group transition-colors hover:bg-muted/30">
+									<td class="px-6 py-4">
+										<div class="font-bold text-foreground">{entity.name}</div>
+									</td>
+									<td class="px-6 py-4">
+										<Badge variant="secondary" class="font-medium capitalize">{entity.type}</Badge>
+									</td>
+									<td class="px-6 py-4">
+										<div class="flex items-center gap-1.5 text-muted-foreground">
+											<Tag class="h-3.5 w-3.5" />
+											<span class="font-medium tabular-nums">{entity.segmentCount}</span>
+										</div>
+									</td>
+									<td class="px-6 py-4">
+										{#if entity.article}
+											<Badge
+												variant="outline"
+												class="border-emerald-500/20 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400"
+											>
+												Synthesized
+											</Badge>
+										{:else}
+											<Badge variant="outline" class="text-muted-foreground">Draft</Badge>
+										{/if}
+									</td>
+									<td class="px-6 py-4 text-xs text-muted-foreground tabular-nums">
+										{formatDate(entity.articleUpdatedAt)}
+									</td>
+									<td class="px-6 py-4 text-right">
+										<div
+											class="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+										>
+											<Button
+												variant="ghost"
+												size="icon"
+												onclick={() => startEdit(entity)}
+												class="h-8 w-8 rounded-full"
+												title="Edit Article"
+											>
+												<Pencil class="h-3.5 w-3.5" />
+											</Button>
 											{#if entity.article}
-												<Badge
-													variant="secondary"
-													class="gap-1 border-emerald-500/20 bg-emerald-500/10 text-emerald-600"
-												>
-													<FileText class="h-3 w-3" />
-													Generated
-												</Badge>
-											{:else}
-												<Badge variant="outline" class="text-muted-foreground opacity-50"
-													>None</Badge
-												>
-											{/if}
-										</td>
-										<td class="px-4 py-3 text-xs text-muted-foreground">
-											{formatDate(entity.articleGeneratedAt)}
-										</td>
-										<td class="px-4 py-3 text-right">
-											<div class="flex justify-end gap-1">
 												<Button
 													variant="ghost"
-													size="icon-sm"
-													title="Edit Article"
-													onclick={() => startEdit(entity)}
-													class="rounded-full"
+													size="icon"
+													onclick={() => handleDeleteArticle(entity._id)}
+													class="h-8 w-8 rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+													title="Remove Article"
 												>
-													<Pencil class="h-4 w-4" />
+													<Trash2 class="h-3.5 w-3.5" />
 												</Button>
-												{#if entity.article}
-													<Button
-														variant="ghost"
-														size="icon-sm"
-														title="Remove Article"
-														class="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
-														onclick={() => handleDeleteArticle(entity._id)}
-													>
-														<Trash2 class="h-4 w-4" />
-													</Button>
-												{/if}
+											{/if}
+										</div>
+									</td>
+								</tr>
+							{:else}
+								<tr>
+									<td colspan="6" class="px-6 py-20 text-center">
+										<div class="flex flex-col items-center gap-3">
+											<div class="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+												<Search class="h-6 w-6 text-muted-foreground/50" />
 											</div>
-										</td>
-									</tr>
-								{:else}
-									<tr>
-										<td colspan="6" class="px-6 py-12 text-center">
-											<div class="flex flex-col items-center gap-2">
-												<Tag class="h-12 w-12 text-muted-foreground/20" />
-												<h3 class="font-semibold text-foreground">No entities found</h3>
-												<p class="text-sm text-muted-foreground">
-													Try adjusting your search or filters.
-												</p>
-											</div>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				</Card.Content>
-			</Card.Root>
-
-			<div class="mt-4 flex items-center justify-between px-2">
-				<div class="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
-					Page {cursorHistory.length + 1} · {entitiesQuery.data.page.length} items
+											<h3 class="font-semibold text-foreground">No entities found</h3>
+											<p class="text-sm text-muted-foreground max-w-xs mx-auto">
+												Try adjusting your search or filters.
+											</p>
+										</div>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				</div>
-				<div class="flex items-center gap-1.5">
+			</div>
+
+			<div class="mt-6 flex items-center justify-between px-2">
+				<div class="text-xs font-medium text-muted-foreground">
+					Page <span class="font-bold text-foreground">{cursorHistory.length + 1}</span> · {entitiesQuery
+						.data.page.length} items
+				</div>
+				<div class="flex items-center gap-2">
 					<Button
 						variant="outline"
 						size="sm"
 						onclick={prevPage}
 						disabled={cursorHistory.length === 0}
-						class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
+						class="h-8 gap-1.5 px-3 text-xs font-semibold"
 					>
 						<ChevronLeft class="h-3.5 w-3.5" />
 						Previous
@@ -402,7 +443,7 @@
 						size="sm"
 						onclick={nextPage}
 						disabled={entitiesQuery.data.isDone}
-						class="h-7 gap-1 px-2 text-[10px] font-bold tracking-tight uppercase"
+						class="h-8 gap-1.5 px-3 text-xs font-semibold"
 					>
 						Next
 						<ChevronRight class="h-3.5 w-3.5" />
