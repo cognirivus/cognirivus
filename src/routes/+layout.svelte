@@ -24,7 +24,7 @@
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 <ModeWatcher />
 
-<div class="flex h-screen flex-col overflow-hidden">
+<div class="flex h-screen flex-col overflow-auto">
 	{#if showNavbar}
 		<Navbar />
 	{:else}
