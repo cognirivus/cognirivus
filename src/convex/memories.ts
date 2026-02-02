@@ -7,7 +7,7 @@ import {
 	internalQuery,
 	internalAction
 } from './_generated/server';
-import { internal } from './_generated/api';
+import { internal, api } from './_generated/api';
 import {
 	createEmbedding,
 	extractMemories,
@@ -77,7 +77,11 @@ export const addMemory = internalAction({
 	},
 	handler: async (ctx, args) => {
 		// 1. Extract potential memories
-		const { memories: extracted, generationId } = await extractMemories(args.messageText);
+		const modelConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'memory_extraction' });
+		const { memories: extracted, generationId } = await extractMemories(
+			args.messageText,
+			modelConfig?.modelId
+		);
 
 		// Log extraction usage
 		const stats = await getGenerationStats(generationId);
@@ -99,11 +103,17 @@ export const addMemory = internalAction({
 
 		const newlyLearned: { text: string; category: string }[] = [];
 
+		const embedConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'embeddings' });
+		const judgeConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'memory_judge' });
+
 		// Process memories in parallel to avoid long sequential waits for stats
 		await Promise.all(
 			extracted.map(async (memory) => {
 				try {
-					const { embedding, generationId: embedGenId } = await createEmbedding(memory.text);
+					const { embedding, generationId: embedGenId } = await createEmbedding(
+						memory.text,
+						embedConfig?.modelId
+					);
 
 					// Log embedding usage
 					const embedStats = await getGenerationStats(embedGenId);
@@ -245,7 +255,8 @@ export const searchMemories = internalAction({
 		limit: v.optional(v.number())
 	},
 	handler: async (ctx, args): Promise<any[]> => {
-		const { embedding, generationId } = await createEmbedding(args.queryText);
+		const embedConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'embeddings' });
+		const { embedding, generationId } = await createEmbedding(args.queryText, embedConfig?.modelId);
 
 		// Log embedding usage for search
 		const stats = await getGenerationStats(generationId);
@@ -379,7 +390,8 @@ export const formulateQuery = internalAction({
 		)
 	},
 	handler: async (ctx, { userId, messages }): Promise<string> => {
-		const { result, generationId } = await formulateStandaloneQuery(messages);
+		const queryConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'standalone_query' });
+		const { result, generationId } = await formulateStandaloneQuery(messages, queryConfig?.modelId);
 
 		// Log standalone query usage
 		const stats = await getGenerationStats(generationId);
@@ -441,7 +453,11 @@ Return ONLY the rephrased query text. If the message is already standalone, retu
 		const rewriterInput = [systemMessage, ...history];
 
 		// 2. Formulate standalone query
-		const { result: formulatedQuery, generationId } = await formulateStandaloneQuery(history);
+		const queryConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'standalone_query' });
+		const { result: formulatedQuery, generationId } = await formulateStandaloneQuery(
+			history,
+			queryConfig?.modelId
+		);
 
 		// Log standalone query usage
 		const stats = await getGenerationStats(generationId);

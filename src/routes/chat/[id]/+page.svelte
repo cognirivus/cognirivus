@@ -90,7 +90,7 @@
 	async function triggerResponse() {
 		chatState.status = 'streaming';
 		try {
-			// @ts-ignore - useRag might not be in generated types yet
+			// Chat generation with integrated multi-agent routing
 			await client.action(api.chat.generate, {
 				threadId,
 				model: chatState.selectedModel,
@@ -98,7 +98,6 @@
 				generateImage: chatState.generateImage,
 				imageAspectRatio: chatState.generateImage ? chatState.imageAspectRatio : undefined,
 				useMemory: chatState.useMemory,
-				// @ts-ignore
 				useRag: chatState.useRag
 			});
 		} catch (e: any) {

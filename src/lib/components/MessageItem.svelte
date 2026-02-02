@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Terminal, Square, Image, ImageOff, Brain, BookOpen } from '@lucide/svelte';
+	import { Terminal, Square, Image, ImageOff, Brain, BookOpen, Bot, Wrench } from '@lucide/svelte';
 	import { Message, MessageContent } from '$lib/components/prompt-kit/message/index.js';
 	import {
 		Reasoning,
@@ -10,6 +10,8 @@
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import MultiAgentMessage from './MultiAgentMessage.svelte';
+	import AgentWorkCollapsible from './AgentWorkCollapsible.svelte';
 
 	let { message, isLast, isStreaming, onViewContext } = $props<{
 		message: any;
@@ -51,28 +53,39 @@
 >
 	<Message class="w-full flex-col gap-2 {message.role === 'user' ? 'items-end' : 'items-start'}">
 		{#if message.role === 'assistant'}
-			{#if message.reasoning}
-				<Reasoning isStreaming={isLast && isStreaming && !message.body}>
-					<ReasoningTrigger
-						onclick={(e) => e.stopPropagation()}
-						class="text-sm text-muted-foreground transition-colors hover:text-foreground"
-					>
-						Reasoning
-					</ReasoningTrigger>
-					<ReasoningContent
-						markdown
-						content={message.reasoning}
-						class="border-l-2 border-border pl-4 italic"
-					/>
-				</Reasoning>
-			{/if}
+			{#if message.metadata?.agentName}
+				<!-- Legacy Multi-Agent Message Display (for old messages) -->
+				<MultiAgentMessage {message} {isStreaming} />
+			{:else}
+				<!-- Agent Work Collapsible (new flow - agent work + chat response) -->
+				<!-- Hide for chat agent without tools since its output is shown directly in the message -->
+				{#if message.metadata?.agentWork && (message.metadata.agentWork.agentName !== 'chat' || message.metadata.agentWork.toolExecutions?.length > 0)}
+					<AgentWorkCollapsible agentWork={message.metadata.agentWork} />
+				{/if}
 
-			{#if message.body}
-				<MessageContent
-					markdown
-					content={message.body}
-					class="w-full max-w-none bg-transparent p-0 leading-relaxed"
-				/>
+				{#if message.reasoning}
+					<Reasoning isStreaming={isLast && isStreaming && !message.body}>
+						<ReasoningTrigger
+							onclick={(e) => e.stopPropagation()}
+							class="text-sm text-muted-foreground transition-colors hover:text-foreground"
+						>
+							Reasoning
+						</ReasoningTrigger>
+						<ReasoningContent
+							markdown
+							content={message.reasoning}
+							class="border-l-2 border-border pl-4 italic"
+						/>
+					</Reasoning>
+				{/if}
+
+				{#if message.body}
+					<MessageContent
+						markdown
+						content={message.body}
+						class="w-full max-w-none bg-transparent p-0 leading-relaxed"
+					/>
+				{/if}
 			{/if}
 
 			{#if message.imageUrls?.length > 0 || message.deletedImageCount > 0}

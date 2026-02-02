@@ -598,6 +598,9 @@ export const runJob = action({
 		const config = EXTRACTION_PROMPTS[job.extractionType as ExtractionType];
 		if (!config) throw new Error(`Invalid extraction type: ${job.extractionType}`);
 
+		const modelConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'extraction' });
+		const modelToUse = modelConfig?.modelId || DEFAULT_MODEL;
+
 		let processedItems = 0;
 		let failedItems = 0;
 		let extractedCount = 0;
@@ -644,7 +647,9 @@ export const runJob = action({
 						'X-Title': `Cognirivus ${config.name} Extractor`
 					},
 					body: JSON.stringify({
-						model: DEFAULT_MODEL,
+						model: modelToUse,
+						temperature: modelConfig?.temperature ?? 0.1,
+						max_tokens: modelConfig?.maxTokens,
 						messages: [
 							{
 								role: 'system',
@@ -855,6 +860,9 @@ export const executeJob = internalAction({
 		const config = EXTRACTION_PROMPTS[job.extractionType as ExtractionType];
 		if (!config) throw new Error(`Invalid extraction type: ${job.extractionType}`);
 
+		const modelConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'extraction' });
+		const modelToUse = modelConfig?.modelId || DEFAULT_MODEL;
+
 		let processedItems = 0;
 		let failedItems = 0;
 		let extractedCount = 0;
@@ -901,7 +909,9 @@ export const executeJob = internalAction({
 						'X-Title': `Cognirivus ${config.name} Extractor`
 					},
 					body: JSON.stringify({
-						model: DEFAULT_MODEL,
+						model: modelToUse,
+						temperature: modelConfig?.temperature ?? 0.1,
+						max_tokens: modelConfig?.maxTokens,
 						messages: [
 							{
 								role: 'system',

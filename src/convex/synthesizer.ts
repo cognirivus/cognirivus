@@ -55,6 +55,9 @@ export const generateArticle = action({
 		});
 
 		// 5. Call AI
+		const modelConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'synthesis' });
+		const modelToUse = modelConfig?.modelId || 'google/gemini-2.0-flash-lite-001';
+
 		const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
 			method: 'POST',
 			headers: {
@@ -64,7 +67,9 @@ export const generateArticle = action({
 				'X-Title': 'Cognirivus UPSC Synthesizer'
 			},
 			body: JSON.stringify({
-				model: 'google/gemini-2.0-flash-lite-001',
+				model: modelToUse,
+				temperature: modelConfig?.temperature ?? 0.3,
+				max_tokens: modelConfig?.maxTokens,
 				messages: [
 					{
 						role: 'system',

@@ -43,6 +43,9 @@ export const extractFromNews = action({
 
 			// 4. Call OpenRouter
 			try {
+				const modelConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'locations' });
+				const modelToUse = modelConfig?.modelId || 'google/gemini-2.5-flash-lite';
+
 				const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
 					method: 'POST',
 					headers: {
@@ -52,7 +55,9 @@ export const extractFromNews = action({
 						'X-Title': 'Cognirivus Chat'
 					},
 					body: JSON.stringify({
-						model: 'google/gemini-2.5-flash-lite',
+						model: modelToUse,
+						temperature: modelConfig?.temperature ?? 0.3,
+						max_tokens: modelConfig?.maxTokens,
 						messages: [
 							{
 								role: 'system',

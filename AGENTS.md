@@ -1,115 +1,152 @@
 # AGENTS.md - Cognirivus Chat
 
-This file contains essential information for AI coding agents (like yourself) to operate effectively and safely within the Cognirivus Chat repository.
+Essential guidance for AI coding agents operating in this repository.
 
-## Commands
+---
 
-### Development & Build
+## Tech Stack
 
-- **Dev server:** `pnpm dev` (Vite + SvelteKit)
-- **Build:** `pnpm build` (NEVER run without explicit user permission)
-- **Type check:** `pnpm check` (Runs `svelte-check` for runes and types)
-- **Linting:** `pnpm lint` (Prettier check + ESLint)
+| Layer      | Technology                                                     |
+| ---------- | -------------------------------------------------------------- |
+| Frontend   | SvelteKit 2 + Svelte 5 (runes)                                 |
+| Styling    | TailwindCSS 4                                                  |
+| Components | shadcn-svelte (`bits-ui`) → `src/lib/components/ui/`           |
+| Backend    | Convex → `src/convex/`                                         |
+| Auth       | better-auth with Convex adapter                                |
+| AI         | OpenRouter API + Vercel AI SDK (`@openrouter/ai-sdk-provider`) |
+| Storage    | Cloudflare R2 (large text content)                             |
+| Schema     | `src/convex/schema.ts`                                         |
 
-### Backend (Convex)
+---
 
-- **Convex dev:** `npx convex dev` (Runs backend in watch mode. NEVER run without explicit user permission).
-- **Convex Dashboard:** `npx convex dashboard`
-- **Auth Schema Gen:** `npx @better-auth/cli generate --output src/convex/betterAuth/schema.ts -y` (NEVER run without explicit user permission)
+## Critical Rules
 
-### Testing (Vitest)
+1. **Convex code**: Always read `convex_rules.txt` before writing Convex functions.
+2. **Never run** `pnpm build` or `npx convex dev` without explicit user permission.
+3. **No secrets**: Never commit `.env` or credentials.
+4. **Large content**: Never store text >1000 chars directly in Convex—use R2.
 
-- **Run all tests:** `npx vitest run`
-- **Run in watch mode:** `npx vitest`
-- **Run single file:** `npx vitest run path/to/file.test.ts`
-- **Run single test:** `npx vitest run -t "test name pattern"`
+---
 
-## Architecture & Tech Stack
+## Naming Conventions
 
-- **Frontend:** SvelteKit 2 + Svelte 5 (runes: `$state`, `$derived`, `$effect`, `$props`).
-- **Styling:** TailwindCSS 4.
-- **Components:** shadcn-svelte (based on `bits-ui`) in `src/lib/components/ui/`.
-- **Backend:** Convex (serverless DB + functions) in `src/convex/`.
-- **Large Text Storage:** Cloudflare R2 for full text content (news, syllabus, blogs). Convex stores metadata and `r2Key`. See `docs/R2_STORAGE.md`.
-- **Auth:** better-auth with Convex adapter (`src/convex/auth.ts`, `src/lib/auth-client.ts`).
-- **AI Integration:** Direct OpenRouter API and Vercel AI SDK (`ai` package) with `@openrouter/ai-sdk-provider`.
-- **Schema:** Defined in `src/convex/schema.ts`. Key tables: `messages`, `threads`, `usage_logs`, `content`, `subjects`, `entities`.
+| Type                | Convention             | Example                           |
+| ------------------- | ---------------------- | --------------------------------- |
+| Svelte Components   | `PascalCase.svelte`    | `MessageItem.svelte`              |
+| Functions/Variables | `camelCase`            | `getUserData`                     |
+| Constants           | `SCREAMING_SNAKE_CASE` | `MAX_RETRIES`                     |
+| DB Indexes          | `by_field_name`        | `by_thread`, `by_user_updated_at` |
 
-## Code Style & Conventions
+---
 
-### Formatting (Prettier)
+## Svelte 5 Patterns
 
-- **Tabs:** Use tabs for indentation.
-- **Quotes:** Single quotes.
-- **Trailing Commas:** None.
-- **Line Width:** 100 characters.
-- **Svelte:** Components use Svelte 5 syntax.
-
-### TypeScript & Types
-
-- **Strict Mode:** `strict: true` is enforced. No `any` unless absolutely necessary (e.g., in generic wrappers).
-- **Validation:** Use `zod` for all frontend and Convex Action input validation.
-- **Naming:**
-  - **Svelte Components:** `PascalCase.svelte` (e.g., `MessageItem.svelte`).
-  - **Functions/Variables:** `camelCase`.
-  - **Constants:** `SCREAMING_SNAKE_CASE`.
-  - **DB Indexes:** `by_field_name` (e.g., `by_thread`, `by_user_updated_at`).
-
-### Svelte 5 (Runes) Patterns
-
-- Use `$state` for reactive state, `$derived` for computed values, and `$effect` for side effects.
-- Reactive modules (shared state) should use `.svelte.ts` extension.
-- Prefer event handlers as props (e.g., `onclick={() => ...}`) over deprecated `createEventDispatcher`.
+- Use `$state` for reactive state, `$derived` for computed, `$effect` for side effects.
 - Use `$props()` for component properties.
+- Reactive modules → `.svelte.ts` extension.
+- Event handlers as props: `onclick={() => ...}` (not `createEventDispatcher`).
+- **Always** check svelte MCP server for docs before writing Svelte code.
 
-### Convex Backend Patterns
+---
 
-- **Function Types:**
-  - `query`/`mutation`: Publicly accessible (with auth checks).
-  - `internalQuery`/`internalMutation`: Backend-only (use via `internal.path.to.func`).
-  - `action`: For network requests (AI, R2), cannot directly modify DB; must call mutations.
-- **Validation:** Every Convex function MUST have an `args` object using `v` validators from `convex/values`.
-- **Auth:** Use `authComponent.getAuthUser(ctx)` in Convex functions to verify user session.
-- **Indexing:** Always define indexes for fields used in `.filter()` or `.eq()` queries. Prefer `.withIndex()` over full table scans.
+## Convex Patterns
 
-### Large Content Management (R2)
+| Function Type                        | Use Case                                             |
+| ------------------------------------ | ---------------------------------------------------- |
+| `query` / `mutation`                 | Public (with auth checks)                            |
+| `internalQuery` / `internalMutation` | Backend-only via `internal.path.func`                |
+| `action`                             | Network requests (AI, R2); cannot modify DB directly |
 
-- Never store full article/news text (> 1000 chars) directly in Convex.
-- **Upload Flow:**
-  1. Action generates R2 key.
-  2. Action uploads to R2.
-  3. Action calls `internalMutation` to save metadata + `r2Key` + `snippet` (max 500 chars) to Convex.
-- **Read Flow:** UI fetches `bodyUrl` (signed) from Convex and performs a client-side `fetch(url).text()`.
+- Every function **must** have `args` with `v` validators.
+- Auth: `authComponent.getAuthUser(ctx)`.
+- Always use `.withIndex()` over `.filter()` for queries.
+- **Always** check `convex_rules.txt` for reference before writing Convex code.
 
-### AI & Agent Patterns
+---
 
-- Use the `Agent` class from `@convex-dev/agent` for complex workflows.
-- **Idempotency:** Save the user prompt in a mutation first, then trigger an async action for response generation using `promptMessageId`.
-- **Reasoning:** Handle reasoning/thinking tokens separately from the message body.
+## R2 Storage Flow
 
-### Error Handling
+**Upload:**
 
-- **Backend:** Throw `Error` with descriptive messages. Use `ConvexError` for client-visible structured errors if needed.
-- **Frontend:** Use `svelte-sonner` (toast) for all non-modal error notifications.
+1. Action generates R2 key
+2. Action uploads to R2
+3. Call `internalMutation` to save metadata + `r2Key` + snippet (≤500 chars)
 
-### Imports
+**Read:** Fetch signed `bodyUrl` from Convex, then `fetch(url).text()` client-side.
 
-- **Alias:** Use `$lib/` for project library code.
-- **Environment:** Use `$env/dynamic/private` or `$env/static/private` for sensitive vars.
-- **Convex:** Import `api` and `internal` from `./_generated/api`.
+---
+
+## Imports
+
+```typescript
+// Project code
+import { ... } from '$lib/...'
+
+// Environment
+import { ... } from '$env/dynamic/private'
+
+// Convex
+import { api, internal } from './_generated/api'
+
+// Icons
+import { Icon } from '@lucide/svelte'
+```
+
+---
+
+## Formatting (Prettier)
+
+- Tabs for indentation
+- Single quotes
+- No trailing commas
+- 100 char line width
+
+---
+
+## Error Handling
+
+| Context  | Approach                                                        |
+| -------- | --------------------------------------------------------------- |
+| Backend  | `throw Error('message')` or `ConvexError` for structured errors |
+| Frontend | `svelte-sonner` toast for notifications                         |
+
+---
 
 ## Development Workflow
 
-1.  **Understand:** Search for existing patterns using `grep` or `glob`.
-2.  **Schema First:** If adding data, update `src/convex/schema.ts` and run `npx convex dev`. (NEVER run without explicit user permission)
-3.  **UI:** Implement Svelte 5 components with runes.
-4.  **Verification:** Run `pnpm check` and `pnpm lint` before submitting changes.
-5.  **No Secret Commits:** Never include `.env` or credentials in changes.
+1. **Check docs** first—use MCP servers for relevant documentation
+2. **Load skills**—load relevant skills (e.g., `svelte-code-writer`, `frontend-design`) before starting work
+3. **Search** existing patterns with `grep` / `glob`
+4. **Schema first** if adding data → update `src/convex/schema.ts`
+5. **Implement** Svelte 5 components with runes
+6. **Verify** with `pnpm check` and `pnpm lint`
 
-## Documentation References
+---
 
-- **R2 Pattern:** `docs/R2_STORAGE.md`
-- **Agent Usage:** `docs/convex-agents.md`
-- **OpenRouter SDK:** `docs/openrouter-aisdk.md`
-- **Streaming:** `docs/svelte-streamdown.md`
-- **RAG:** `docs/convex-rag.md`
+## Commands
+
+```bash
+# Development
+pnpm dev              # Start dev server
+pnpm check            # Type check (svelte-check)
+pnpm lint             # Prettier + ESLint
+
+# Testing
+npx vitest run                          # All tests
+npx vitest run path/to/file.test.ts     # Single file
+npx vitest run -t "pattern"             # Single test
+
+# Build (requires permission)
+pnpm build
+npx convex dev
+```
+
+---
+
+## Documentation
+
+- [R2 Storage](docs/R2_STORAGE.md)
+- [Convex Agents](docs/convex-agents.md)
+- [OpenRouter SDK](docs/openrouter-aisdk.md)
+- [Streaming](docs/svelte-streamdown.md)
+- [RAG](docs/convex-rag.md)

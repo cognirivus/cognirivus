@@ -7,7 +7,9 @@
 		FileText,
 		Newspaper,
 		Brain,
-		Sparkles
+		Sparkles,
+		Bot,
+		Cpu
 	} from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
@@ -68,6 +70,16 @@
 			name: 'Articles',
 			href: '/admin/article',
 			icon: FileText
+		},
+		{
+			name: 'Agents',
+			href: '/admin/agents',
+			icon: Bot
+		},
+		{
+			name: 'Models',
+			href: '/admin/models',
+			icon: Cpu
 		}
 	];
 

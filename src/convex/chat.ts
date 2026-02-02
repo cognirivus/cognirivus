@@ -1,29 +1,22 @@
 import { action } from './_generated/server';
 import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
-import { getGenerationStats } from './lib/openrouter';
-import { highlightText } from './lib/semantic';
+import { getGenerationStats, streamChatCompletion } from './lib/llm_client';
 import { authComponent } from './auth';
-import { rag, RAG_CONFIG, type RagEntry, type RagUsage } from './rag';
-import type {
-	Memory,
-	OpenRouterMessage,
-	OpenRouterRequestBody,
-	GeneratedImage,
-	ContextPayload
-} from './types/chat';
+import type { OpenRouterMessage, GeneratedImage, ContextPayload } from './types/chat';
+import { detectIntent, orchestrateMultiAgent, getAgentDisplayName } from './agents/router';
+import { getUserRole } from './agents/lib/permissions';
 
 /**
  * Generates an AI response for a given chat thread.
  *
  * This action performs the following steps:
  * 1. Retrieves message history for the thread.
- * 2. Fetches relevant user memories (if enabled) to provide context.
- * 3. Prepares a payload for the OpenRouter API.
- * 4. Calls OpenRouter to stream a response (text and optionally images).
- * 5. Creates an assistant message in the database and updates it in real-time as the stream progresses.
- * 6. Handles user cancellation during streaming.
- * 7. Saves any generated images and logs usage/cost metadata.
+ * 2. Detects intent and routes to appropriate agent (all requests go through agents).
+ * 3. Agent executes with tools (memory search, RAG, web search handled by agent tools).
+ * 4. Uses the agent's response directly (no secondary LLM call).
+ * 5. Handles image generation if requested.
+ * 6. Saves generated images and logs usage/cost metadata.
  *
  * @param threadId - The unique identifier of the chat thread.
  * @param model - Optional. The AI model to use (defaults to google/gemini-2.5-flash-lite).
@@ -52,6 +45,7 @@ export const generate = action({
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
 		const userId = user._id;
+		const userRole = getUserRole(user);
 
 		// 1. Get previous messages
 		const messages = await ctx.runQuery(api.messages.list, { threadId });
@@ -60,313 +54,172 @@ export const generate = action({
 		const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
 		const userPrompt = lastUserMessage?.body || 'Chat generated image';
 
-		// Trigger memory storage for the user's new message (fire-and-forget)
-		// Always store memories regardless of useMemory flag
+		// 2. Detect intent and route to appropriate agent
+		// ALL requests now go through agents (including 'chat' for memory/RAG via tools)
+		const intent = await detectIntent(ctx, userPrompt, messages, userRole);
 
-		if (lastUserMessage && lastUserMessage.body) {
-			await ctx.scheduler.runAfter(0, internal.memories.addMemory, {
-				userId,
-				messageId: lastUserMessage._id,
-				messageText: lastUserMessage.body
-			});
-		}
+		// Determine if this is a specialized agent or default chat agent
+		const isSpecializedAgent = intent.primaryAgent !== 'chat' && intent.confidence >= 0.7;
+		const agentToUse = isSpecializedAgent ? intent.primaryAgent : 'chat';
 
-		// Retrieve relevant memories (only if useMemory is enabled)
-		let relevantMemories: Memory[] = [];
-		let searchOutputText = userPrompt; // Track what was actually used for search
-		let rewriterInput: OpenRouterMessage[] = [];
-
-		if (useMemory !== false && userPrompt) {
-			try {
-				const enriched = await ctx.runAction(internal.memories.getEnrichedContext, {
-					userId,
-					history: messages.slice(-5).map((m: { role: string; body: string }) => ({
-						role: m.role,
-						content: m.body
-					})),
-					limit: 5
-				});
-
-				relevantMemories = enriched.relevantMemories;
-				searchOutputText = enriched.formulatedQuery;
-				rewriterInput = enriched.rewriterInput;
-			} catch (e) {
-				console.error('Failed to search memories', e);
-			}
-		}
-
-		// 2. Create empty assistant message early to show "Searching..." status
+		// Create assistant message early to show real-time status
 		const messageId = await ctx.runMutation(internal.messages.internalCreate, {
 			body: '',
 			userId,
 			threadId,
 			role: 'assistant',
 			model: model || 'google/gemini-2.5-flash-lite',
-			metadata: { status: 'searching' }
+			metadata: {
+				status: 'agent_working',
+				agentWork: {
+					agentName: agentToUse,
+					agentDisplayName: getAgentDisplayName(agentToUse),
+					intentConfidence: intent.confidence,
+					intentReasoning: isSpecializedAgent ? intent.reasoning : 'General chat',
+					toolExecutions: [],
+					agentResponse: '',
+					cost: 0,
+					isStreaming: true
+				}
+			}
 		});
 
-		// 3. RAG Search for Blogs (only if enabled)
-		let ragContext = '';
-		let ragEntries: RagEntry[] = [];
-		let ragUsage: RagUsage | null = null;
-		let ragError: string | undefined;
+		// Route ALL requests through agent system
+		// Chat agent has tools: searchMemories, searchBlogs, webSearch, analyzeContent
+		// It will use them as needed based on the query
+		let agentWork: {
+			agentName: string;
+			agentDisplayName: string;
+			intentConfidence: number;
+			intentReasoning: string;
+			toolExecutions: unknown[];
+			agentResponse: string;
+			cost: number;
+		} | null = null;
 
-		if (useRag !== false) {
-			try {
-				// 1. Vector Search
-				const vectorResult = await rag.search(ctx, {
-					namespace: RAG_CONFIG.namespace,
-					query: userPrompt,
-					limit: RAG_CONFIG.search.limit,
-					vectorScoreThreshold: RAG_CONFIG.search.scoreThreshold,
-					chunkContext: RAG_CONFIG.search.chunkContext
-				});
+		const agentIntent = isSpecializedAgent
+			? intent
+			: { primaryAgent: 'chat', confidence: 1, reasoning: 'General chat', subagents: [] };
 
-				// 2. Text Search (Hybrid)
-				const textResults = await ctx.runQuery(internal.blogs.searchInternal, {
-					query: userPrompt,
-					limit: 2
-				});
-
-				const { results: vectorResults, entries, usage } = vectorResult;
-				ragUsage = usage;
-
-				// Combine and deduplicate
-				const uniqueBlogIds = new Set([...entries.map((e) => e.key as string)]);
-				for (const blog of textResults) {
-					uniqueBlogIds.add(blog._id);
-				}
-
-				console.log(
-					`RAG Search Results: ${entries.length} vector, ${textResults.length} text, ${uniqueBlogIds.size} unique docs`
-				);
-
-				if (uniqueBlogIds.size > 0) {
-					// Fetch all unique blog docs
-					const blogDocs = await Promise.all(
-						[...uniqueBlogIds].map((id) => ctx.runQuery(api.blogs.get, { id: id as any }))
-					);
-					const blogMap = new Map(blogDocs.filter(Boolean).map((b: any) => [b!._id, b!]));
-
-					// 1. Collect all chunks (Vector + Text)
-					let allContext = '';
-					const contextSources: { id: string; title: string; text: string; score: number }[] = [];
-
-					// Add Vector Results
-					for (const r of vectorResults) {
-						const entry = entries.find((e) => e.entryId === r.entryId);
-						const blogId = entry?.key as string | undefined;
-						const blog: any = blogId ? blogMap.get(blogId as any) : undefined;
-						const text = r.content[0]?.text || '';
-
-						if (text) {
-							allContext += `\n\n--- Source: ${blog?.title || 'Unknown'} ---\n${text}\n`;
-							contextSources.push({
-								id: blog?._id || '',
-								title: blog?.title || 'Unknown',
-								text,
-								score: r.score
-							});
-						}
-					}
-
-					// Add Text Results
-					const uniqueTextResults = textResults.filter(
-						(blog: any) => !entries.some((e) => e.key === blog._id)
-					);
-					for (const blog of uniqueTextResults as any[]) {
-						const text = blog.body.substring(0, 500);
-						if (text) {
-							allContext += `\n\n--- Source: ${blog.title} ---\n${text}\n`;
-							contextSources.push({
-								id: blog._id,
-								title: blog.title,
-								text,
-								score: 0.8
-							});
-						}
-					}
-
-					// 2. Single API Call to Highlight Combined Context
-					if (allContext) {
-						// Update status to 'highlighting'
-						await ctx.runMutation(internal.messages.internalUpdate, {
-							messageId,
-							body: '',
-							metadata: { status: 'highlighting' }
-						});
-
-						console.log('Sending combined context to highlighter...');
-						const { highlightedText, scores } = await highlightText(userPrompt, allContext);
-
-						if (highlightedText) {
-							console.log('--- Highlighted Sentences (Combined) ---');
-							console.log(highlightedText);
-
-							if (scores) {
-								console.log(`--- Scores (Raw: ${scores.length}) ---`);
-								// Just log the first few stats about scores to avoid spamming mismatched logs
-								console.log(
-									`Min: ${Math.min(...scores).toFixed(4)}, Max: ${Math.max(...scores).toFixed(4)}, Avg: ${(scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(4)}`
-								);
-							}
-
-							console.log('RAG found relevant blogs (Highlighted)');
-							ragContext = `\n\nRelevant blog posts (Highlighted):\n${highlightedText}\n`;
-						} else {
-							console.warn('Highlighter returned empty result for combined context.');
-							ragContext = ''; // Or fallback to allContext if preferred? Currently strict no-fallback.
-						}
-
-						// Map for UI - We show the sources that contributed to the context
-						ragEntries = contextSources.map((s) => ({
-							key: s.id,
-							title: s.title,
-							text: s.text,
-							_score: s.score
-						}));
-
-						// Add a special entry for the AI Highlights if available
-						if (highlightedText) {
-							// Format the text to include scores if available
-							let formattedText = highlightedText;
-							if (scores && scores.length > 0) {
-								const lines = highlightedText.split('\n');
-								// Only format if lengths match to be safe
-								if (lines.length === scores.length) {
-									formattedText = lines
-										.map((line, i) => {
-											const percent = Math.round(scores[i] * 100);
-											// Using bold for visibility, similar to a text badge
-											return `**[${percent}%]** ${line}`;
-										})
-										.join('\n');
-								}
-							}
-
-							ragEntries.unshift({
-								key: 'ai-highlights',
-								title: '✨ AI Highlights',
-								text: formattedText,
-								_score: 1.0
-							});
-						}
-					}
-				}
-
-				// Log RAG embedding usage
-				if (usage) {
-					await ctx.runMutation(internal.usage.logUsage, {
-						userId,
-						messageId: undefined,
-						purpose: 'rag_search',
-						model: RAG_CONFIG.model,
-						promptTokens: usage.tokens,
-						completionTokens: 0,
-						totalTokens: usage.tokens,
-						cost: 0,
-						raw_response: { usage }
-					});
-				}
-			} catch (e) {
-				console.error('Failed to search blogs', e);
-				ragError = e instanceof Error ? e.message : String(e);
-				// Graceful degradation - continue without RAG context
-			}
+		try {
+			const agentResult = await orchestrateMultiAgent(
+				ctx,
+				threadId,
+				userId,
+				lastUserMessage?._id,
+				userPrompt,
+				userRole,
+				agentIntent,
+				messageId
+			);
+			agentWork = agentResult.agentWork;
+		} catch (e: unknown) {
+			const errorMessage = e instanceof Error ? e.message : String(e);
+			console.error('[Chat] Agent execution failed:', errorMessage);
 		}
 
-		// Update message status to "generating"
-		await ctx.runMutation(internal.messages.internalUpdate, {
-			messageId,
-			body: '',
-			metadata: { status: 'generating' }
-		});
+		// Get model configuration
+		const modelConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'chat_primary' });
+		const modelToUse = model || modelConfig?.modelId || 'google/gemini-2.5-flash-lite';
 
-		// Format memories for context
-		const memoryContext =
-			relevantMemories.length > 0
-				? `\n\nRelevant memories about the user:\n${relevantMemories.map((m) => `- ${m.text}`).join('\n')}\n`
-				: '';
+		// If agent produced a response, use it directly (no secondary LLM call)
+		// This is the key change: agents now produce the final response
+		if (agentWork?.agentResponse) {
+			// Build context payload for debugging
+			const contextPayload: ContextPayload = {
+				model: modelToUse,
+				messages: [],
+				stream: false,
+				include_reasoning: false
+			};
+
+			const finalMetadata = {
+				status: 'complete',
+				agentWork: { ...agentWork, isStreaming: false },
+				requestPayload: contextPayload
+			};
+
+			// Update message with agent's response
+			await ctx.runMutation(internal.messages.internalUpdate, {
+				messageId,
+				body: agentWork.agentResponse,
+				metadata: finalMetadata,
+				cost: agentWork.cost
+			});
+
+			// Log usage for agent work
+			await ctx.runMutation(internal.usage.logUsage, {
+				userId,
+				messageId,
+				purpose: 'agent_chat',
+				model: modelToUse,
+				promptTokens: 0, // Agent already logged its own usage
+				completionTokens: 0,
+				totalTokens: 0,
+				cost: agentWork.cost,
+				raw_response: { agentWork }
+			});
+
+			return;
+		}
+
+		// Fallback: If agent didn't produce a response, use streaming LLM
+		// This handles edge cases and image generation
+		const controller = new AbortController();
 
 		// 4. Prepare OpenRouter payload
-		const openRouterMessages: OpenRouterMessage[] = messages.map((m: any) => ({
+		const openRouterMessages: OpenRouterMessage[] = messages.map((m) => ({
 			role: m.role,
-			content: m.isCancelled || m.metadata?.cancelled ? `[CANCELLED BY USER] ${m.body}` : m.body
+			content:
+				m.isCancelled || (m.metadata as Record<string, unknown>)?.cancelled
+					? `[CANCELLED BY USER] ${m.body}`
+					: m.body
 		}));
 
-		// Inject memories and RAG context into the system instructions
+		// Build system prompt
 		const systemContent = `You are a helpful AI assistant.
 MANDATORY: In every response, wrap only key terms with <hl>...</hl>.
 Focus highlighting on direct answers, essential facts, and core concepts relevant to the question.
-Example: “The capital of France is <hl>Paris</hl>, with a population of <hl>2.1 million</hl>.”${memoryContext}${ragContext ? `\n\nUse the following blog posts to answer if relevant. If you use information from a blog, cite it like [Source Title].\n\n${ragContext}` : ''}`;
+Example: "The capital of France is <hl>Paris</hl>, with a population of <hl>2.1 million</hl>."`;
 
-		// Always inject system prompt
 		openRouterMessages.unshift({
 			role: 'system',
 			content: systemContent
 		});
 
-		// 5. Call OpenRouter
-		const modelToUse = model || 'google/gemini-2.5-flash-lite';
-		const controller = new AbortController();
+		// Build request options
+		const requestOptions = {
+			model: modelToUse,
+			messages: openRouterMessages.map((m) => ({
+				role: m.role as 'system' | 'user' | 'assistant',
+				content: m.content
+			})),
+			temperature: modelConfig?.temperature,
+			maxTokens: modelConfig?.maxTokens,
+			includeReasoning: includeReasoning ?? false,
+			stream: true as const
+		};
 
-		const requestBody: OpenRouterRequestBody = {
+		// Use the unified streaming client
+		const { response, generationId } = await streamChatCompletion(requestOptions);
+
+		if (!response.body) throw new Error('No response body');
+
+		// Store context payload for debugging
+		const contextPayload: ContextPayload = {
 			model: modelToUse,
 			messages: openRouterMessages,
 			stream: true,
 			stream_options: { include_usage: true },
-			include_reasoning: includeReasoning ?? false
+			include_reasoning: includeReasoning ?? false,
+			temperature: modelConfig?.temperature ?? undefined,
+			max_tokens: modelConfig?.maxTokens ?? undefined
 		};
 
-		if (generateImage) {
-			requestBody.modalities = ['image', 'text'];
-			if (imageAspectRatio) {
-				requestBody.image_config = { aspect_ratio: imageAspectRatio };
-			}
-		}
-
-		const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-				'HTTP-Referer': 'https://cognirivus.vercel.app',
-				'X-Title': 'Cognirivus Chat',
-				'Content-Type': 'application/json'
-			},
-			signal: controller.signal,
-			body: JSON.stringify(requestBody)
-		});
-
-		if (!response.ok) {
-			throw new Error(`OpenRouter error: ${response.statusText}`);
-		}
-
-		let generationId = '';
-
-		if (!response.body) throw new Error('No response body');
-
-		// 6. Update assistant message with request context in metadata
-		const usedMemoriesForMeta = relevantMemories.map((m) => ({
-			_id: m._id,
-			text: m.text,
-			_score: m._score
-		}));
-		// Store the full request payload for context display
-		const contextPayload: ContextPayload = {
-			...requestBody,
-			memorySearchQuery: useMemory !== false ? searchOutputText : undefined,
-			memoryFormulationPayload: useMemory !== false ? rewriterInput : undefined,
-			embeddingModel: useMemory !== false ? 'qwen/qwen3-embedding-8b' : undefined,
-			retrievedMemories: useMemory !== false ? relevantMemories : undefined,
-			ragResults: ragEntries,
-			ragError: ragError
-		};
 		const initialMetadata = {
 			status: 'streaming',
 			...(generateImage ? { isGeneratingImage: true, imageAspectRatio } : {}),
-			...(usedMemoriesForMeta.length > 0 ? { usedMemories: usedMemoriesForMeta } : {}),
-			...(ragEntries.length > 0 ? { ragResults: ragEntries } : {}),
-			...(ragError ? { ragError } : {}),
+			...(agentWork ? { agentWork } : {}),
 			requestPayload: contextPayload
 		};
 
@@ -415,11 +268,6 @@ Example: “The capital of France is <hl>Paris</hl>, with a population of <hl>2.
 								);
 							}
 
-							// Capture ID on first chunk - MUST happen before we might break
-							if (json.id && !generationId) {
-								generationId = json.id;
-							}
-
 							if (json.usage) {
 								// Final usage update from stream
 								await ctx.runMutation(internal.messages.internalUpdate, {
@@ -438,12 +286,11 @@ Example: “The capital of France is <hl>Paris</hl>, with a population of <hl>2.
 							const delta = json.choices[0]?.delta;
 							const content = delta?.content || '';
 							const reasoning = delta?.reasoning || delta?.reasoning_content || '';
-							const images = delta?.images; // Check for images in delta
+							const images = delta?.images;
 
 							if (images) {
 								for (const img of images) {
 									if (img.image_url?.url) {
-										// Format: data:image/png;base64,...
 										const url = img.image_url.url;
 										const match = url.match(/^data:(image\/[a-z]+);base64,(.*)$/);
 										if (match) {
@@ -575,7 +422,7 @@ Example: “The capital of France is <hl>Paris</hl>, with a population of <hl>2.
 				if (data) {
 					await ctx.runMutation(internal.messages.internalUpdate, {
 						messageId,
-						body: fullContent, // Keep existing body
+						body: fullContent,
 						reasoning: fullReasoning || undefined,
 						isCancelled: isStopped ? true : undefined,
 						cost: data.usage ?? data.total_cost ?? 0,
@@ -584,29 +431,19 @@ Example: “The capital of France is <hl>Paris</hl>, with a population of <hl>2.
 							completionTokens: data.native_tokens_completion ?? 0,
 							totalTokens: (data.native_tokens_prompt ?? 0) + (data.native_tokens_completion ?? 0)
 						},
-						// Store request payload for debugging, not generation data
 						metadata: initialMetadata
 					});
 
 					// 7. Log usage
-					const finalStats = data || {
-						model: modelToUse,
-						native_tokens_prompt: 0,
-						native_tokens_completion: 0,
-						usage: 0,
-						_is_fallback: !data
-					};
-
 					await ctx.runMutation(internal.usage.logUsage, {
 						userId,
 						messageId,
 						purpose: 'chat',
-						model: finalStats.model,
-						promptTokens: finalStats.native_tokens_prompt ?? 0,
-						completionTokens: finalStats.native_tokens_completion ?? 0,
-						totalTokens:
-							(finalStats.native_tokens_prompt ?? 0) + (finalStats.native_tokens_completion ?? 0),
-						cost: finalStats.usage ?? finalStats.total_cost ?? 0,
+						model: data.model,
+						promptTokens: data.native_tokens_prompt ?? 0,
+						completionTokens: data.native_tokens_completion ?? 0,
+						totalTokens: (data.native_tokens_prompt ?? 0) + (data.native_tokens_completion ?? 0),
+						cost: data.usage ?? data.total_cost ?? 0,
 						raw_response: data || { generationId }
 					});
 				}

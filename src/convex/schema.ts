@@ -32,7 +32,10 @@ const schema = defineSchema({
 	}).index('by_user', ['userId', 'updatedAt']),
 	usage_logs: defineTable({
 		userId: v.string(),
+		threadId: v.optional(v.id('threads')),
 		messageId: v.optional(v.id('messages')),
+		agentSessionId: v.optional(v.id('agent_sessions')),
+		agentName: v.optional(v.string()),
 		purpose: v.optional(v.string()),
 		model: v.string(),
 		promptTokens: v.number(),
@@ -43,6 +46,8 @@ const schema = defineSchema({
 		raw_response: v.optional(v.any())
 	})
 		.index('by_user', ['userId'])
+		.index('by_thread', ['threadId'])
+		.index('by_agent_session', ['agentSessionId'])
 		.index('by_created_at', ['createdAt']),
 	generated_images: defineTable({
 		userId: v.string(),
@@ -80,12 +85,14 @@ const schema = defineSchema({
 	models: defineTable({
 		modelId: v.string(),
 		name: v.string(),
+		type: v.union(v.literal('chat'), v.literal('embedding')),
 		attributes: v.any(),
 		isEnabled: v.boolean(),
 		lastUpdated: v.number()
 	})
 		.index('by_model_id', ['modelId'])
-		.index('by_enabled', ['isEnabled']),
+		.index('by_enabled', ['isEnabled'])
+		.index('by_type_enabled', ['type', 'isEnabled']),
 	blogs: defineTable({
 		title: v.string(),
 		snippet: v.string(),
@@ -382,7 +389,85 @@ const schema = defineSchema({
 		like_dislike: v.number()
 	})
 		.index('by_comment', ['commentId'])
-		.index('by_comment_user', ['commentId', 'userId'])
+		.index('by_comment_user', ['commentId', 'userId']),
+
+	// Multi-Agent System Tables
+	agents: defineTable({
+		name: v.string(),
+		displayName: v.string(),
+		description: v.string(),
+		mode: v.union(v.literal('primary'), v.literal('subagent')),
+		model: v.string(),
+		temperature: v.number(),
+		instructions: v.string(),
+		maxSteps: v.number(),
+		isEnabled: v.boolean(),
+		isAdminOnly: v.boolean(),
+		availableTools: v.array(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_name', ['name'])
+		.index('by_enabled', ['isEnabled'])
+		.index('by_admin_only', ['isAdminOnly']),
+
+	agent_sessions: defineTable({
+		threadId: v.id('threads'),
+		parentSessionId: v.optional(v.id('agent_sessions')),
+		agentName: v.string(),
+		userId: v.string(),
+		promptMessageId: v.id('messages'),
+		status: v.union(
+			v.literal('idle'),
+			v.literal('running'),
+			v.literal('completed'),
+			v.literal('error')
+		),
+		depth: v.number(),
+		toolCalls: v.optional(v.array(v.any())),
+		startedAt: v.number(),
+		completedAt: v.optional(v.number()),
+		cost: v.optional(v.number()),
+		errorMessage: v.optional(v.string())
+	})
+		.index('by_thread', ['threadId'])
+		.index('by_parent', ['parentSessionId'])
+		.index('by_user', ['userId'])
+		.index('by_prompt_message', ['promptMessageId'])
+		.index('by_depth', ['threadId', 'depth'])
+		.index('by_status', ['status']),
+
+	tool_executions: defineTable({
+		sessionId: v.id('agent_sessions'),
+		toolName: v.string(),
+		status: v.union(v.literal('running'), v.literal('completed'), v.literal('error')),
+		input: v.any(),
+		output: v.optional(v.any()),
+		startedAt: v.number(),
+		completedAt: v.optional(v.number()),
+		errorMessage: v.optional(v.string())
+	})
+		.index('by_session', ['sessionId'])
+		.index('by_status', ['sessionId', 'status']),
+
+	intent_rules: defineTable({
+		pattern: v.string(),
+		agentName: v.string(),
+		priority: v.number(),
+		isEnabled: v.boolean(),
+		confidence: v.number()
+	})
+		.index('by_pattern', ['pattern'])
+		.index('by_priority', ['priority'])
+		.index('by_agent', ['agentName']),
+
+	task_configs: defineTable({
+		task: v.string(), // e.g., 'extraction', 'flashcards', 'synthesis'
+		modelId: v.string(), // references models.modelId
+		temperature: v.optional(v.number()),
+		maxTokens: v.optional(v.number()),
+		updatedAt: v.number()
+	}).index('by_task', ['task'])
 });
 
 export default schema;

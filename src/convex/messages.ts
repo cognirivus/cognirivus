@@ -1,6 +1,16 @@
-import { mutation, query, internalMutation } from './_generated/server';
+import { mutation, query, internalMutation, internalQuery } from './_generated/server';
 import { v } from 'convex/values';
 import { authComponent } from './auth';
+
+/**
+ * Get a single message by ID (internal use for agent updates)
+ */
+export const get = internalQuery({
+	args: { id: v.id('messages') },
+	handler: async (ctx, { id }) => {
+		return await ctx.db.get(id);
+	}
+});
 
 /**
  * Lists all messages for a specific chat thread.

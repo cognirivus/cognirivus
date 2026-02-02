@@ -29,9 +29,17 @@ export interface OpenRouterMessage {
 export interface OpenRouterRequestBody {
 	model: string;
 	messages: OpenRouterMessage[];
-	stream: boolean;
+	stream?: boolean;
 	stream_options?: { include_usage: boolean };
 	include_reasoning?: boolean;
+	temperature?: number;
+	max_tokens?: number;
+	top_p?: number;
+	top_k?: number;
+	frequency_penalty?: number;
+	presence_penalty?: number;
+	repetition_penalty?: number;
+	response_format?: { type: 'json_object' | 'json_schema'; json_schema?: any };
 	modalities?: string[];
 	image_config?: { aspect_ratio: string };
 }
