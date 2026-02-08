@@ -21,7 +21,7 @@
 
 	const chatState = useChatContext();
 	const client = useConvexClient();
-	const threadId = page.params.id as Id<'threads'>;
+	const threadId = $derived(page.params.id as Id<'threads'>);
 
 	let viewingContextId = $state<string | null>(null);
 	let viewingContextMode = $state<'full' | 'rag'>('full');
