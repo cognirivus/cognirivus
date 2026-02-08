@@ -28,6 +28,7 @@ export const list = query({
 	returns: v.array(
 		v.object({
 			_id: v.id('agents'),
+			_creationTime: v.number(),
 			name: v.string(),
 			displayName: v.string(),
 			description: v.string(),
@@ -65,6 +66,7 @@ export const get = query({
 	returns: v.union(
 		v.object({
 			_id: v.id('agents'),
+			_creationTime: v.number(),
 			name: v.string(),
 			displayName: v.string(),
 			description: v.string(),
@@ -110,6 +112,7 @@ export const listEnabled = query({
 	returns: v.array(
 		v.object({
 			_id: v.id('agents'),
+			_creationTime: v.number(),
 			name: v.string(),
 			displayName: v.string(),
 			description: v.string(),

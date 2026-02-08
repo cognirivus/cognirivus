@@ -1,9 +1,9 @@
 // Seed function to populate initial agents and intent rules
-import { internalMutation } from '../_generated/server';
+import { mutation } from '../_generated/server';
 import { allAgents } from './config';
 import { v } from 'convex/values';
 
-export const seedAgents = internalMutation({
+export const seedAgents = mutation({
 	args: {},
 	handler: async (ctx) => {
 		// Check if already seeded
