@@ -84,11 +84,14 @@ export class ChatContext {
 			try {
 				const cached = localStorage.getItem(this.STORAGE_KEY);
 				if (cached) {
-					this.models = JSON.parse(cached);
-					this.isLoadingModels = false;
-					// Ensure we have a valid selection from cache
-					if (this.models.length > 0 && !this.models.find((m) => m.id === this.selectedModel)) {
-						this.selectedModel = this.models[0].id;
+					const parsed = JSON.parse(cached);
+					if (Array.isArray(parsed) && parsed.length > 0) {
+						this.models = parsed;
+						this.isLoadingModels = false;
+						// Ensure we have a valid selection from cache
+						if (!this.models.find((m) => m.id === this.selectedModel)) {
+							this.selectedModel = this.models[0].id;
+						}
 					}
 				}
 			} catch (e) {

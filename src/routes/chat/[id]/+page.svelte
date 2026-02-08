@@ -44,10 +44,22 @@
 		}
 	};
 
-	// Fetch messages for selected thread
-	const messagesQuery = useQuery(api.messages.list, () => ({ threadId: threadId }));
+	// Consolidated context query for faster initial load
+	const contextQuery = useQuery(api.threads.getContext, () => ({ id: threadId }));
+	const threadDetails = $derived(contextQuery?.data?.thread);
 
-	const messages = $derived(messagesQuery?.data || []);
+	// Fetch messages for selected thread (paginated)
+	let numItems = $state(50);
+	const messagesQuery = useQuery(api.messages.list, () => ({
+		threadId: threadId,
+		paginationOpts: { numItems, cursor: null }
+	}));
+
+	const messages = $derived(
+		contextQuery?.data?.messages && !messagesQuery?.data
+			? contextQuery.data.messages
+			: [...(messagesQuery?.data?.page || [])].reverse()
+	);
 
 	// Auto-scroll when messages update
 	$effect(() => {
@@ -58,12 +70,9 @@
 		}
 	});
 
-	// Verify thread ownership and existence
-	const threadDetails = useQuery(api.threads.get, () => ({ id: threadId }));
-
 	// Redirect if thread is not found or unauthorized
 	$effect(() => {
-		if (mounted && threadDetails?.data === null && !threadDetails.isLoading) {
+		if (mounted && contextQuery?.data === null && !contextQuery.isLoading) {
 			goto('/chat');
 		}
 	});
@@ -148,21 +157,11 @@
 			viewingContextMode = 'full';
 		};
 
-		// Calculate totals
-		let tokens = 0;
-		let promptTokens = 0;
-		let completionTokens = 0;
-		let cost = 0;
-		for (const m of messages) {
-			if (m.usage?.totalTokens) tokens += m.usage.totalTokens;
-			if (m.usage?.promptTokens) promptTokens += m.usage.promptTokens;
-			if (m.usage?.completionTokens) completionTokens += m.usage.completionTokens;
-			if (m.cost) cost += m.cost;
-		}
-		chatState.totalTokens = tokens;
-		chatState.totalPromptTokens = promptTokens;
-		chatState.totalCompletionTokens = completionTokens;
-		chatState.totalCost = cost;
+		// Sync totals from backend thread metadata
+		chatState.totalTokens = threadDetails?.totalTokens || 0;
+		chatState.totalPromptTokens = threadDetails?.totalPromptTokens || 0;
+		chatState.totalCompletionTokens = threadDetails?.totalCompletionTokens || 0;
+		chatState.totalCost = threadDetails?.totalCost || 0;
 
 		// Sync isActuallyStreaming
 		if (chatState.status === 'streaming') {
@@ -189,6 +188,19 @@
 		</div>
 	{:else}
 		<div class="mx-auto flex max-w-3xl flex-col space-y-8 px-4 pt-16 pb-48 md:px-0 md:pt-20">
+			{#if messagesQuery?.data && !messagesQuery.data.isDone}
+				<div class="flex justify-center pt-4">
+					<Button
+						variant="ghost"
+						size="sm"
+						class="text-xs text-muted-foreground"
+						onclick={() => (numItems += 50)}
+					>
+						Load older messages
+					</Button>
+				</div>
+			{/if}
+
 			{#each messages as message, messageIndex (message._id)}
 				<MessageItem
 					{message}

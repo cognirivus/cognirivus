@@ -123,6 +123,45 @@ export const rename = mutation({
 });
 
 /**
+ * Optimized query to get thread details and the first page of messages in a single request.
+ * Reduces auth latency and database hits during initial chat load.
+ */
+export const getContext = query({
+	args: { id: v.id('threads') },
+	handler: async (ctx, { id }) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return null;
+
+		const thread = await ctx.db.get(id);
+		if (!thread || thread.userId !== user._id) return null;
+
+		// Fetch last 30 messages
+		const messages = await ctx.db
+			.query('messages')
+			.withIndex('by_thread', (q) => q.eq('threadId', id))
+			.order('desc')
+			.take(30);
+
+		const messagesWithUrls = await Promise.all(
+			messages.reverse().map(async (msg) => {
+				const imageUrls = await Promise.all(
+					(msg.images || []).map((storageId) => ctx.storage.getUrl(storageId))
+				);
+				return {
+					...msg,
+					imageUrls: imageUrls.filter((url) => url !== null) as string[]
+				};
+			})
+		);
+
+		return {
+			thread,
+			messages: messagesWithUrls
+		};
+	}
+});
+
+/**
  * Deletes ALL chat threads and associated messages for the authenticated user.
  *
  * This is a destructive action that wipes the user's entire conversation history.

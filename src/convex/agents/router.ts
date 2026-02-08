@@ -216,8 +216,9 @@ export async function orchestrateMultiAgent(
 	}
 ): Promise<{ agentWork: AgentWorkResult; tokens?: { prompt: number; completion: number } }> {
 	// Get message history, excluding the current generating message
-	const allMessages = await ctx.runQuery(api.messages.list, {
-		threadId: threadId as Id<'threads'>
+	const allMessages = await ctx.runQuery(internal.messages.internalList, {
+		threadId: threadId as Id<'threads'>,
+		limit: 100
 	});
 	const messages = allMessages.filter((m) => (m as any)._id !== messageId);
 

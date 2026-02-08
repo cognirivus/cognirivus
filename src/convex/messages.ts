@@ -1,6 +1,7 @@
 import { mutation, query, internalMutation, internalQuery } from './_generated/server';
 import { v } from 'convex/values';
 import { authComponent } from './auth';
+import { paginationOptsValidator } from 'convex/server';
 
 /**
  * Get a single message by ID (internal use for agent updates)
@@ -13,31 +14,23 @@ export const get = internalQuery({
 });
 
 /**
- * Lists all messages for a specific chat thread.
- *
- * Verifies that the authenticated user owns the thread before returning messages.
- * Each message includes a list of signed URLs for any attached images.
- *
- * @param threadId - The unique identifier of the chat thread.
- * @returns A list of messages with associated image URLs.
+ * Internal query to list messages for a thread without pagination.
+ * Used by backend actions that need a slice of history.
  */
-export const list = query({
-	args: { threadId: v.id('threads') },
-	handler: async (ctx, { threadId }) => {
-		const user = await authComponent.getAuthUser(ctx);
-		if (!user) return [];
-
-		// Verify user owns this thread
-		const thread = await ctx.db.get(threadId);
-		if (!thread || thread.userId !== user._id) return [];
-
+export const internalList = internalQuery({
+	args: {
+		threadId: v.id('threads'),
+		limit: v.optional(v.number())
+	},
+	handler: async (ctx, { threadId, limit }) => {
 		const messages = await ctx.db
 			.query('messages')
 			.withIndex('by_thread', (q) => q.eq('threadId', threadId))
-			.collect();
+			.order('desc')
+			.take(limit ?? 100);
 
 		return Promise.all(
-			messages.map(async (msg) => {
+			messages.reverse().map(async (msg) => {
 				const imageUrls = await Promise.all(
 					(msg.images || []).map((storageId) => ctx.storage.getUrl(storageId))
 				);
@@ -48,6 +41,57 @@ export const list = query({
 				};
 			})
 		);
+	}
+});
+
+/**
+ * Lists all messages for a specific chat thread.
+ *
+ * Verifies that the authenticated user owns the thread before returning messages.
+ * Each message includes a list of signed URLs for any attached images.
+ *
+ * @param threadId - The unique identifier of the chat thread.
+ * @param paginationOpts - Options for paginating the results.
+ * @returns A paginated list of messages with associated image URLs.
+ */
+export const list = query({
+	args: {
+		threadId: v.id('threads'),
+		paginationOpts: paginationOptsValidator
+	},
+	handler: async (ctx, { threadId, paginationOpts }) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) {
+			return { page: [], isDone: true, continueCursor: '' };
+		}
+
+		// Verify user owns this thread
+		const thread = await ctx.db.get(threadId);
+		if (!thread || thread.userId !== user._id) {
+			return { page: [], isDone: true, continueCursor: '' };
+		}
+
+		const result = await ctx.db
+			.query('messages')
+			.withIndex('by_thread', (q) => q.eq('threadId', threadId))
+			.order('desc')
+			.paginate(paginationOpts);
+
+		return {
+			...result,
+			page: await Promise.all(
+				result.page.map(async (msg) => {
+					const imageUrls = await Promise.all(
+						(msg.images || []).map((storageId) => ctx.storage.getUrl(storageId))
+					);
+					return {
+						...msg,
+						imageUrls: imageUrls.filter((url) => url !== null) as string[],
+						deletedImageCount: msg.deletedImages?.length || 0
+					};
+				})
+			)
+		};
 	}
 });
 
@@ -179,6 +223,20 @@ export const internalUpdate = internalMutation({
 		if (isCancelled !== undefined) updates.isCancelled = isCancelled;
 		if (images !== undefined) updates.images = images;
 		await ctx.db.patch(messageId, updates);
+
+		// Update thread totals
+		if (usage || cost !== undefined) {
+			const thread = await ctx.db.get(existing.threadId);
+			if (thread) {
+				await ctx.db.patch(existing.threadId, {
+					totalTokens: (thread.totalTokens || 0) + (usage?.totalTokens || 0),
+					totalPromptTokens: (thread.totalPromptTokens || 0) + (usage?.promptTokens || 0),
+					totalCompletionTokens:
+						(thread.totalCompletionTokens || 0) + (usage?.completionTokens || 0),
+					totalCost: (thread.totalCost || 0) + (cost || 0)
+				});
+			}
+		}
 	}
 });
 

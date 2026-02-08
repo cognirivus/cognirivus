@@ -14,7 +14,9 @@
 	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
 	const user = $derived(currentUserQuery.data);
 	const isAdmin = $derived(
-		!!(user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin'))
+		!!(
+			user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin')
+		)
 	);
 
 	// Browser responsiveness
@@ -67,7 +69,7 @@
 			totalCompletionTokens={chatState.totalCompletionTokens}
 			totalCost={chatState.totalCost}
 			isActuallyStreaming={chatState.isActuallyStreaming}
-			isLoadingModels={chatState.isLoadingModels}
+			isLoadingModels={chatState.isLoadingModels && chatState.models.length === 0}
 			{isAdmin}
 		/>
 	</div>

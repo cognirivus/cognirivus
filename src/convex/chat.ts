@@ -59,7 +59,10 @@ export const generate = action({
 		const userRole = getUserRole(user);
 
 		// 1. Get previous messages
-		const messages = await ctx.runQuery(api.messages.list, { threadId });
+		const messages = await ctx.runQuery(internal.messages.internalList, {
+			threadId,
+			limit: 100
+		});
 
 		// Get the last user message for image prompt and memory storage
 		const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');

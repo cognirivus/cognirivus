@@ -28,7 +28,11 @@ const schema = defineSchema({
 	threads: defineTable({
 		title: v.string(),
 		userId: v.string(),
-		updatedAt: v.number()
+		updatedAt: v.number(),
+		totalTokens: v.optional(v.number()),
+		totalPromptTokens: v.optional(v.number()),
+		totalCompletionTokens: v.optional(v.number()),
+		totalCost: v.optional(v.number())
 	}).index('by_user', ['userId', 'updatedAt']),
 	usage_logs: defineTable({
 		userId: v.string(),
