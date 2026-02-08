@@ -44,12 +44,15 @@ export interface LLMRequestOptions {
 	toolChoice?: 'auto' | 'none' | 'required';
 	responseFormat?: { type: 'json_object' | 'text' };
 	includeReasoning?: boolean;
+	plugins?: Array<Record<string, unknown>>;
+	webSearchOptions?: { search_context_size: 'low' | 'medium' | 'high' };
 }
 
 export interface LLMResponse {
 	content: string;
 	reasoning?: string;
 	toolCalls: LLMToolCall[];
+	annotations?: Array<Record<string, unknown>>;
 	usage: {
 		promptTokens: number;
 		completionTokens: number;
@@ -205,6 +208,12 @@ export async function chatCompletion(options: LLMRequestOptions): Promise<LLMRes
 		requestBody.tools = options.tools;
 		requestBody.tool_choice = options.toolChoice ?? 'auto';
 	}
+	if (options.plugins && options.plugins.length > 0) {
+		requestBody.plugins = options.plugins;
+	}
+	if (options.webSearchOptions) {
+		requestBody.web_search_options = options.webSearchOptions;
+	}
 	if (options.responseFormat) {
 		requestBody.response_format = options.responseFormat;
 	}
@@ -240,10 +249,13 @@ export async function chatCompletion(options: LLMRequestOptions): Promise<LLMRes
 		}
 	}
 
+	const annotations: Array<Record<string, unknown>> = choice?.message?.annotations || [];
+
 	return {
 		content: choice?.message?.content || '',
 		reasoning: choice?.message?.reasoning || choice?.message?.reasoning_content,
 		toolCalls,
+		annotations,
 		usage: {
 			promptTokens: data.usage?.prompt_tokens || 0,
 			completionTokens: data.usage?.completion_tokens || 0,
@@ -384,7 +396,7 @@ export async function simpleChat(
 
 /**
  * JSON completion with automatic parsing.
- * Returns the parsed JSON object.
+ * Returns the parsed JSON object along with usage data for cost tracking.
  */
 export async function jsonChat<T = unknown>(
 	model: string,
@@ -394,7 +406,16 @@ export async function jsonChat<T = unknown>(
 		temperature?: number;
 		maxTokens?: number;
 	}
-): Promise<{ data: T; generationId: string | null }> {
+): Promise<{
+	data: T;
+	generationId: string | null;
+	usage: {
+		promptTokens: number;
+		completionTokens: number;
+		totalTokens: number;
+	};
+	model: string;
+}> {
 	const response = await chatCompletion({
 		model,
 		messages: [
@@ -408,7 +429,12 @@ export async function jsonChat<T = unknown>(
 
 	try {
 		const data = JSON.parse(response.content) as T;
-		return { data, generationId: response.generationId };
+		return {
+			data,
+			generationId: response.generationId,
+			usage: response.usage,
+			model: response.model
+		};
 	} catch (e) {
 		throw createLLMError(
 			`Failed to parse JSON response: ${response.content.substring(0, 200)}`,
@@ -485,6 +511,12 @@ export async function streamChatCompletion(
 	if (options.tools && options.tools.length > 0) {
 		requestBody.tools = options.tools;
 		requestBody.tool_choice = options.toolChoice ?? 'auto';
+	}
+	if (options.plugins && options.plugins.length > 0) {
+		requestBody.plugins = options.plugins;
+	}
+	if (options.webSearchOptions) {
+		requestBody.web_search_options = options.webSearchOptions;
 	}
 	if (options.includeReasoning) {
 		requestBody.include_reasoning = true;

@@ -4,6 +4,7 @@ import { action, internalMutation, mutation, query } from './_generated/server';
 import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { authComponent } from './auth';
+import { getGenerationStats } from './lib/llm_client';
 
 const checkAdmin = async (ctx: any) => {
 	const user = await authComponent.getAuthUser(ctx);
@@ -232,7 +233,7 @@ export const removeBulk = mutation({
 export const generateFromContent = action({
 	args: { contentId: v.id('content') },
 	handler: async (ctx, args): Promise<{ success: boolean; count: number; error?: string }> => {
-		await checkAdmin(ctx);
+		const user = await checkAdmin(ctx);
 		const content = await ctx.runQuery(api.content.getById, { id: args.contentId });
 
 		if (!content) {
@@ -328,8 +329,34 @@ GUIDELINES:
 				return { success: false, count: 0, error: 'AI generation failed' };
 			}
 
+			// Get generation ID for usage tracking
+			const generationId = response.headers.get('x-openrouter-id');
+
 			const data = (await response.json()) as any;
 			const rawContent = data.choices[0]?.message?.content || '{"flashcards":[]}';
+
+			// Log usage with generation stats
+			if (generationId && user) {
+				try {
+					const stats = await getGenerationStats(generationId);
+					if (stats) {
+						await ctx.runMutation(internal.usage.logUsage, {
+							userId: user._id,
+							purpose: 'flashcard_generation',
+							model: stats.model || modelToUse,
+							promptTokens: stats.native_tokens_prompt ?? stats.tokens_prompt ?? 0,
+							completionTokens: stats.native_tokens_completion ?? stats.tokens_completion ?? 0,
+							totalTokens:
+								(stats.native_tokens_prompt ?? stats.tokens_prompt ?? 0) +
+								(stats.native_tokens_completion ?? stats.tokens_completion ?? 0),
+							cost: stats.usage ?? stats.total_cost ?? 0,
+							raw_response: stats
+						});
+					}
+				} catch (e) {
+					console.warn('[Flashcards] Failed to log usage:', e);
+				}
+			}
 
 			let generatedCards: { front: string; back: string; type: string; difficulty: number }[] = [];
 			try {

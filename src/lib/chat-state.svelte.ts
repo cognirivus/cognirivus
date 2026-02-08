@@ -7,6 +7,8 @@ export class ChatContext {
 	useMemory = $state(false); // Memory-based personalization (off by default)
 	/** RAG toggle state */
 	useRag = $state(false); // RAG-based blog search (off by default)
+	/** Web Search toggle state */
+	useWebSearch = $state(false); // Direct Exa web search (off by default)
 	generateImage = $state(false);
 	imageAspectRatio = $state<string>('1:1');
 	input = $state('');

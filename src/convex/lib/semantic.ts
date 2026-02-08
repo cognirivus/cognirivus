@@ -4,6 +4,7 @@
 export interface HighlightResult {
 	highlightedText: string;
 	scores?: number[];
+	allMatches?: Array<{ text: string; score: number }>;
 }
 
 /**
@@ -27,7 +28,16 @@ export async function highlightText(
 	context: string,
 	threshold: number = 0.5
 ): Promise<HighlightResult> {
-	console.log(`[Semantic Highlight] Calling API for query: "${query.substring(0, 50)}..."`);
+	// Cap context size to prevent API timeouts/payload issues
+	// 40k chars is plenty for most RAG tasks (~10k tokens)
+	const MAX_HIGHLIGHT_CHARS = 40000;
+	const safeContext =
+		context.length > MAX_HIGHLIGHT_CHARS ? context.substring(0, MAX_HIGHLIGHT_CHARS) : context;
+
+	console.log(
+		`[Semantic Highlight] Calling API for query: "${query.substring(0, 50)}..." (${safeContext.length} chars)`
+	);
+
 	try {
 		const response = await fetch('https://chiragrohit--semantic-highlighter-highlight.modal.run/', {
 			method: 'POST',
@@ -37,54 +47,53 @@ export async function highlightText(
 			},
 			body: JSON.stringify({
 				query,
-				context,
+				context: safeContext,
 				// We request ALL sentences (threshold 0.0) from the API so we can filter locally
-				// and ensure perfect alignment between sentences and scores.
 				threshold: 0.0,
 				return_sentence_metrics: true
 			})
 		});
 
 		if (!response.ok) {
-			console.warn(`[Semantic Highlight] API error: ${response.statusText}`);
+			const errorText = await response.text().catch(() => 'Unknown error');
+			console.warn(`[Semantic Highlight] API error: ${response.status} - ${errorText}`);
 			return { highlightedText: '' };
 		}
 
-		const data = (await response.json()) as ModalHighlightResponse;
+		let data: ModalHighlightResponse;
+		try {
+			data = (await response.json()) as ModalHighlightResponse;
+		} catch (jsonErr) {
+			console.error('[Semantic Highlight] Failed to parse API response JSON', jsonErr);
+			return { highlightedText: '' };
+		}
 
 		if (data.highlighted_sentences && Array.isArray(data.highlighted_sentences)) {
+			const allMatches: Array<{ text: string; score: number }> = [];
 			const cleanSentences: string[] = [];
 			const cleanScores: number[] = [];
 
 			const allScores = data.sentence_probabilities || [];
 			const sentences = data.highlighted_sentences;
 
-			let matchCount = 0;
-
 			sentences.forEach((s: string, i: number) => {
 				const score = allScores[i] ?? 0;
+				const trimmed = s?.trim();
+				if (!trimmed) return;
 
-				// Apply filtering: Must be non-empty AND meet the requested threshold
-				if (s && s.trim().length > 0 && score >= threshold) {
-					// IMPORTANT: The API returns strings with trailing newlines. Trim them.
-					cleanSentences.push(s.trim());
+				allMatches.push({ text: trimmed, score });
+
+				// Apply filtering for the "primary" result
+				if (score >= threshold) {
+					cleanSentences.push(trimmed);
 					cleanScores.push(score);
-					matchCount++;
 				}
 			});
 
-			// If no sentences remain after filtering
-			if (cleanSentences.length === 0) {
-				console.log(`[Semantic Highlight] No matches found above threshold ${threshold}.`);
-				return { highlightedText: '' };
-			}
-
-			console.log(`[Semantic Highlight] Found ${matchCount} matches above threshold ${threshold}.`);
-			const highlightedText = cleanSentences.join('\n');
-
 			return {
-				highlightedText,
-				scores: cleanScores.length > 0 ? cleanScores : undefined
+				highlightedText: cleanSentences.join('\n'),
+				scores: cleanScores,
+				allMatches
 			};
 		}
 

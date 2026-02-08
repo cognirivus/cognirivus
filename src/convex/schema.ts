@@ -409,7 +409,8 @@ const schema = defineSchema({
 	})
 		.index('by_name', ['name'])
 		.index('by_enabled', ['isEnabled'])
-		.index('by_admin_only', ['isAdminOnly']),
+		.index('by_admin_only', ['isAdminOnly'])
+		.index('by_enabled_and_admin_only', ['isEnabled', 'isAdminOnly']),
 
 	agent_sessions: defineTable({
 		threadId: v.id('threads'),

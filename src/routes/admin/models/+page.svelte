@@ -108,6 +108,12 @@
 			name: 'RAG Embeddings',
 			description: 'Embedding model for vector search (typically OpenAI)',
 			icon: Settings2
+		},
+		{
+			id: 'web_search_tool',
+			name: 'Web Search',
+			description: 'Model for agent web search tool (uses :online suffix)',
+			icon: Search
 		}
 	];
 

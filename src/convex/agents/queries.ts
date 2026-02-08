@@ -1,7 +1,21 @@
-import { query } from '../_generated/server';
+import { query, internalQuery } from '../_generated/server';
 import { v } from 'convex/values';
 import { authComponent } from '../auth';
 import { filterAgentsByRole, getUserRole } from './lib/permissions';
+
+const agentConfigValidator = v.object({
+	name: v.string(),
+	displayName: v.string(),
+	description: v.string(),
+	mode: v.union(v.literal('primary'), v.literal('subagent')),
+	model: v.string(),
+	temperature: v.number(),
+	instructions: v.string(),
+	maxSteps: v.number(),
+	isEnabled: v.boolean(),
+	isAdminOnly: v.boolean(),
+	availableTools: v.array(v.string())
+});
 
 /**
  * List all agents, filtered by user role.
@@ -126,11 +140,114 @@ export const listEnabled = query({
 		} else {
 			agents = await ctx.db
 				.query('agents')
-				.withIndex('by_enabled', (q) => q.eq('isEnabled', true))
-				.filter((q) => q.eq(q.field('isAdminOnly'), false))
+				.withIndex('by_enabled_and_admin_only', (q) =>
+					q.eq('isEnabled', true).eq('isAdminOnly', false)
+				)
 				.collect();
 		}
 
 		return agents;
+	}
+});
+
+/**
+ * Internal: Get an agent config by name (no auth checks).
+ *
+ * @param name - The unique name of the agent
+ * @returns The agent config or null if not found
+ */
+export const internalGetConfigByName = internalQuery({
+	args: { name: v.string() },
+	returns: v.union(agentConfigValidator, v.null()),
+	handler: async (ctx, { name }) => {
+		const agent = await ctx.db
+			.query('agents')
+			.withIndex('by_name', (q) => q.eq('name', name))
+			.unique();
+
+		if (!agent) return null;
+
+		return {
+			name: agent.name,
+			displayName: agent.displayName,
+			description: agent.description,
+			mode: agent.mode,
+			model: agent.model,
+			temperature: agent.temperature,
+			instructions: agent.instructions,
+			maxSteps: agent.maxSteps,
+			isEnabled: agent.isEnabled,
+			isAdminOnly: agent.isAdminOnly,
+			availableTools: agent.availableTools
+		};
+	}
+});
+
+/**
+ * Internal: List all agent configs (no auth checks).
+ *
+ * @returns Array of agent configs
+ */
+export const internalListAllConfigs = internalQuery({
+	args: {},
+	returns: v.array(agentConfigValidator),
+	handler: async (ctx) => {
+		const agents = await ctx.db.query('agents').collect();
+
+		return agents.map((agent) => ({
+			name: agent.name,
+			displayName: agent.displayName,
+			description: agent.description,
+			mode: agent.mode,
+			model: agent.model,
+			temperature: agent.temperature,
+			instructions: agent.instructions,
+			maxSteps: agent.maxSteps,
+			isEnabled: agent.isEnabled,
+			isAdminOnly: agent.isAdminOnly,
+			availableTools: agent.availableTools
+		}));
+	}
+});
+
+/**
+ * Internal: List enabled agent configs for a role (no auth checks).
+ *
+ * @param userRole - The role to filter by
+ * @returns Array of enabled agent configs visible to this role
+ */
+export const internalListEnabledForRole = internalQuery({
+	args: { userRole: v.string() },
+	returns: v.array(agentConfigValidator),
+	handler: async (ctx, { userRole }) => {
+		let agents;
+
+		if (userRole === 'admin') {
+			agents = await ctx.db
+				.query('agents')
+				.withIndex('by_enabled', (q) => q.eq('isEnabled', true))
+				.collect();
+		} else {
+			agents = await ctx.db
+				.query('agents')
+				.withIndex('by_enabled_and_admin_only', (q) =>
+					q.eq('isEnabled', true).eq('isAdminOnly', false)
+				)
+				.collect();
+		}
+
+		return agents.map((agent) => ({
+			name: agent.name,
+			displayName: agent.displayName,
+			description: agent.description,
+			mode: agent.mode,
+			model: agent.model,
+			temperature: agent.temperature,
+			instructions: agent.instructions,
+			maxSteps: agent.maxSteps,
+			isEnabled: agent.isEnabled,
+			isAdminOnly: agent.isAdminOnly,
+			availableTools: agent.availableTools
+		}));
 	}
 });

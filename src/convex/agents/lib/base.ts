@@ -6,7 +6,10 @@ import type {
 	ToolExecution,
 	AgentResult,
 	LLMResponse,
-	ToolCall
+	LLMCallTrace,
+	ToolCall,
+	TruncatedText,
+	ToolResult
 } from '../types';
 import type { ToolDefinition } from '../../tools/types';
 import { checkToolPermission } from './permissions';
@@ -18,6 +21,61 @@ import {
 	runErrorMiddleware,
 	type ToolMiddlewareContext
 } from '../../tools/middleware';
+import type { Id } from '../../_generated/dataModel';
+
+const MAX_TRACE_MESSAGES = 24;
+const MAX_SYSTEM_MESSAGE_CHARS = 500;
+const MAX_CHARS_PER_MSG = 1200;
+const MAX_TOOL_ARGUMENT_CHARS = 1000;
+const MAX_RESPONSE_CHARS = 6000;
+
+function safeStringify(value: unknown): string {
+	if (typeof value === 'string') return value;
+	if (value === null || value === undefined) return '';
+
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
+}
+
+function truncateText(text: string, maxChars: number): TruncatedText {
+	const originalLength = text.length;
+	if (originalLength <= maxChars) {
+		return { text, originalLength, truncated: false };
+	}
+
+	return {
+		text: `${text.slice(0, maxChars)}\n...(truncated)`,
+		originalLength,
+		truncated: true
+	};
+}
+
+function summarizeMessages(
+	messages: LLMMessage[]
+): Array<{ role: string; content: TruncatedText }> {
+	const recentMessages = messages.slice(-MAX_TRACE_MESSAGES);
+
+	return recentMessages.map((message) => {
+		const maxChars = message.role === 'system' ? MAX_SYSTEM_MESSAGE_CHARS : MAX_CHARS_PER_MSG;
+		let text = safeStringify(message.content);
+
+		// ENHANCEMENT: Make tool calls clearer in the trace summary
+		if (message.role === 'assistant' && !text && message.tool_calls) {
+			text = `(Tool Call: ${message.tool_calls.map((tc) => tc.function.name).join(', ')})`;
+		} else if (message.role === 'tool' && text.length > 500) {
+			// Don't overwhelm the trace UI with massive tool outputs
+			text = `${text.substring(0, 500)}\n...(truncated for trace)`;
+		}
+
+		return {
+			role: message.role,
+			content: truncateText(text, maxChars)
+		};
+	});
+}
 
 export class BaseAgent {
 	protected config: AgentConfig;
@@ -31,10 +89,17 @@ export class BaseAgent {
 	/**
 	 * Build OpenAI-compatible tool definitions for the LLM
 	 */
-	protected buildToolDefinitions(): LLMToolDefinition[] {
+	protected buildToolDefinitions(options?: {
+		useRag?: boolean;
+		useWebSearch?: boolean;
+	}): LLMToolDefinition[] {
 		const toolDefs: LLMToolDefinition[] = [];
 
 		for (const [name, tool] of this.tools) {
+			// Skip search tools if disabled via options
+			if (options?.useWebSearch === false && name === 'webSearch') continue;
+			if (options?.useRag === false && name === 'searchBlogs') continue;
+
 			toolDefs.push({
 				type: 'function',
 				function: {
@@ -51,6 +116,8 @@ export class BaseAgent {
 	/**
 	 * Execute the agent with a given context and session
 	 * @param onUpdate - Optional callback for real-time UI updates
+	 * @param sessionId - Optional session ID for cost tracking
+	 * @param userId - Optional user ID for cost tracking
 	 */
 	async execute(
 		ctx: ActionCtx,
@@ -59,67 +126,179 @@ export class BaseAgent {
 		userRole: string,
 		onUpdate?: (update: {
 			toolExecutions?: ToolExecution[];
+			llmCalls?: LLMCallTrace[];
 			cost?: number;
 			status?: string;
-		}) => Promise<void>
+		}) => Promise<void>,
+		sessionId?: Id<'agent_sessions'>,
+		userId?: string,
+		options?: {
+			useMemory?: boolean;
+			useRag?: boolean;
+			useWebSearch?: boolean;
+		}
 	): Promise<AgentResult> {
 		const toolExecutions: ToolExecution[] = [];
+		const llmCalls: LLMCallTrace[] = [];
 		let totalCost = 0;
 		let totalPromptTokens = 0;
 		let totalCompletionTokens = 0;
 		let step = 0;
 
-		// Convert DB messages to LLM format (body → content)
+		// Convert DB messages to LLM format (body -> content)
 		const currentMessages: LLMMessage[] = messages.map((m) => ({
 			role: m.role as 'user' | 'assistant' | 'system',
 			content: m.body || m.content || ''
 		}));
 
 		// Add system prompt with agent instructions
+		let instructions = this.config.instructions;
+
+		// Add dynamic instructions based on options
+		if (options) {
+			if (options.useWebSearch === false) {
+				instructions += `\n\nCRITICAL: Web search is currently DISABLED. Do not attempt to use the webSearch tool. Rely on searchBlogs or your internal knowledge for older facts.`;
+			} else if (options.useWebSearch === true) {
+				instructions += `\n\nCRITICAL: Web search is ENABLED. You MUST use the webSearch tool for any query requiring real-time info, current events, or facts outside your training data. Do not answer from internal knowledge for these topics.`;
+			}
+
+			if (options.useRag === false) {
+				instructions += `\n\nCRITICAL: Knowledge base search is currently DISABLED. Do not attempt to use the searchBlogs tool.`;
+			} else if (options.useRag === true) {
+				instructions += `\n\nCRITICAL: Knowledge base search is ENABLED. Use the searchBlogs tool to look up platform-specific information.`;
+			}
+		}
+
 		currentMessages.unshift({
 			role: 'system',
-			content: this.config.instructions
+			content: instructions
 		});
+
+		// Extract the last user query for semantic highlighting of tool results
+		const lastUserQuery =
+			messages
+				.slice()
+				.reverse()
+				.find((m) => m.role === 'user')?.body ||
+			messages
+				.slice()
+				.reverse()
+				.find((m) => m.role === 'user')?.content ||
+			'';
 
 		let finalResponse = '';
 
 		while (step < this.config.maxSteps) {
-			// Call LLM with current context
-			const response = await this.callLLM(ctx, currentMessages, userRole);
+			const llmStartedAt = Date.now();
+			const response = await this.callLLM(
+				ctx,
+				currentMessages,
+				userRole,
+				sessionId,
+				userId,
+				options
+			);
+			const llmCompletedAt = Date.now();
 
-			// Accumulate tokens
+			llmCalls.push({
+				step,
+				startedAt: llmStartedAt,
+				completedAt: llmCompletedAt,
+				model: response.model,
+				temperature: response.temperature,
+				prompt: {
+					messageCount: currentMessages.length,
+					messages: summarizeMessages(currentMessages)
+				},
+				response: {
+					content: truncateText(response.content || '', MAX_RESPONSE_CHARS),
+					toolCalls: response.toolCalls?.map((toolCall) => ({
+						id: toolCall.id,
+						name: toolCall.function.name,
+						arguments: truncateText(toolCall.function.arguments || '', MAX_TOOL_ARGUMENT_CHARS)
+					}))
+				},
+				tokens: response.tokens,
+				cost: response.cost
+			});
+
 			totalPromptTokens += response.tokens.prompt;
 			totalCompletionTokens += response.tokens.completion;
 			totalCost += response.cost;
 
-			// Check if tool calls are needed
+			if (onUpdate) {
+				await onUpdate({
+					toolExecutions: [...toolExecutions],
+					llmCalls: [...llmCalls],
+					cost: totalCost
+				});
+			}
+
 			if (response.toolCalls && response.toolCalls.length > 0) {
+				// Tracker for tool call frequency to prevent loops
+				const toolCallCounts: Record<string, number> = {};
+
 				// Execute each tool call
 				for (const toolCall of response.toolCalls) {
+					const toolName = toolCall.function.name;
+
+					// ENHANCEMENT: Prevent redundant/infinite loops
+					// If a tool (like webSearch) has been called 3+ times with no results, skip it
+					toolCallCounts[toolName] = (toolCallCounts[toolName] || 0) + 1;
+					const previousFailures = toolExecutions.filter((ex) => {
+						if (ex.toolName !== toolName || ex.status !== 'completed') return false;
+
+						const output = ex.output as ToolResult<any> | undefined;
+						return (
+							!output ||
+							(output.data && 'count' in output.data && output.data.count === 0) ||
+							(output.data && 'answer' in output.data && output.data.answer === '')
+						);
+					}).length;
+
+					if (toolName === 'webSearch' && previousFailures >= 3) {
+						console.warn(
+							`[Agent] Capping redundant ${toolName} calls after ${previousFailures} failures`
+						);
+						continue;
+					}
+
 					// Add "running" tool to executions for real-time display
 					const runningTool: ToolExecution = {
-						toolName: toolCall.function.name,
+						toolName,
 						input: JSON.parse(toolCall.function.arguments || '{}'),
 						status: 'running',
-						startedAt: Date.now()
+						startedAt: Date.now(),
+						step
 					};
 					toolExecutions.push(runningTool);
 
 					// Update UI immediately to show tool is running
 					if (onUpdate) {
-						await onUpdate({ toolExecutions: [...toolExecutions], cost: totalCost });
+						await onUpdate({
+							toolExecutions: [...toolExecutions],
+							llmCalls: [...llmCalls],
+							cost: totalCost
+						});
 					}
 
-					// Execute the tool
-					const toolResult = await this.executeTool(ctx, toolCall, session, userRole);
+					const toolResult = await this.executeTool(
+						ctx,
+						toolCall,
+						session,
+						userRole,
+						lastUserQuery
+					);
 
-					// Update the tool execution with result
 					const toolIndex = toolExecutions.length - 1;
-					toolExecutions[toolIndex] = toolResult;
+					toolExecutions[toolIndex] = { ...toolResult, step };
 
-					// Update UI with completed tool
 					if (onUpdate) {
-						await onUpdate({ toolExecutions: [...toolExecutions], cost: totalCost });
+						await onUpdate({
+							toolExecutions: [...toolExecutions],
+							llmCalls: [...llmCalls],
+							cost: totalCost
+						});
 					}
 
 					// Add tool call and result to messages
@@ -163,12 +342,13 @@ export class BaseAgent {
 
 		// Final update
 		if (onUpdate) {
-			await onUpdate({ toolExecutions, cost: totalCost, status: 'agent_complete' });
+			await onUpdate({ toolExecutions, llmCalls, cost: totalCost, status: 'agent_complete' });
 		}
 
 		return {
 			response: finalResponse,
 			toolExecutions,
+			llmCalls,
 			cost: totalCost,
 			tokens: { prompt: totalPromptTokens, completion: totalCompletionTokens }
 		};
@@ -180,16 +360,37 @@ export class BaseAgent {
 	protected async callLLM(
 		ctx: ActionCtx,
 		messages: LLMMessage[],
-		userRole: string
+		userRole: string,
+		sessionId?: Id<'agent_sessions'>,
+		userId?: string,
+		options?: {
+			useRag?: boolean;
+			useWebSearch?: boolean;
+		}
 	): Promise<LLMResponse> {
+		// Map agent names to admin task config names
+		// This allows agents to use the model configured in /admin/models
+		const AGENT_TO_TASK_MAP: Record<string, string> = {
+			chat: 'chat_primary',
+			researcher: 'multi_agent',
+			'content-creator': 'multi_agent',
+			'flashcard-tutor': 'flashcards',
+			'syllabus-planner': 'multi_agent',
+			'memory-curator': 'memory_extraction'
+		};
+
 		// Get admin-configured model for this agent, fallback to agent's default
-		const taskName = `agent_${this.config.name}`;
+		const taskName = AGENT_TO_TASK_MAP[this.config.name] || `agent_${this.config.name}`;
 		const modelConfig = await ctx.runQuery(api.tasks.getConfig, { task: taskName });
 		const model = modelConfig?.modelId || this.config.model;
 		const temperature = modelConfig?.temperature ?? this.config.temperature;
 
 		// Build tools array from agent's available tools
-		const tools = this.buildToolDefinitions();
+		const tools = this.buildToolDefinitions(options);
+
+		console.log(
+			`[Agent:${this.config.name}] Calling LLM with ${tools.length} tools. WebSearch enabled: ${options?.useWebSearch !== false}`
+		);
 
 		// Use the unified LLM client
 		const response = await chatWithTools(model, messages, tools, {
@@ -213,8 +414,25 @@ export class BaseAgent {
 			completionTokens: response.usage.completionTokens
 		});
 
+		// Log agent LLM usage if userId is provided
+		if (userId) {
+			await ctx.runMutation(internal.usage.logUsage, {
+				userId,
+				agentSessionId: sessionId,
+				agentName: this.config.name,
+				purpose: 'agent_llm',
+				model,
+				promptTokens: response.usage.promptTokens,
+				completionTokens: response.usage.completionTokens,
+				totalTokens: response.usage.totalTokens,
+				cost
+			});
+		}
+
 		return {
 			content: response.content,
+			model,
+			temperature,
 			toolCalls,
 			cost,
 			tokens: {
@@ -225,18 +443,19 @@ export class BaseAgent {
 	}
 
 	/**
-	 * Execute a tool with middleware support
+	 * Execute a tool with middleware support and semantic highlighting
 	 */
 	protected async executeTool(
 		ctx: ActionCtx,
 		toolCall: ToolCall,
 		session: AgentSession,
-		userRole: string
+		userRole: string,
+		userQuery?: string
 	): Promise<ToolExecution> {
 		const toolName = toolCall.function.name;
 		const tool = this.tools.get(toolName);
 		const startedAt = Date.now();
-		const toolInput = JSON.parse(toolCall.function.arguments);
+		const toolInput = JSON.parse(toolCall.function.arguments) as Record<string, unknown>;
 
 		if (!tool) {
 			return {

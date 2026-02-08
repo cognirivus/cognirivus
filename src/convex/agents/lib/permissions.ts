@@ -1,7 +1,8 @@
 // RBAC Permissions library for the multi-agent system
 import { ConvexError } from 'convex/values';
 import type { ActionCtx } from '../../_generated/server';
-import { getAgentConfig } from '../config';
+import { internal } from '../../_generated/api';
+import { getTool } from '../../tools/registry';
 
 export interface PermissionCheck {
 	allowed: boolean;
@@ -18,7 +19,9 @@ export async function checkAgentPermission(
 	agentName: string,
 	userRole: string
 ): Promise<PermissionCheck> {
-	const agent = getAgentConfig(agentName);
+	const agent = await ctx.runQuery(internal.agents.queries.internalGetConfigByName, {
+		name: agentName
+	});
 
 	if (!agent) {
 		return { allowed: false, reason: 'Agent not found' };
@@ -45,23 +48,15 @@ export async function checkAgentPermission(
  */
 export function checkToolPermission(
 	toolName: string,
-	agentName: string,
+	_agentName: string,
 	userRole: string
 ): { allowed: boolean; reason?: string } {
-	const agent = getAgentConfig(agentName);
-
-	if (!agent) {
-		return { allowed: false, reason: 'Agent not found' };
+	const tool = getTool(toolName);
+	if (!tool) {
+		return { allowed: false, reason: `Tool ${toolName} not found` };
 	}
 
-	// Check if tool is in agent's available tools
-	if (!agent.availableTools.includes(toolName)) {
-		return { allowed: false, reason: `Tool ${toolName} not available for agent ${agentName}` };
-	}
-
-	// Check admin-only tools
-	const adminOnlyTools = ['systemConfig', 'userManagement', 'bulkOperations'];
-	if (adminOnlyTools.includes(toolName) && userRole !== 'admin') {
+	if (tool.isAdminOnly && userRole !== 'admin') {
 		return { allowed: false, reason: `Tool ${toolName} requires admin privileges` };
 	}
 

@@ -164,6 +164,13 @@ export const internalUpdate = internalMutation({
 		ctx,
 		{ messageId, body, usage, cost, metadata, reasoning, isCancelled, images }
 	) => {
+		// Check if message exists before updating to avoid crashing background actions
+		const existing = await ctx.db.get(messageId);
+		if (!existing) {
+			console.warn(`[Messages] internalUpdate: Message ${messageId} not found, skipping update`);
+			return;
+		}
+
 		const updates: any = { body };
 		if (usage) updates.usage = usage;
 		if (cost !== undefined) updates.cost = cost;

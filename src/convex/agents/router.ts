@@ -1,11 +1,18 @@
 // LLM-based intent detection and multi-agent orchestration
 import type { ActionCtx } from '../_generated/server';
 import { api, internal } from '../_generated/api';
-import type { IntentDetectionResult } from './types';
+import type {
+	IntentDetectionResult,
+	ToolExecution,
+	LLMCallTrace,
+	MessageDoc,
+	MessageMetadata,
+	AgentWorkMetadata
+} from './types';
 import { getAgent } from './registry';
-import { getAvailableAgents } from './config';
 import { checkAgentPermission } from './lib/permissions';
 import { jsonChat } from '../lib/llm_client';
+import type { Id } from '../_generated/dataModel';
 
 // Default model for intent routing (can be overridden in admin/models)
 const DEFAULT_INTENT_MODEL = 'openai/gpt-4o-mini';
@@ -17,10 +24,14 @@ export async function detectIntent(
 	ctx: ActionCtx,
 	query: string,
 	history: Array<{ role: string; body?: string; content?: string }>,
-	userRole: string
+	userRole: string,
+	userId?: string,
+	threadId?: Id<'threads'>
 ): Promise<IntentDetectionResult> {
 	// Get available agents for this user's role
-	const availableAgents = getAvailableAgents(userRole);
+	const availableAgents = await ctx.runQuery(internal.agents.queries.internalListEnabledForRole, {
+		userRole
+	});
 	const agentDescriptions = availableAgents.map((a) => `- ${a.name}: ${a.description}`).join('\n');
 
 	// Build classification prompt
@@ -66,14 +77,43 @@ ${history
 		const temperature = modelConfig?.temperature ?? 0.1;
 
 		// Use the unified LLM client for intent classification
-		const { data: result } = await jsonChat<{
+		const chatResult = await jsonChat<{
 			agent?: string;
 			confidence?: number;
 			reasoning?: string;
 		}>(model, systemPrompt, userPrompt, {
 			temperature,
 			maxTokens: 200
+		}).catch((err) => {
+			console.warn('[Router] LLM classification failed, using fallback:', err.message);
+			return null;
 		});
+
+		if (!chatResult || !chatResult.data) {
+			return fallbackToRuleMatch(ctx, query);
+		}
+
+		const { data: result, usage, model: actualModel } = chatResult;
+
+		// Log intent detection usage if userId is provided
+		if (userId) {
+			const cost = await ctx.runQuery(internal.models.calculateCost, {
+				modelId: actualModel,
+				promptTokens: usage.promptTokens,
+				completionTokens: usage.completionTokens
+			});
+
+			await ctx.runMutation(internal.usage.logUsage, {
+				userId,
+				threadId,
+				purpose: 'intent_detection',
+				model: actualModel,
+				promptTokens: usage.promptTokens,
+				completionTokens: usage.completionTokens,
+				totalTokens: usage.totalTokens,
+				cost
+			});
+		}
 
 		// Validate agent exists and user has access
 		const agentName = result.agent || 'chat';
@@ -168,10 +208,18 @@ export async function orchestrateMultiAgent(
 	query: string,
 	userRole: string,
 	intent: IntentDetectionResult,
-	messageId: string
-): Promise<{ agentWork: AgentWorkResult }> {
-	// Get message history
-	const messages = await ctx.runQuery(api.messages.list, { threadId: threadId as any });
+	messageId: Id<'messages'>,
+	options?: {
+		useMemory?: boolean;
+		useRag?: boolean;
+		useWebSearch?: boolean;
+	}
+): Promise<{ agentWork: AgentWorkResult; tokens?: { prompt: number; completion: number } }> {
+	// Get message history, excluding the current generating message
+	const allMessages = await ctx.runQuery(api.messages.list, {
+		threadId: threadId as Id<'threads'>
+	});
+	const messages = allMessages.filter((m) => (m as any)._id !== messageId);
 
 	// Check permission
 	const permission = await checkAgentPermission(ctx, intent.primaryAgent, userRole);
@@ -180,73 +228,137 @@ export async function orchestrateMultiAgent(
 	}
 
 	// Get agent and execute
-	const agent = getAgent(intent.primaryAgent);
+	const agent = await getAgent(ctx, intent.primaryAgent);
 	if (!agent) {
 		throw new Error(`Agent ${intent.primaryAgent} not found`);
 	}
 
-	// Execute the agent with real-time update callback
-	const result = await agent.execute(
-		ctx,
-		{
-			_id: '',
-			threadId,
-			agentName: intent.primaryAgent,
-			userId,
-			promptMessageId: userMessageId || '',
-			status: 'running',
-			depth: 0,
-			startedAt: Date.now()
-		},
-		messages,
-		userRole,
-		// Callback to update message metadata in real-time
-		async (update: { toolExecutions?: unknown[]; cost?: number; status?: string }) => {
-			const currentMsg = await ctx.runQuery(internal.messages.get, { id: messageId as any });
-			const currentAgentWork = (currentMsg?.metadata as Record<string, unknown>)?.agentWork || {};
-
-			await ctx.runMutation(internal.messages.internalUpdate, {
-				messageId: messageId as any,
-				body: '',
-				metadata: {
-					...(currentMsg?.metadata || {}),
-					status: update.status || 'agent_working',
-					agentWork: {
-						...(currentAgentWork as Record<string, unknown>),
-						toolExecutions:
-							update.toolExecutions ||
-							(currentAgentWork as Record<string, unknown>).toolExecutions ||
-							[],
-						cost: update.cost || (currentAgentWork as Record<string, unknown>).cost || 0,
-						isStreaming: update.status !== 'agent_complete'
-					}
-				}
+	// Create agent session in database
+	let sessionId: Id<'agent_sessions'> | undefined;
+	try {
+		if (userMessageId) {
+			sessionId = await ctx.runMutation(internal.agents.agent_sessions.internalCreate, {
+				threadId: threadId as Id<'threads'>,
+				userId,
+				agentName: intent.primaryAgent,
+				promptMessageId: userMessageId as Id<'messages'>,
+				depth: 0,
+				status: 'running',
+				startedAt: Date.now()
 			});
 		}
-	);
+	} catch (e) {
+		console.warn('[Router] Failed to create agent session:', e);
+	}
+
+	// Execute the agent with real-time update callback
+	let result;
+	try {
+		result = await agent.execute(
+			ctx,
+			{
+				_id: sessionId || '',
+				threadId,
+				agentName: intent.primaryAgent,
+				userId,
+				promptMessageId: userMessageId || '',
+				status: 'running',
+				depth: 0,
+				startedAt: Date.now()
+			},
+			messages,
+			userRole,
+			// Callback to update message metadata in real-time
+			async (update: {
+				toolExecutions?: ToolExecution[];
+				llmCalls?: LLMCallTrace[];
+				cost?: number;
+				status?: string;
+			}) => {
+				const currentMsg = (await ctx.runQuery(internal.messages.get, {
+					id: messageId
+				})) as MessageDoc | null;
+				if (!currentMsg) {
+					console.warn(`[Router] Message ${messageId} not found, skipping real-time update`);
+					return;
+				}
+
+				const currentAgentWork = currentMsg.metadata?.agentWork || ({} as AgentWorkMetadata);
+
+				await ctx.runMutation(internal.messages.internalUpdate, {
+					messageId,
+					body: '',
+					metadata: {
+						...(currentMsg.metadata || {}),
+						status: (update.status as any) || 'agent_working',
+						agentWork: {
+							...currentAgentWork,
+							toolExecutions: update.toolExecutions ?? currentAgentWork.toolExecutions ?? [],
+							llmCalls: update.llmCalls ?? currentAgentWork.llmCalls ?? [],
+							cost: update.cost ?? currentAgentWork.cost ?? 0,
+							isStreaming: update.status !== 'agent_complete'
+						}
+					}
+				});
+			},
+			// Pass session ID and userId for cost tracking
+			sessionId,
+			userId,
+			options
+		);
+
+		// Mark session as completed
+		if (sessionId) {
+			await ctx.runMutation(internal.agents.agent_sessions.internalComplete, {
+				sessionId,
+				cost: result.cost,
+				completedAt: Date.now()
+			});
+		}
+	} catch (error) {
+		// Mark session as error
+		if (sessionId) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			await ctx.runMutation(internal.agents.agent_sessions.internalSetError, {
+				sessionId,
+				errorMessage
+			});
+		}
+		throw error;
+	}
 
 	// Final update with complete agent work
 	const agentWork: AgentWorkResult = {
 		agentName: intent.primaryAgent,
-		agentDisplayName: getAgentDisplayName(intent.primaryAgent),
+		agentDisplayName: agent.getConfig().displayName || intent.primaryAgent,
 		intentConfidence: intent.confidence,
 		intentReasoning: intent.reasoning,
 		toolExecutions: result.toolExecutions,
+		llmCalls: result.llmCalls,
 		agentResponse: result.response,
 		cost: result.cost
 	};
 
 	// Mark agent work as complete
-	await ctx.runMutation(internal.messages.internalUpdate, {
-		messageId: messageId as any,
-		body: '',
-		metadata: {
-			status: 'generating',
-			agentWork: { ...agentWork, isStreaming: false }
-		}
-	});
+	const checkMsg = await ctx.runQuery(internal.messages.get, { id: messageId });
+	if (checkMsg) {
+		await ctx.runMutation(internal.messages.internalUpdate, {
+			messageId,
+			body: '',
+			metadata: {
+				...(checkMsg.metadata || {}),
+				status: 'generating',
+				agentWork: { ...agentWork, isStreaming: false }
+			}
+		});
+	}
 
-	return { agentWork };
+	return {
+		agentWork,
+		tokens: result.tokens
+			? { prompt: result.tokens.prompt, completion: result.tokens.completion }
+			: undefined
+	};
 }
 
 // Agent work result for UI display
@@ -255,24 +367,17 @@ export interface AgentWorkResult {
 	agentDisplayName: string;
 	intentConfidence: number;
 	intentReasoning: string;
-	toolExecutions: unknown[];
+	toolExecutions: ToolExecution[];
+	llmCalls: LLMCallTrace[];
 	agentResponse: string;
 	cost: number;
 }
 
-export function getAgentDisplayName(agentName: string): string {
-	const names: Record<string, string> = {
-		chat: 'Chat',
-		researcher: 'Researcher',
-		'content-creator': 'Content Creator',
-		'flashcard-tutor': 'Flashcard Tutor',
-		'syllabus-planner': 'Syllabus Planner',
-		'memory-curator': 'Memory Curator',
-		'system-admin': 'System Admin',
-		'data-curator': 'Data Curator',
-		'model-tuner': 'Model Tuner'
-	};
-	return names[agentName] || agentName;
+export async function getAgentDisplayName(ctx: ActionCtx, agentName: string): Promise<string> {
+	const agent = await ctx.runQuery(internal.agents.queries.internalGetConfigByName, {
+		name: agentName
+	});
+	return agent?.displayName || agentName;
 }
 
 export { orchestrateMultiAgent as default };

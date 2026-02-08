@@ -59,7 +59,7 @@
 			{:else}
 				<!-- Agent Work Collapsible (new flow - agent work + chat response) -->
 				<!-- Hide for chat agent without tools since its output is shown directly in the message -->
-				{#if message.metadata?.agentWork && (message.metadata.agentWork.agentName !== 'chat' || message.metadata.agentWork.toolExecutions?.length > 0)}
+				{#if message.metadata?.agentWork && (message.metadata.agentWork.agentName !== 'chat' || message.metadata.agentWork.toolExecutions?.length > 0 || message.metadata.agentWork.llmCalls?.length > 0)}
 					<AgentWorkCollapsible agentWork={message.metadata.agentWork} />
 				{/if}
 

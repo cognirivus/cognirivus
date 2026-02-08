@@ -26,7 +26,6 @@ import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as blogs from "../blogs.js";
 import type * as chat from "../chat.js";
-import type * as chat_multi_agent from "../chat_multi_agent.js";
 import type * as content from "../content.js";
 import type * as crons from "../crons.js";
 import type * as currentAffairs from "../currentAffairs.js";
@@ -96,7 +95,6 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   blogs: typeof blogs;
   chat: typeof chat;
-  chat_multi_agent: typeof chat_multi_agent;
   content: typeof content;
   crons: typeof crons;
   currentAffairs: typeof currentAffairs;

@@ -10,7 +10,8 @@
 		Activity,
 		Database,
 		Star,
-		BookOpen
+		BookOpen,
+		Globe
 	} from '@lucide/svelte';
 	import { useChatContext } from '$lib/chat-state.svelte';
 	import { onMount } from 'svelte';
@@ -221,6 +222,24 @@
 						title="Search Blogs (RAG)"
 					>
 						<BookOpen class="h-3.5 w-3.5" />
+					</Button>
+
+					<div class="h-4 w-[1px] bg-border/50"></div>
+
+					<Button
+						variant={chatState.useWebSearch ? 'default' : 'ghost'}
+						size="icon"
+						onclick={() => (chatState.useWebSearch = !chatState.useWebSearch)}
+						disabled={chatStatus === 'streaming'}
+						class="relative h-8 w-9 flex-shrink-0 rounded-none transition-all"
+						title="Search Web"
+					>
+						<Globe class="h-3.5 w-3.5" />
+						{#if chatState.useWebSearch}
+							<span
+								class="absolute top-1.5 right-1.5 flex h-1 w-1 animate-pulse rounded-full bg-primary-foreground shadow-[0_0_8px_rgba(255,255,255,0.8)]"
+							></span>
+						{/if}
 					</Button>
 
 					<div class="h-4 w-[1px] bg-border/50"></div>
@@ -462,6 +481,26 @@
 								</Button>
 							</Tooltip.Trigger>
 							<Tooltip.Content side="top">Search Blogs (RAG)</Tooltip.Content>
+						</Tooltip.Root>
+
+						<Tooltip.Root delayDuration={400}>
+							<Tooltip.Trigger>
+								<Button
+									variant={chatState.useWebSearch ? 'default' : 'ghost'}
+									size="icon"
+									onclick={() => (chatState.useWebSearch = !chatState.useWebSearch)}
+									disabled={chatStatus === 'streaming'}
+									class="relative h-8 w-8 transition-all"
+								>
+									<Globe class="h-4 w-4" />
+									{#if chatState.useWebSearch}
+										<span
+											class="absolute top-1.5 right-1.5 flex h-1 w-1 animate-pulse rounded-full bg-primary-foreground shadow-[0_0_8px_rgba(255,255,255,0.8)]"
+										></span>
+									{/if}
+								</Button>
+							</Tooltip.Trigger>
+							<Tooltip.Content side="top">Search Web</Tooltip.Content>
 						</Tooltip.Root>
 
 						<Tooltip.Root delayDuration={400}>

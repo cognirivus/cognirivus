@@ -2,6 +2,7 @@ import { action, query, mutation, internalMutation } from './_generated/server';
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { authComponent } from './auth';
+import { getGenerationStats } from './lib/llm_client';
 
 // Aspect ratio to dimensions mapping
 const ASPECT_DIMENSIONS: Record<string, { width: number; height: number }> = {
@@ -146,11 +147,37 @@ export const generate = action({
 				throw new Error(`OpenRouter error: ${response.statusText}`);
 			}
 
+			// Get generation ID for usage tracking
+			const generationId = response.headers.get('x-openrouter-id');
+
 			const data = await response.json();
 			const images = data.choices?.[0]?.message?.images;
 
 			if (!images || images.length === 0) {
 				throw new Error('No image generated');
+			}
+
+			// Log usage for OpenRouter image generation
+			if (generationId) {
+				try {
+					const stats = await getGenerationStats(generationId);
+					if (stats) {
+						await ctx.runMutation(internal.usage.logUsage, {
+							userId,
+							purpose: 'image_generation',
+							model: stats.model || modelToUse,
+							promptTokens: stats.native_tokens_prompt ?? stats.tokens_prompt ?? 0,
+							completionTokens: stats.native_tokens_completion ?? stats.tokens_completion ?? 0,
+							totalTokens:
+								(stats.native_tokens_prompt ?? stats.tokens_prompt ?? 0) +
+								(stats.native_tokens_completion ?? stats.tokens_completion ?? 0),
+							cost: stats.usage ?? stats.total_cost ?? 0,
+							raw_response: stats
+						});
+					}
+				} catch (e) {
+					console.warn('[Image] Failed to log usage:', e);
+				}
 			}
 
 			// Parse base64 image

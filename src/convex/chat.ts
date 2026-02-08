@@ -6,6 +6,7 @@ import { authComponent } from './auth';
 import type { OpenRouterMessage, GeneratedImage, ContextPayload } from './types/chat';
 import { detectIntent, orchestrateMultiAgent, getAgentDisplayName } from './agents/router';
 import { getUserRole } from './agents/lib/permissions';
+import type { AgentWorkResult } from './agents/router';
 
 /**
  * Generates an AI response for a given chat thread.
@@ -36,11 +37,21 @@ export const generate = action({
 		generateImage: v.optional(v.boolean()),
 		imageAspectRatio: v.optional(v.string()),
 		useMemory: v.optional(v.boolean()),
-		useRag: v.optional(v.boolean())
+		useRag: v.optional(v.boolean()),
+		useWebSearch: v.optional(v.boolean())
 	},
 	handler: async (
 		ctx,
-		{ threadId, model, includeReasoning, generateImage, imageAspectRatio, useMemory, useRag }
+		{
+			threadId,
+			model,
+			includeReasoning,
+			generateImage,
+			imageAspectRatio,
+			useMemory,
+			useRag,
+			useWebSearch
+		}
 	) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
@@ -56,11 +67,13 @@ export const generate = action({
 
 		// 2. Detect intent and route to appropriate agent
 		// ALL requests now go through agents (including 'chat' for memory/RAG via tools)
-		const intent = await detectIntent(ctx, userPrompt, messages, userRole);
+		const intent = await detectIntent(ctx, userPrompt, messages, userRole, userId, threadId);
 
 		// Determine if this is a specialized agent or default chat agent
 		const isSpecializedAgent = intent.primaryAgent !== 'chat' && intent.confidence >= 0.7;
 		const agentToUse = isSpecializedAgent ? intent.primaryAgent : 'chat';
+
+		const agentDisplayName = await getAgentDisplayName(ctx, agentToUse);
 
 		// Create assistant message early to show real-time status
 		const messageId = await ctx.runMutation(internal.messages.internalCreate, {
@@ -73,10 +86,11 @@ export const generate = action({
 				status: 'agent_working',
 				agentWork: {
 					agentName: agentToUse,
-					agentDisplayName: getAgentDisplayName(agentToUse),
+					agentDisplayName,
 					intentConfidence: intent.confidence,
 					intentReasoning: isSpecializedAgent ? intent.reasoning : 'General chat',
 					toolExecutions: [],
+					llmCalls: [],
 					agentResponse: '',
 					cost: 0,
 					isStreaming: true
@@ -87,19 +101,14 @@ export const generate = action({
 		// Route ALL requests through agent system
 		// Chat agent has tools: searchMemories, searchBlogs, webSearch, analyzeContent
 		// It will use them as needed based on the query
-		let agentWork: {
-			agentName: string;
-			agentDisplayName: string;
-			intentConfidence: number;
-			intentReasoning: string;
-			toolExecutions: unknown[];
-			agentResponse: string;
-			cost: number;
-		} | null = null;
+		let agentWork: AgentWorkResult | null = null;
+		let agentTokens: { prompt: number; completion: number } | undefined;
 
 		const agentIntent = isSpecializedAgent
 			? intent
 			: { primaryAgent: 'chat', confidence: 1, reasoning: 'General chat', subagents: [] };
+
+		console.log(`[Chat:Generate] useWebSearch: ${useWebSearch}, useRag: ${useRag}`);
 
 		try {
 			const agentResult = await orchestrateMultiAgent(
@@ -110,9 +119,15 @@ export const generate = action({
 				userPrompt,
 				userRole,
 				agentIntent,
-				messageId
+				messageId,
+				{
+					useMemory,
+					useRag,
+					useWebSearch
+				}
 			);
 			agentWork = agentResult.agentWork;
+			agentTokens = agentResult.tokens;
 		} catch (e: unknown) {
 			const errorMessage = e instanceof Error ? e.message : String(e);
 			console.error('[Chat] Agent execution failed:', errorMessage);
@@ -144,18 +159,26 @@ export const generate = action({
 				messageId,
 				body: agentWork.agentResponse,
 				metadata: finalMetadata,
-				cost: agentWork.cost
+				cost: agentWork.cost,
+				usage: agentTokens
+					? {
+							promptTokens: agentTokens.prompt,
+							completionTokens: agentTokens.completion,
+							totalTokens: agentTokens.prompt + agentTokens.completion
+						}
+					: undefined
 			});
 
 			// Log usage for agent work
 			await ctx.runMutation(internal.usage.logUsage, {
 				userId,
+				threadId,
 				messageId,
 				purpose: 'agent_chat',
 				model: modelToUse,
-				promptTokens: 0, // Agent already logged its own usage
-				completionTokens: 0,
-				totalTokens: 0,
+				promptTokens: agentTokens?.prompt ?? 0,
+				completionTokens: agentTokens?.completion ?? 0,
+				totalTokens: agentTokens ? agentTokens.prompt + agentTokens.completion : 0,
 				cost: agentWork.cost,
 				raw_response: { agentWork }
 			});

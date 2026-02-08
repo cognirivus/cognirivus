@@ -42,6 +42,34 @@ export interface AgentSession {
 }
 
 // ============================================================================
+// LLM Call Tracing
+// ============================================================================
+
+export interface TruncatedText {
+	text: string;
+	originalLength: number;
+	truncated: boolean;
+}
+
+export interface LLMCallTrace {
+	step: number;
+	startedAt: number;
+	completedAt: number;
+	model: string;
+	temperature?: number;
+	prompt: {
+		messageCount: number;
+		messages: Array<{ role: string; content: TruncatedText }>;
+	};
+	response: {
+		content: TruncatedText;
+		toolCalls?: Array<{ id: string; name: string; arguments: TruncatedText }>;
+	};
+	tokens: { prompt: number; completion: number };
+	cost: number;
+}
+
+// ============================================================================
 // Tool Execution
 // ============================================================================
 
@@ -55,6 +83,7 @@ export interface ToolExecution {
 	startedAt: number;
 	completedAt?: number;
 	errorMessage?: string;
+	step?: number;
 }
 
 // ============================================================================
@@ -75,6 +104,7 @@ export interface ToolResult<T = unknown> {
 export interface AgentResult {
 	response: string;
 	toolExecutions: ToolExecution[];
+	llmCalls: LLMCallTrace[];
 	cost: number;
 	tokens: {
 		prompt: number;
@@ -109,6 +139,7 @@ export interface AgentWorkMetadata {
 	intentConfidence: number;
 	intentReasoning: string;
 	toolExecutions: ToolExecution[];
+	llmCalls?: LLMCallTrace[];
 	agentResponse: string;
 	cost: number;
 	isStreaming?: boolean;
@@ -157,6 +188,8 @@ export interface ToolCall {
 
 export interface LLMResponse {
 	content: string;
+	model: string;
+	temperature?: number;
 	toolCalls?: ToolCall[];
 	cost: number;
 	tokens: {

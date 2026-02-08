@@ -1,29 +1,28 @@
 <script lang="ts">
-	import { ExternalLinkIcon, X, FileText } from '@lucide/svelte';
+	import { X, FileText, ExternalLink as ExternalLinkIcon } from '@lucide/svelte';
 	import { browser } from '$app/environment';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '../../../convex/_generated/api';
 	import type { Id } from '../../../convex/_generated/dataModel';
 	import { page } from '$app/state';
 	import { useChatContext } from '$lib/chat-state.svelte';
-	import { onMount } from 'svelte';
-
-	import { tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { toast } from 'svelte-sonner';
 
 	import MessageItem from '$lib/components/MessageItem.svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
-	import { toast } from 'svelte-sonner';
+	import { Terminal, CheckCircle2, Layers, Search, Database, Sparkles } from '@lucide/svelte';
+	import LLMTraceView from '$lib/components/LLMTraceView.svelte';
 	import HighlightToggle from '$lib/components/HighlightToggle.svelte';
 
-	const threadId = $derived(page.params.id as Id<'threads'>);
-
-	const client = useConvexClient();
 	const chatState = useChatContext();
+	const client = useConvexClient();
+	const threadId = page.params.id as Id<'threads'>;
+
 	let viewingContextId = $state<string | null>(null);
 	let viewingContextMode = $state<'full' | 'rag'>('full');
 	let viewport = $state<HTMLElement>();
@@ -98,7 +97,8 @@
 				generateImage: chatState.generateImage,
 				imageAspectRatio: chatState.generateImage ? chatState.imageAspectRatio : undefined,
 				useMemory: chatState.useMemory,
-				useRag: chatState.useRag
+				useRag: chatState.useRag,
+				useWebSearch: chatState.useWebSearch
 			});
 		} catch (e: any) {
 			if ((chatState.status as string) === 'ready') {
@@ -255,9 +255,22 @@
 			class="flex h-[85vh] w-full max-w-4xl animate-in flex-col overflow-hidden rounded-xl border bg-card shadow-2xl duration-200 zoom-in-95 fade-in"
 		>
 			<div class="flex flex-row items-center justify-between border-b px-6 py-4">
-				<h3 class="text-sm font-semibold">
-					{viewingContextMode === 'rag' ? 'Referenced Sources' : 'Context Sent to AI'}
-				</h3>
+				{#if messages.find((m) => m._id === viewingContextId)}
+					{@const selectedMessage = messages.find((m) => m._id === viewingContextId)}
+					<h3 class="text-sm font-semibold">
+						{#if viewingContextMode === 'rag'}
+							Referenced Sources
+						{:else if selectedMessage?.metadata?.agentWork?.llmCalls?.length > 0}
+							Agent Execution Trace
+						{:else}
+							Context Sent to AI
+						{/if}
+					</h3>
+				{:else}
+					<h3 class="text-sm font-semibold">
+						{viewingContextMode === 'rag' ? 'Referenced Sources' : 'Context Sent to AI'}
+					</h3>
+				{/if}
 				<Button
 					variant="ghost"
 					size="icon"
@@ -268,18 +281,16 @@
 				</Button>
 			</div>
 			<div class="flex-1 overflow-auto p-6 font-mono text-xs">
-				{#if messages.find((m) => m._id === viewingContextId)?.metadata?.requestPayload}
-					{@const payload = messages.find((m) => m._id === viewingContextId)?.metadata
-						?.requestPayload}
-
+				{#if messages.find((m) => m._id === viewingContextId)}
+					{@const selectedMessage = messages.find((m) => m._id === viewingContextId)!}
 					{#if viewingContextMode === 'rag'}
 						<div class="space-y-6">
 							<p class="text-sm text-muted-foreground">
 								The AI used the following knowledge sources to generate this response:
 							</p>
-							{#if payload?.ragResults?.length > 0}
+							{#if selectedMessage.metadata?.requestPayload?.ragResults?.length > 0}
 								<div class="grid gap-4">
-									{#each payload.ragResults as entry}
+									{#each selectedMessage.metadata.requestPayload.ragResults as entry}
 										<div
 											class="rounded-xl border bg-card p-5 shadow-sm transition-all hover:border-primary/20"
 										>
@@ -295,7 +306,7 @@
 														rel="noopener noreferrer"
 														class="inline-flex items-center gap-1 text-primary transition-colors hover:text-primary/80 hover:underline"
 													>
-														{entry.title || 'Untitled'}
+														{entry.title || 'Untitled Source'}
 														<ExternalLinkIcon class="h-3.5 w-3.5 shrink-0" />
 													</a>
 												{:else}
@@ -344,8 +355,31 @@
 								</div>
 							{/if}
 						</div>
-					{:else}
-						<!-- PIPELINE START -->
+					{:else if selectedMessage.metadata?.agentWork?.llmCalls?.length > 0}
+						<!-- AGENT TRACE VIEW -->
+						<div class="space-y-6 font-sans">
+							<div class="flex items-center gap-3 border-b pb-4">
+								<div
+									class="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary"
+								>
+									<Layers class="h-5 w-5" />
+								</div>
+								<div>
+									<h2 class="text-lg font-bold text-foreground">Multi-Agent Execution Trace</h2>
+									<p class="text-xs text-muted-foreground">
+										Detailed step-by-step reasoning and tool usage for this response.
+									</p>
+								</div>
+							</div>
+
+							<LLMTraceView
+								llmCalls={selectedMessage.metadata.agentWork.llmCalls}
+								toolExecutions={selectedMessage.metadata.agentWork.toolExecutions}
+							/>
+						</div>
+					{:else if selectedMessage.metadata?.requestPayload}
+						<!-- LEGACY PIPELINE VIEW -->
+						{@const payload = selectedMessage.metadata.requestPayload}
 						<div class="space-y-8">
 							<!-- Step 1: Query Formulation -->
 							<div class="relative border-l-2 border-primary/20 pb-4 pl-8">

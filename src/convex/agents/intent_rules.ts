@@ -30,6 +30,7 @@ export const listIntentRules = query({
 	returns: v.array(
 		v.object({
 			_id: v.id('intent_rules'),
+			_creationTime: v.number(),
 			pattern: v.string(),
 			agentName: v.string(),
 			priority: v.number(),
@@ -149,6 +150,7 @@ export const getActiveRules = internalQuery({
 	returns: v.array(
 		v.object({
 			_id: v.id('intent_rules'),
+			_creationTime: v.number(),
 			pattern: v.string(),
 			agentName: v.string(),
 			priority: v.number(),
@@ -175,6 +177,7 @@ export const testIntentDetection = query({
 	returns: v.array(
 		v.object({
 			_id: v.id('intent_rules'),
+			_creationTime: v.number(),
 			pattern: v.string(),
 			agentName: v.string(),
 			priority: v.number(),
