@@ -274,16 +274,19 @@
 			</div>
 		{/if}
 
-		<!-- Scroll to bottom FAB -->
-		{#if showScrollButton}
+	</div>
+
+	<!-- Scroll to bottom FAB -->
+	{#if showScrollButton}
+		<div class="pointer-events-none absolute inset-x-0 bottom-20 z-20 flex justify-center sm:bottom-24">
 			<button
 				onclick={scrollToBottom}
-				class="absolute bottom-20 left-1/2 z-20 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-background shadow-lg ring-1 ring-border/60 transition-all hover:scale-105 active:scale-95 sm:bottom-24"
+				class="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-full bg-background shadow-lg ring-1 ring-border/60 transition-all hover:scale-105 active:scale-95"
 			>
 				<ArrowDown class="h-4 w-4 text-muted-foreground" />
 			</button>
-		{/if}
-	</div>
+		</div>
+	{/if}
 
 	<!-- Input Area -->
 	<div class="pointer-events-none absolute inset-x-0 bottom-0 z-30">
