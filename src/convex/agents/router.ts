@@ -275,6 +275,7 @@ export async function orchestrateMultiAgent(
 				llmCalls?: LLMCallTrace[];
 				cost?: number;
 				status?: string;
+				agentResponse?: string;
 			}) => {
 				const currentMsg = (await ctx.runQuery(internal.messages.get, {
 					id: messageId
@@ -297,6 +298,7 @@ export async function orchestrateMultiAgent(
 							toolExecutions: update.toolExecutions ?? currentAgentWork.toolExecutions ?? [],
 							llmCalls: update.llmCalls ?? currentAgentWork.llmCalls ?? [],
 							cost: update.cost ?? currentAgentWork.cost ?? 0,
+							agentResponse: update.agentResponse ?? currentAgentWork.agentResponse ?? '',
 							isStreaming: update.status !== 'agent_complete'
 						}
 					}

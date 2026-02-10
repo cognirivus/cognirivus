@@ -545,3 +545,97 @@ export async function streamChatCompletion(
 
 	return { response, generationId };
 }
+
+/**
+ * Process a streaming response from the LLM
+ */
+export async function processStream(
+	response: Response,
+	callbacks: StreamCallbacks
+): Promise<{
+	content: string;
+	reasoning: string;
+	toolCalls: LLMToolCall[];
+	usage: LLMResponse['usage'];
+}> {
+	const reader = response.body?.getReader();
+	if (!reader) throw new Error('No response body reader');
+
+	const decoder = new TextDecoder();
+	let content = '';
+	let reasoning = '';
+	const toolCallsMap = new Map<number, LLMToolCall>();
+	let usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+	let buffer = '';
+
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+
+			buffer += decoder.decode(value, { stream: true });
+			const lines = buffer.split('\n');
+			buffer = lines.pop() || '';
+
+			for (const line of lines) {
+				const trimmed = line.trim();
+				if (!trimmed || trimmed === 'data: [DONE]') continue;
+
+				const jsonStr = trimmed.startsWith('data: ') ? trimmed.slice(6) : trimmed;
+				try {
+					const json = JSON.parse(jsonStr);
+					const delta = json.choices?.[0]?.delta;
+
+					if (delta) {
+						if (delta.content) {
+							content += delta.content;
+							if (callbacks.onContent) callbacks.onContent(delta.content);
+						}
+						if (delta.reasoning || delta.reasoning_content) {
+							const r = delta.reasoning || delta.reasoning_content;
+							reasoning += r;
+							if (callbacks.onReasoning) callbacks.onReasoning(r);
+						}
+						if (delta.tool_calls) {
+							for (const tc of delta.tool_calls) {
+								const index = tc.index;
+								if (!toolCallsMap.has(index)) {
+									toolCallsMap.set(index, {
+										id: tc.id,
+										type: 'function',
+										function: { name: tc.function.name, arguments: '' }
+									});
+								}
+								const existing = toolCallsMap.get(index)!;
+								if (tc.function.arguments) {
+									existing.function.arguments += tc.function.arguments;
+								}
+								if (callbacks.onToolCall) callbacks.onToolCall(existing);
+							}
+						}
+					}
+
+					if (json.usage) {
+						usage = {
+							promptTokens: json.usage.prompt_tokens,
+							completionTokens: json.usage.completion_tokens,
+							totalTokens: json.usage.total_tokens
+						};
+						if (callbacks.onUsage) callbacks.onUsage(usage);
+					}
+				} catch (e) {
+					// Partial JSON
+				}
+			}
+		}
+	} finally {
+		reader.releaseLock();
+	}
+
+	return {
+		content,
+		reasoning,
+		toolCalls: Array.from(toolCallsMap.values()),
+		usage
+	};
+}

@@ -217,7 +217,10 @@
 				{@const latestMessage = messages[lastMessageIndex]}
 				{@const showLoader =
 					latestMessage?.role === 'user' ||
-					(latestMessage?.role === 'assistant' && !latestMessage.body && !latestMessage.reasoning)}
+					(latestMessage?.role === 'assistant' &&
+						!latestMessage.body &&
+						!latestMessage.reasoning &&
+						!latestMessage.metadata?.agentWork?.agentResponse)}
 
 				{#if showLoader}
 					{@const status =

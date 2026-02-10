@@ -129,6 +129,7 @@ export class BaseAgent {
 			llmCalls?: LLMCallTrace[];
 			cost?: number;
 			status?: string;
+			agentResponse?: string;
 		}) => Promise<void>,
 		sessionId?: Id<'agent_sessions'>,
 		userId?: string,
@@ -192,13 +193,33 @@ IMPORTANT: You are limited to EXACTLY ONE web search attempt per turn. Make your
 
 		while (step < this.config.maxSteps) {
 			const llmStartedAt = Date.now();
+
+			let accumulatedContent = '';
+			let lastUpdateTime = 0;
+			const UPDATE_THROTTLE_MS = 250; // Throttle DB updates to 4 per second
+
 			const response = await this.callLLM(
 				ctx,
 				currentMessages,
 				userRole,
 				sessionId,
 				userId,
-				options
+				options,
+				async (chunk) => {
+					accumulatedContent += chunk;
+					const now = Date.now();
+
+					// Throttle updates to avoid overloading the DB
+					if (now - lastUpdateTime > UPDATE_THROTTLE_MS && onUpdate) {
+						lastUpdateTime = now;
+						await onUpdate({
+							toolExecutions: [...toolExecutions],
+							llmCalls: [...llmCalls],
+							cost: totalCost, // Approximate cost until final
+							agentResponse: accumulatedContent
+						});
+					}
+				}
 			);
 			const llmCompletedAt = Date.now();
 
@@ -401,7 +422,8 @@ IMPORTANT: You are limited to EXACTLY ONE web search attempt per turn. Make your
 		options?: {
 			useRag?: boolean;
 			useWebSearch?: boolean;
-		}
+		},
+		onStream?: (chunk: string) => Promise<void>
 	): Promise<LLMResponse> {
 		// Map agent names to admin task config names
 		// This allows agents to use the model configured in /admin/models
@@ -427,11 +449,28 @@ IMPORTANT: You are limited to EXACTLY ONE web search attempt per turn. Make your
 			`[Agent:${this.config.name}] Calling LLM with ${tools.length} tools. WebSearch enabled: ${options?.useWebSearch !== false}`
 		);
 
-		// Use the unified LLM client
-		const response = await chatWithTools(model, messages, tools, {
-			temperature,
-			toolChoice: tools.length > 0 ? 'auto' : undefined
-		});
+		// Use streaming if callback is provided
+		let response;
+		if (onStream) {
+			const { streamChatCompletion, processStream } = await import('../../lib/llm_client');
+			const { response: streamResponse } = await streamChatCompletion({
+				model,
+				messages,
+				tools,
+				temperature,
+				toolChoice: tools.length > 0 ? 'auto' : undefined
+			});
+
+			response = await processStream(streamResponse, {
+				onContent: onStream
+			});
+		} else {
+			const { chatWithTools } = await import('../../lib/llm_client');
+			response = await chatWithTools(model, messages, tools, {
+				temperature,
+				toolChoice: tools.length > 0 ? 'auto' : undefined
+			});
+		}
 
 		// Convert to internal ToolCall format
 		const toolCalls: ToolCall[] = response.toolCalls.map((tc) => ({

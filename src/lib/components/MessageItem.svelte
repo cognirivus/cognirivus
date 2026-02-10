@@ -85,6 +85,12 @@
 						content={message.body}
 						class="w-full max-w-none bg-transparent p-0 leading-relaxed"
 					/>
+				{:else if message.metadata?.agentWork?.agentResponse && isStreaming}
+					<MessageContent
+						markdown
+						content={message.metadata.agentWork.agentResponse}
+						class="w-full max-w-none bg-transparent p-0 leading-relaxed"
+					/>
 				{/if}
 			{/if}
 
