@@ -4,10 +4,27 @@
 	import { page } from '$app/state';
 	import { tick } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { SendHorizontal, MessageSquare, ArrowDown } from '@lucide/svelte';
+	import { SendHorizontal, MessageSquare, ArrowDown, SmilePlus } from '@lucide/svelte';
 	import type { Id } from '$convex/_generated/dataModel';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { authClient } from '$lib/auth-client';
+
+	const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢', '👀'] as const;
+	type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
+	type MessageReaction = {
+		emoji: ReactionEmoji;
+		count: number;
+		reactedByMe: boolean;
+	};
+	type GroupChatMessage = {
+		_id: Id<'group_chat_messages'>;
+		userId: string;
+		userName: string;
+		userImage?: string;
+		body: string;
+		createdAt: number;
+		reactions: Array<MessageReaction>;
+	};
 
 	const groupId = $derived(page.params.id as Id<'groups'>);
 	const client = useConvexClient();
@@ -19,14 +36,15 @@
 	let scrollContainer: HTMLElement | null = $state(null);
 	let showScrollButton = $state(false);
 	let inputEl: HTMLTextAreaElement | null = $state(null);
+	let reactionPickerMessageId = $state<Id<'group_chat_messages'> | null>(null);
 
 	const messagesQuery = useQuery((api as any).group_chat.getMessages, () =>
 		groupId ? { groupId } : 'skip'
 	);
-	const messages = $derived(messagesQuery.data ?? []);
+	const messages = $derived((messagesQuery.data ?? []) as Array<GroupChatMessage>);
 
-	function groupMessagesByDate(msgs: any[]) {
-		const groups: { label: string; messages: any[] }[] = [];
+	function groupMessagesByDate(msgs: Array<GroupChatMessage>) {
+		const groups: Array<{ label: string; messages: Array<GroupChatMessage> }> = [];
 		let currentLabel = '';
 
 		for (const msg of msgs) {
@@ -59,7 +77,7 @@
 
 	const groupedMessages = $derived(groupMessagesByDate(messages));
 
-	function isConsecutive(msgs: any[], index: number) {
+	function isConsecutive(msgs: Array<GroupChatMessage>, index: number) {
 		if (index === 0) return false;
 		const prev = msgs[index - 1];
 		const curr = msgs[index];
@@ -158,7 +176,35 @@
 		}
 		return avatarColors[Math.abs(hash) % avatarColors.length];
 	}
+
+	function toggleReactionPicker(messageId: Id<'group_chat_messages'>) {
+		reactionPickerMessageId = reactionPickerMessageId === messageId ? null : messageId;
+	}
+
+	function handleDocumentClick(event: MouseEvent) {
+		if (!reactionPickerMessageId) return;
+		const target = event.target as HTMLElement | null;
+		if (!target) return;
+		if (target.closest('[data-reaction-controls]')) return;
+		reactionPickerMessageId = null;
+	}
+
+	async function toggleReaction(messageId: Id<'group_chat_messages'>, emoji: ReactionEmoji) {
+		if (!groupId) return;
+		try {
+			await client.mutation((api as any).group_chat.toggleReaction, {
+				groupId,
+				messageId,
+				emoji
+			});
+			reactionPickerMessageId = null;
+		} catch (e) {
+			console.error('Failed to toggle reaction:', e);
+		}
+	}
 </script>
+
+<svelte:document onclick={handleDocumentClick} />
 
 <div class="relative flex h-full max-h-full flex-col overflow-hidden">
 	<!-- Messages Area -->
@@ -208,7 +254,7 @@
 						{@const showName = !isMine && !consecutive}
 
 						<div
-							class="flex {isMine ? 'justify-end' : 'justify-start'} {consecutive
+							class="group flex {isMine ? 'justify-end' : 'justify-start'} {consecutive
 								? 'mt-0.5'
 								: 'mt-3'}"
 						>
@@ -263,6 +309,65 @@
 										<span class="shrink-0 text-[9px] leading-none opacity-60 sm:text-[10px]">
 											{formatTime(msg.createdAt)}
 										</span>
+									</div>
+									<div
+										data-reaction-controls
+										class="relative mt-1 flex max-w-full flex-wrap items-center gap-1 {isMine
+											? 'justify-end'
+											: 'justify-start'}"
+									>
+										{#each msg.reactions as reaction (`${msg._id}-${reaction.emoji}`)}
+											{#if isMine}
+												<span
+													class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-foreground/85 sm:text-xs"
+												>
+													<span>{reaction.emoji}</span>
+													<span class="font-medium">{reaction.count}</span>
+												</span>
+											{:else}
+												<button
+													type="button"
+													aria-label={`Toggle ${reaction.emoji} reaction`}
+													onclick={() => toggleReaction(msg._id, reaction.emoji)}
+													class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors sm:text-xs {reaction.reactedByMe
+														? 'border-primary/40 bg-primary/10 text-primary'
+														: 'border-border/70 bg-background text-foreground/85 hover:bg-muted/70'}"
+												>
+													<span>{reaction.emoji}</span>
+													<span class="font-medium">{reaction.count}</span>
+												</button>
+											{/if}
+										{/each}
+
+										{#if !isMine}
+											<button
+												type="button"
+												aria-label="Add reaction"
+												onclick={() => toggleReactionPicker(msg._id)}
+												class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground sm:h-7 sm:w-7"
+											>
+												<SmilePlus class="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+											</button>
+										{/if}
+
+										{#if !isMine && reactionPickerMessageId === msg._id}
+											<div
+												class="absolute bottom-full z-20 mb-1.5 flex items-center gap-0.5 rounded-full border border-border/70 bg-background p-1 shadow-md {isMine
+													? 'right-0'
+													: 'left-0'}"
+											>
+												{#each REACTION_EMOJIS as emoji (emoji)}
+													<button
+														type="button"
+														aria-label={`React with ${emoji}`}
+														onclick={() => toggleReaction(msg._id, emoji)}
+														class="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors hover:bg-muted sm:h-8 sm:w-8 sm:text-base"
+													>
+														{emoji}
+													</button>
+												{/each}
+											</div>
+										{/if}
 									</div>
 								</div>
 							</div>

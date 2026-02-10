@@ -611,14 +611,27 @@ export const remove = mutation({
 			.collect();
 		for (const bcr of blogCommentReactions) await ctx.db.delete(bcr._id);
 
-		// 4. Delete memberships
+		// 4. Delete group chat messages and reactions
+		const chatReactions = await ctx.db
+			.query('group_chat_reactions')
+			.withIndex('by_group', (q) => q.eq('groupId', groupId))
+			.collect();
+		for (const reaction of chatReactions) await ctx.db.delete(reaction._id);
+
+		const chatMessages = await ctx.db
+			.query('group_chat_messages')
+			.withIndex('by_group_created_at', (q) => q.eq('groupId', groupId))
+			.collect();
+		for (const message of chatMessages) await ctx.db.delete(message._id);
+
+		// 5. Delete memberships
 		const memberships = await ctx.db
 			.query('group_memberships')
 			.withIndex('by_group', (q) => q.eq('groupId', groupId))
 			.collect();
 		for (const m of memberships) await ctx.db.delete(m._id);
 
-		// 5. Finally, delete the group itself
+		// 6. Finally, delete the group itself
 		await ctx.db.delete(groupId);
 	}
 });

@@ -482,7 +482,18 @@ const schema = defineSchema({
 		userImage: v.optional(v.string()),
 		body: v.string(),
 		createdAt: v.number()
-	}).index('by_group_created_at', ['groupId', 'createdAt'])
+	}).index('by_group_created_at', ['groupId', 'createdAt']),
+	group_chat_reactions: defineTable({
+		groupId: v.id('groups'),
+		messageId: v.id('group_chat_messages'),
+		userId: v.string(),
+		emoji: v.string(),
+		createdAt: v.number()
+	})
+		.index('by_message', ['messageId'])
+		.index('by_message_user_emoji', ['messageId', 'userId', 'emoji'])
+		.index('by_group', ['groupId'])
+		.index('by_group_message', ['groupId', 'messageId'])
 });
 
 export default schema;
