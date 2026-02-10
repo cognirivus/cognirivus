@@ -4,6 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
+	import GroupPresenceWidget from '$lib/components/GroupPresenceWidget.svelte';
 	import {
 		Search,
 		ChevronRight,
@@ -184,6 +185,16 @@
 					<LayoutDashboard class="h-4 w-4" />
 					Dashboard
 				</button>
+				<button
+					onclick={() => navigate('/chat')}
+					class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-bold transition-all hover:bg-accent
+                    {page.url.pathname.includes('/chat')
+						? 'bg-accent text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<MessageSquare class="h-4 w-4" />
+					Chat
+				</button>
 				{#if group?.membershipRole === 'admin' || group?.ownerId === currentUserId}
 					<button
 						onclick={() => navigate('/settings')}
@@ -343,7 +354,7 @@
 						<Button size="sm" class="h-7 px-3 text-xs" onclick={handleSearch}>Search</Button>
 					</div>
 				</header>
-			{:else if !page.url.pathname.includes('/content/')}
+			{:else if !page.url.pathname.includes('/content/') && !page.url.pathname.includes('/chat')}
 				<header
 					class="flex h-10 shrink-0 items-center justify-between border-b bg-background px-4 {isSidebarOpen
 						? ''
@@ -429,6 +440,11 @@
 
 					<Separator />
 
+					<!-- Members Presence Widget -->
+					<GroupPresenceWidget />
+
+					<Separator />
+
 					<div class="rounded-xl border bg-primary/5 p-4 text-center">
 						<Users class="mx-auto mb-2 h-8 w-8 text-primary/40" />
 						<p class="text-xs font-medium">Ready to collaborate?</p>
@@ -451,5 +467,3 @@
 		</div>
 	</aside>
 </div>
-
-

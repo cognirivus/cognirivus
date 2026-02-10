@@ -288,7 +288,7 @@
 		<Tabs.Root bind:value={activeTab}>
 			<Tabs.List class="h-9">
 				{#each categories as cat}
-					<Tabs.Trigger value={cat.id} class="text-xs px-3">
+					<Tabs.Trigger value={cat.id} class="px-3 text-xs">
 						{cat.label}
 						{#if cat.id !== 'all'}
 							<span class="ml-1 text-[10px] text-muted-foreground">
@@ -300,12 +300,10 @@
 			</Tabs.List>
 		</Tabs.Root>
 		<div class="relative w-full sm:w-64">
-			<Search class="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-			<Input
-				placeholder="Search tasks..."
-				bind:value={searchFilter}
-				class="h-9 pl-8 text-sm"
+			<Search
+				class="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
 			/>
+			<Input placeholder="Search tasks..." bind:value={searchFilter} class="h-9 pl-8 text-sm" />
 		</div>
 	</div>
 
@@ -317,7 +315,7 @@
 						<Skeleton class="h-8 w-8 shrink-0 rounded-md" />
 						<Skeleton class="h-4 w-28" />
 						<Skeleton class="h-4 w-48" />
-						<div class="flex-1" />
+						<div class="flex-1"></div>
 						<Skeleton class="h-8 w-48" />
 						<Skeleton class="h-8 w-20" />
 						<Skeleton class="h-8 w-24" />
@@ -330,7 +328,7 @@
 		<div class="rounded-lg border bg-card shadow-sm">
 			<!-- Table Header -->
 			<div
-				class="grid grid-cols-[2.5rem_10rem_1fr_5rem_minmax(12rem,2fr)_4.5rem_5rem_2.5rem] items-center gap-3 border-b bg-muted/40 px-4 py-2.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground"
+				class="grid grid-cols-[2.5rem_10rem_1fr_5rem_minmax(12rem,2fr)_4.5rem_5rem_2.5rem] items-center gap-3 border-b bg-muted/40 px-4 py-2.5 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
 			>
 				<span></span>
 				<span>Task</span>
@@ -426,9 +424,7 @@
 												</div>
 												<div class="max-h-[300px] overflow-y-auto p-1">
 													{#if getFilteredModels(task.id, modelSearchQueries[task.id]).length === 0}
-														<div
-															class="px-2 py-4 text-center text-sm text-muted-foreground"
-														>
+														<div class="px-2 py-4 text-center text-sm text-muted-foreground">
 															No models found.
 														</div>
 													{:else}
@@ -441,10 +437,7 @@
 																)}
 																onclick={() => {
 																	taskSettings[task.id].modelId = model.modelId;
-																	if (
-																		model.attributes?.top_provider
-																			?.max_completion_tokens
-																	) {
+																	if (model.attributes?.top_provider?.max_completion_tokens) {
 																		taskSettings[task.id].maxTokens =
 																			model.attributes.top_provider.max_completion_tokens;
 																	}
@@ -459,14 +452,9 @@
 																			: 'opacity-0'
 																	)}
 																/>
-																<div
-																	class="flex min-w-0 flex-1 flex-col items-start gap-0.5"
-																>
-																	<span class="truncate font-medium"
-																		>{model.name}</span
-																	>
-																	<span
-																		class="truncate text-[10px] text-muted-foreground"
+																<div class="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+																	<span class="truncate font-medium">{model.name}</span>
+																	<span class="truncate text-[10px] text-muted-foreground"
 																		>{model.modelId}</span
 																	>
 																	<div
@@ -474,17 +462,27 @@
 																	>
 																		{#if model.attributes?.context_length}
 																			<span
-																				>ctx: {(model.attributes.context_length / 1000).toFixed(0)}k</span
+																				>ctx: {(model.attributes.context_length / 1000).toFixed(
+																					0
+																				)}k</span
 																			>
 																		{/if}
 																		{#if model.attributes?.top_provider?.max_completion_tokens}
 																			<span
-																				>out: {(model.attributes.top_provider.max_completion_tokens / 1000).toFixed(0)}k</span
+																				>out: {(
+																					model.attributes.top_provider.max_completion_tokens / 1000
+																				).toFixed(0)}k</span
 																			>
 																		{/if}
 																		{#if model.attributes?.pricing?.prompt || model.attributes?.pricing?.completion}
 																			<span class="text-emerald-600"
-																				>${(parseFloat(model.attributes.pricing?.prompt || '0') * 1_000_000).toFixed(2)}/${(parseFloat(model.attributes.pricing?.completion || '0') * 1_000_000).toFixed(2)}</span
+																				>${(
+																					parseFloat(model.attributes.pricing?.prompt || '0') *
+																					1_000_000
+																				).toFixed(2)}/${(
+																					parseFloat(model.attributes.pricing?.completion || '0') *
+																					1_000_000
+																				).toFixed(2)}</span
 																			>
 																		{/if}
 																	</div>

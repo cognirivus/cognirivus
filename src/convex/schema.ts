@@ -1,7 +1,9 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { tables as authTables } from './betterAuth/schema';
 
 const schema = defineSchema({
+	...authTables,
 	messages: defineTable({
 		body: v.string(),
 		reasoning: v.optional(v.string()),
@@ -472,7 +474,15 @@ const schema = defineSchema({
 		temperature: v.optional(v.number()),
 		maxTokens: v.optional(v.number()),
 		updatedAt: v.number()
-	}).index('by_task', ['task'])
+	}).index('by_task', ['task']),
+	group_chat_messages: defineTable({
+		groupId: v.id('groups'),
+		userId: v.string(),
+		userName: v.string(),
+		userImage: v.optional(v.string()),
+		body: v.string(),
+		createdAt: v.number()
+	}).index('by_group_created_at', ['groupId', 'createdAt'])
 });
 
 export default schema;
