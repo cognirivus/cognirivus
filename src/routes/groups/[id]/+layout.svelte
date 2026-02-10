@@ -293,8 +293,18 @@
 			<button
 				onclick={() => (isSidebarOpen = true)}
 				class="absolute top-0 left-0 z-50 flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				aria-label="Open left sidebar"
 			>
 				<PanelLeft class="h-4 w-4" />
+			</button>
+		{/if}
+		{#if isMobile && !isSidebarOpen && !isRightSidebarOpen}
+			<button
+				onclick={() => (isRightSidebarOpen = true)}
+				class="absolute top-0 right-0 z-50 flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:hidden"
+				aria-label="Open right sidebar"
+			>
+				<PanelRight class="h-4 w-4" />
 			</button>
 		{/if}
 
@@ -371,19 +381,6 @@
 			<div class="flex-1 {page.url.pathname.includes('/chat') ? 'overflow-hidden' : 'overflow-y-auto'}">
 				{@render children()}
 			</div>
-
-			<!-- Right Sidebar FAB for Mobile -->
-			{#if isMobile}
-				<button
-					onclick={() => (isRightSidebarOpen = true)}
-					class="fixed right-6 bottom-12 z-40 flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:scale-105 active:scale-95 lg:hidden {isRightSidebarOpen
-						? 'pointer-events-none scale-0 opacity-0'
-						: 'scale-100 opacity-100'}"
-					aria-label="View Details"
-				>
-					<Info class="size-4" />
-				</button>
-			{/if}
 		{/if}
 	</main>
 

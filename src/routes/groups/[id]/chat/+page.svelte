@@ -63,9 +63,7 @@
 		if (index === 0) return false;
 		const prev = msgs[index - 1];
 		const curr = msgs[index];
-		return (
-			prev.userId === curr.userId && curr.createdAt - prev.createdAt < 120000
-		);
+		return prev.userId === curr.userId;
 	}
 
 	async function sendMessage() {
@@ -130,7 +128,7 @@
 		return new Date(ts).toLocaleTimeString([], {
 			hour: '2-digit',
 			minute: '2-digit',
-			second: '2-digit'
+			hour12: false
 		});
 	}
 
@@ -162,7 +160,7 @@
 	}
 </script>
 
-<div class="flex h-full max-h-full flex-col overflow-hidden">
+<div class="relative flex h-full max-h-full flex-col overflow-hidden">
 	<!-- Messages Area -->
 	<div
 		bind:this={scrollContainer}
@@ -192,8 +190,8 @@
 				</p>
 			</div>
 		{:else}
-			<div class="mx-auto max-w-3xl px-3 py-3 sm:px-6 sm:py-4">
-				{#each groupedMessages as group}
+			<div class="mx-auto max-w-3xl px-3 py-3 pb-20 sm:px-6 sm:py-4 sm:pb-24">
+				{#each groupedMessages as group (group.label)}
 					<!-- Date Separator -->
 					<div class="sticky top-0 z-10 flex justify-center py-2 sm:py-3">
 						<span
@@ -215,23 +213,21 @@
 								: 'mt-3'}"
 						>
 							<div
-								class="flex max-w-[85%] gap-1.5 sm:max-w-[75%] sm:gap-2 {isMine
-									? 'flex-row-reverse'
-									: 'flex-row'} items-end"
+								class="flex max-w-[85%] items-start gap-1.5 sm:max-w-[75%] sm:gap-2"
 							>
 								<!-- Avatar -->
 								{#if !isMine}
-									<div class="w-6 shrink-0 sm:w-7">
+									<div class="w-7 shrink-0 pt-0.5 sm:w-8">
 										{#if showAvatar}
 											{#if msg.userImage}
 												<img
 													src={msg.userImage}
 													alt={msg.userName}
-													class="h-6 w-6 rounded-full object-cover ring-2 ring-background sm:h-7 sm:w-7"
+													class="h-7 w-7 rounded-full object-cover ring-2 ring-background sm:h-8 sm:w-8"
 												/>
 											{:else}
 												<div
-													class="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-semibold ring-2 ring-background sm:h-7 sm:w-7 sm:text-[10px] {getAvatarColor(
+													class="flex h-7 w-7 items-center justify-center rounded-full text-[9px] font-semibold ring-2 ring-background sm:h-8 sm:w-8 sm:text-[10px] {getAvatarColor(
 														msg.userId
 													)}"
 												>
@@ -242,7 +238,7 @@
 									</div>
 								{/if}
 
-								<!-- Bubble -->
+								<!-- Sender and bubble -->
 								<div
 									class="flex min-w-0 flex-col {isMine
 										? 'items-end'
@@ -255,27 +251,16 @@
 											{msg.userName}
 										</span>
 									{/if}
-									<div>
-										<div
-											class="whitespace-pre-wrap break-words rounded-2xl px-3 py-1.5 text-[13px] leading-relaxed sm:px-3.5 sm:py-2 sm:text-[13.5px]
-											{isMine
-												? consecutive
-													? 'rounded-2xl'
-													: 'rounded-br-md'
-												: consecutive
-													? 'rounded-2xl'
-													: 'rounded-bl-md'}
-											{isMine
-												? 'bg-primary text-primary-foreground'
-												: 'bg-muted/70 text-foreground'}"
-										>
+									<div
+										class="flex max-w-full items-end gap-2 rounded-lg px-3 py-1.5 text-[13px] leading-relaxed sm:px-3.5 sm:py-2 sm:text-[13.5px]
+										{isMine
+											? 'bg-primary text-primary-foreground'
+											: 'bg-muted/70 text-foreground'}"
+									>
+										<span class="min-w-0 flex-1 whitespace-pre-wrap break-words">
 											{msg.body}
-										</div>
-										<span
-											class="mt-0.5 block px-1 text-[9px] text-muted-foreground/50 sm:text-[10px] {isMine
-												? 'text-right'
-												: 'text-left'}"
-										>
+										</span>
+										<span class="shrink-0 text-[9px] leading-none opacity-60 sm:text-[10px]">
 											{formatTime(msg.createdAt)}
 										</span>
 									</div>
@@ -293,7 +278,7 @@
 		{#if showScrollButton}
 			<button
 				onclick={scrollToBottom}
-				class="absolute bottom-3 left-1/2 z-20 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-background shadow-lg ring-1 ring-border/60 transition-all hover:scale-105 active:scale-95"
+				class="absolute bottom-20 left-1/2 z-20 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-background shadow-lg ring-1 ring-border/60 transition-all hover:scale-105 active:scale-95 sm:bottom-24"
 			>
 				<ArrowDown class="h-4 w-4 text-muted-foreground" />
 			</button>
@@ -301,31 +286,35 @@
 	</div>
 
 	<!-- Input Area -->
-	<div class="shrink-0 border-t bg-background px-3 py-2 sm:px-4 sm:py-3">
-		<div class="mx-auto flex max-w-3xl items-end gap-2">
+	<div class="pointer-events-none absolute inset-x-0 bottom-0 z-30">
+		<div class="mx-auto max-w-3xl px-3 pb-3 sm:px-6 sm:pb-4">
 			<div
-				class="flex min-h-[40px] flex-1 items-end rounded-xl border border-border/60 bg-muted/30 transition-colors focus-within:border-primary/30 focus-within:bg-muted/40 sm:min-h-[44px]"
+				class="pointer-events-auto flex items-end gap-2 rounded-xl border border-border/60 bg-background/92 shadow-[0_10px_30px_-16px_rgba(0,0,0,0.35)] backdrop-blur-md"
 			>
-				<textarea
-					bind:this={inputEl}
-					bind:value={newMessage}
-					onkeydown={handleKeydown}
-					oninput={autoResizeTextarea}
-					placeholder="Write a message..."
-					rows={1}
-					class="max-h-32 w-full resize-none bg-transparent px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none sm:px-4 sm:py-2.5 sm:text-[13.5px]"
-				></textarea>
+				<div
+					class="flex min-h-[40px] flex-1 items-end rounded-l-xl border-r border-border/50 bg-muted/30 transition-colors focus-within:bg-muted/40 sm:min-h-[44px]"
+				>
+					<textarea
+						bind:this={inputEl}
+						bind:value={newMessage}
+						onkeydown={handleKeydown}
+						oninput={autoResizeTextarea}
+						placeholder="Write a message..."
+						rows={1}
+						class="max-h-32 w-full resize-none bg-transparent px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none sm:px-4 sm:py-2.5 sm:text-[13.5px]"
+					></textarea>
+				</div>
+				<Button
+					onclick={sendMessage}
+					disabled={!newMessage.trim()}
+					size="icon"
+					class="h-10 w-10 shrink-0 rounded-r-xl rounded-l-none transition-all sm:h-[44px] sm:w-[44px] {newMessage.trim()
+						? 'bg-primary shadow-md hover:shadow-lg'
+						: ''}"
+				>
+					<SendHorizontal class="h-[18px] w-[18px]" />
+				</Button>
 			</div>
-			<Button
-				onclick={sendMessage}
-				disabled={!newMessage.trim()}
-				size="icon"
-				class="h-10 w-10 shrink-0 rounded-xl transition-all sm:h-[44px] sm:w-[44px] {newMessage.trim()
-					? 'bg-primary shadow-md hover:shadow-lg'
-					: ''}"
-			>
-				<SendHorizontal class="h-[18px] w-[18px]" />
-			</Button>
 		</div>
 	</div>
 </div>
