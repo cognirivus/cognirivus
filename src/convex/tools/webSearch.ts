@@ -4,7 +4,7 @@ import type { ToolDefinition } from './types';
 export const webSearchTool: ToolDefinition = {
 	name: 'webSearch',
 	description:
-		'Search the web for current information, news, and facts. Returns an intelligent answer and referenced source documents.',
+		'Search the web for current information, news, and facts. Returns an intelligent answer and referenced source documents. IMPORTANT: Limited to 1 call per session.',
 	parameters: {
 		type: 'object',
 		properties: {
@@ -173,5 +173,5 @@ export const webSearchTool: ToolDefinition = {
 		}
 	},
 	isAdminOnly: false,
-	costTier: 'low'
+	costTier: 'high'
 };

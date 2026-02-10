@@ -144,6 +144,7 @@ export class BaseAgent {
 		let totalPromptTokens = 0;
 		let totalCompletionTokens = 0;
 		let step = 0;
+		const toolCallCounts: Record<string, number> = {};
 
 		// Convert DB messages to LLM format (body -> content)
 		const currentMessages: LLMMessage[] = messages.map((m) => ({
@@ -159,7 +160,8 @@ export class BaseAgent {
 			if (options.useWebSearch === false) {
 				instructions += `\n\nCRITICAL: Web search is currently DISABLED. Do not attempt to use the webSearch tool. Rely on searchBlogs or your internal knowledge for older facts.`;
 			} else if (options.useWebSearch === true) {
-				instructions += `\n\nCRITICAL: Web search is ENABLED. You MUST use the webSearch tool for any query requiring real-time info, current events, or facts outside your training data. Do not answer from internal knowledge for these topics.`;
+				instructions += `\n\nCRITICAL: Web search is ENABLED. You MUST use the webSearch tool for any query requiring real-time info, current events, or facts outside your training data. 
+IMPORTANT: You are limited to EXACTLY ONE web search attempt per turn. Make your query comprehensive. If you need more info after one search, rely on your internal knowledge or inform the user.`;
 			}
 
 			if (options.useRag === false) {
@@ -235,33 +237,66 @@ export class BaseAgent {
 			}
 
 			if (response.toolCalls && response.toolCalls.length > 0) {
-				// Tracker for tool call frequency to prevent loops
-				const toolCallCounts: Record<string, number> = {};
-
 				// Execute each tool call
 				for (const toolCall of response.toolCalls) {
 					const toolName = toolCall.function.name;
 
-					// ENHANCEMENT: Prevent redundant/infinite loops
-					// If a tool (like webSearch) has been called 3+ times with no results, skip it
-					toolCallCounts[toolName] = (toolCallCounts[toolName] || 0) + 1;
-					const previousFailures = toolExecutions.filter((ex) => {
-						if (ex.toolName !== toolName || ex.status !== 'completed') return false;
+					// Strict limit for expensive tools: webSearch is limited to 1 call per turn
+					if (toolName === 'webSearch' && (toolCallCounts[toolName] || 0) >= 1) {
+						console.warn(`[Agent] Blocking redundant ${toolName} call (limit: 1)`);
 
-						const output = ex.output as ToolResult<any> | undefined;
-						return (
-							!output ||
-							(output.data && 'count' in output.data && output.data.count === 0) ||
-							(output.data && 'answer' in output.data && output.data.answer === '')
-						);
-					}).length;
+						const errorOutput = {
+							success: false,
+							error:
+								'Web search limit reached (1 call per turn). Please use the information already gathered or your internal knowledge.'
+						};
 
-					if (toolName === 'webSearch' && previousFailures >= 3) {
-						console.warn(
-							`[Agent] Capping redundant ${toolName} calls after ${previousFailures} failures`
-						);
+						// Add to executions for visibility
+						toolExecutions.push({
+							toolName,
+							input: JSON.parse(toolCall.function.arguments || '{}'),
+							status: 'error',
+							startedAt: Date.now(),
+							completedAt: Date.now(),
+							errorMessage: 'Web search limit reached',
+							output: errorOutput,
+							step
+						});
+
+						// Add tool call and result to messages so the LLM knows
+						currentMessages.push({
+							role: 'assistant',
+							content: null,
+							tool_calls: [
+								{
+									id: toolCall.id,
+									type: 'function',
+									function: {
+										name: toolCall.function.name,
+										arguments: toolCall.function.arguments
+									}
+								}
+							]
+						});
+						currentMessages.push({
+							role: 'tool',
+							tool_call_id: toolCall.id,
+							content: JSON.stringify(errorOutput)
+						});
+
+						// Update UI immediately to show the error
+						if (onUpdate) {
+							await onUpdate({
+								toolExecutions: [...toolExecutions],
+								llmCalls: [...llmCalls],
+								cost: totalCost
+							});
+						}
+
 						continue;
 					}
+
+					toolCallCounts[toolName] = (toolCallCounts[toolName] || 0) + 1;
 
 					// Add "running" tool to executions for real-time display
 					const runningTool: ToolExecution = {
