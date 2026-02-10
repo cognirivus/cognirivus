@@ -36,6 +36,37 @@ const messageWithReactionsValidator = v.object({
 	reactions: v.array(reactionSummaryValidator)
 });
 
+const MAX_MESSAGE_BYTES = 4096;
+const DEFAULT_MESSAGES_LIMIT = 50;
+const MAX_MESSAGES_LIMIT = 100;
+
+function normalizeMessageBody(body: string) {
+	const normalizedBody = body.trim();
+	if (!normalizedBody) {
+		throw new Error('Message body cannot be empty');
+	}
+
+	const encodedByteLength = new TextEncoder().encode(normalizedBody).length;
+	if (encodedByteLength > MAX_MESSAGE_BYTES) {
+		throw new Error(`Message body cannot exceed ${MAX_MESSAGE_BYTES} UTF-8 bytes`);
+	}
+
+	return normalizedBody;
+}
+
+function normalizeMessagesLimit(limit?: number) {
+	if (limit === undefined || !Number.isFinite(limit)) {
+		return DEFAULT_MESSAGES_LIMIT;
+	}
+
+	const normalizedLimit = Math.trunc(limit);
+	if (normalizedLimit <= 0) {
+		return 1;
+	}
+
+	return Math.min(normalizedLimit, MAX_MESSAGES_LIMIT);
+}
+
 async function requireActiveMembership(
 	ctx: QueryCtx | MutationCtx,
 	userId: string,
@@ -80,13 +111,14 @@ export const sendMessage = mutation({
 		if (!user) throw new Error('Not authenticated');
 
 		await requireActiveMembership(ctx, user._id, args.groupId);
+		const body = normalizeMessageBody(args.body);
 
 		return await ctx.db.insert('group_chat_messages', {
 			groupId: args.groupId,
 			userId: user._id,
 			userName: user.name ?? 'Anonymous',
 			userImage: user.image || undefined,
-			body: args.body,
+			body,
 			isDeleted: false,
 			createdAt: Date.now()
 		});
@@ -111,10 +143,7 @@ export const editMessage = mutation({
 			throw new Error('Message has been deleted');
 		}
 
-		const nextBody = args.body.trim();
-		if (!nextBody) {
-			throw new Error('Message body cannot be empty');
-		}
+		const nextBody = normalizeMessageBody(args.body);
 
 		if (nextBody === message.body) {
 			return null;
@@ -141,14 +170,23 @@ export const deleteMessage = mutation({
 		await requireActiveMembership(ctx, user._id, args.groupId);
 		const message = await requireMessageAuthor(ctx, user._id, args.groupId, args.messageId);
 
-		if (message.isDeleted) {
-			return null;
+		if (!message.isDeleted) {
+			await ctx.db.patch(args.messageId, {
+				body: 'message deleted',
+				isDeleted: true
+			});
 		}
 
-		await ctx.db.patch(args.messageId, {
-			body: 'message deleted',
-			isDeleted: true
-		});
+		const reactions = await ctx.db
+			.query('group_chat_reactions')
+			.withIndex('by_group_message', (q) =>
+				q.eq('groupId', args.groupId).eq('messageId', args.messageId)
+			)
+			.collect();
+		for (const reaction of reactions) {
+			await ctx.db.delete(reaction._id);
+		}
+
 		return null;
 	}
 });
@@ -164,16 +202,24 @@ export const getMessages = query({
 		if (!user) throw new Error('Not authenticated');
 
 		await requireActiveMembership(ctx, user._id, args.groupId);
+		const limit = normalizeMessagesLimit(args.limit);
 
 		const messages = await ctx.db
 			.query('group_chat_messages')
 			.withIndex('by_group_created_at', (q) => q.eq('groupId', args.groupId))
 			.order('desc')
-			.take(args.limit ?? 50);
+			.take(limit);
 
 		const orderedMessages = messages.reverse();
 		const withReactions = await Promise.all(
 			orderedMessages.map(async (message) => {
+				if (message.isDeleted) {
+					return {
+						...message,
+						reactions: []
+					};
+				}
+
 				const reactions = await ctx.db
 					.query('group_chat_reactions')
 					.withIndex('by_group_message', (q) =>
@@ -243,11 +289,12 @@ export const toggleReaction = mutation({
 			throw new Error('Cannot react to a deleted message');
 		}
 
-		const allMessageReactions = await ctx.db
+		const myReactions = await ctx.db
 			.query('group_chat_reactions')
-			.withIndex('by_message', (q) => q.eq('messageId', args.messageId))
+			.withIndex('by_message_user_emoji', (q) =>
+				q.eq('messageId', args.messageId).eq('userId', user._id)
+			)
 			.collect();
-		const myReactions = allMessageReactions.filter((reaction) => reaction.userId === user._id);
 		const alreadySelected = myReactions.some((reaction) => reaction.emoji === args.emoji);
 
 		for (const reaction of myReactions) {
