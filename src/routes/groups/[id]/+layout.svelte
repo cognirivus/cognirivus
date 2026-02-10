@@ -368,7 +368,7 @@
 				</header>
 			{/if}
 
-			<div class="flex-1 overflow-y-auto">
+			<div class="flex-1 {page.url.pathname.includes('/chat') ? 'overflow-hidden' : 'overflow-y-auto'}">
 				{@render children()}
 			</div>
 

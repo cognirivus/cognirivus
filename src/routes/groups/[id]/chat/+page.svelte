@@ -7,12 +7,13 @@
 	import { SendHorizontal, MessageSquare, ArrowDown } from '@lucide/svelte';
 	import type { Id } from '$convex/_generated/dataModel';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
+	import { authClient } from '$lib/auth-client';
 
 	const groupId = $derived(page.params.id as Id<'groups'>);
 	const client = useConvexClient();
 
-	const currentUser = $derived(page.data.currentUser as any);
-	const currentUserId = $derived(currentUser?.id ?? currentUser?._id);
+	const session = authClient.useSession();
+	const currentUserId = $derived($session.data?.user?.id);
 
 	let newMessage = $state('');
 	let scrollContainer: HTMLElement | null = $state(null);
@@ -134,11 +135,13 @@
 	}
 
 	function getInitials(name: string) {
-		return name
-			?.split(' ')
-			.map((n: string) => n.charAt(0).toUpperCase())
-			.join('')
-			.slice(0, 2) || '?';
+		return (
+			name
+				?.split(' ')
+				.map((n: string) => n.charAt(0).toUpperCase())
+				.join('')
+				.slice(0, 2) || '?'
+		);
 	}
 
 	const avatarColors = [
@@ -159,12 +162,12 @@
 	}
 </script>
 
-<div class="flex h-full flex-col">
+<div class="flex h-full max-h-full flex-col overflow-hidden">
 	<!-- Messages Area -->
 	<div
 		bind:this={scrollContainer}
 		onscroll={handleScroll}
-		class="relative flex-1 overflow-y-auto"
+		class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain"
 	>
 		{#if messagesQuery.isLoading}
 			<div class="flex h-full items-center justify-center">
@@ -175,26 +178,26 @@
 				class="flex h-full flex-col items-center justify-center px-6 text-center"
 			>
 				<div
-					class="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/60"
+					class="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60 sm:h-16 sm:w-16"
 				>
-					<MessageSquare class="h-7 w-7 text-muted-foreground/60" />
+					<MessageSquare class="h-6 w-6 text-muted-foreground/60 sm:h-7 sm:w-7" />
 				</div>
-				<h3 class="text-base font-semibold text-foreground">
+				<h3 class="text-sm font-semibold text-foreground sm:text-base">
 					Start the conversation
 				</h3>
 				<p
-					class="mt-1.5 max-w-[280px] text-[13px] leading-relaxed text-muted-foreground"
+					class="mt-1.5 max-w-[280px] text-xs leading-relaxed text-muted-foreground sm:text-[13px]"
 				>
 					Be the first to send a message to your group.
 				</p>
 			</div>
 		{:else}
-			<div class="mx-auto max-w-3xl px-4 py-4 sm:px-6">
+			<div class="mx-auto max-w-3xl px-3 py-3 sm:px-6 sm:py-4">
 				{#each groupedMessages as group}
 					<!-- Date Separator -->
-					<div class="sticky top-0 z-10 flex justify-center py-3">
+					<div class="sticky top-0 z-10 flex justify-center py-2 sm:py-3">
 						<span
-							class="rounded-full bg-background/90 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm ring-1 ring-border/50 backdrop-blur-sm"
+							class="rounded-full bg-background/90 px-3 py-1 text-[10px] font-medium text-muted-foreground shadow-sm ring-1 ring-border/50 backdrop-blur-sm sm:text-[11px]"
 						>
 							{group.label}
 						</span>
@@ -207,26 +210,30 @@
 						{@const showName = !isMine && !consecutive}
 
 						<div
-							class="flex {isMine ? 'justify-end' : 'justify-start'} {consecutive ? 'mt-0.5' : 'mt-3'}"
+							class="flex {isMine ? 'justify-end' : 'justify-start'} {consecutive
+								? 'mt-0.5'
+								: 'mt-3'}"
 						>
 							<div
-								class="flex max-w-[75%] gap-2 {isMine
+								class="flex max-w-[85%] gap-1.5 sm:max-w-[75%] sm:gap-2 {isMine
 									? 'flex-row-reverse'
 									: 'flex-row'} items-end"
 							>
 								<!-- Avatar -->
 								{#if !isMine}
-									<div class="w-7 shrink-0">
+									<div class="w-6 shrink-0 sm:w-7">
 										{#if showAvatar}
 											{#if msg.userImage}
 												<img
 													src={msg.userImage}
 													alt={msg.userName}
-													class="h-7 w-7 rounded-full object-cover ring-2 ring-background"
+													class="h-6 w-6 rounded-full object-cover ring-2 ring-background sm:h-7 sm:w-7"
 												/>
 											{:else}
 												<div
-													class="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-semibold ring-2 ring-background {getAvatarColor(msg.userId)}"
+													class="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-semibold ring-2 ring-background sm:h-7 sm:w-7 sm:text-[10px] {getAvatarColor(
+														msg.userId
+													)}"
 												>
 													{getInitials(msg.userName)}
 												</div>
@@ -237,20 +244,20 @@
 
 								<!-- Bubble -->
 								<div
-									class="flex flex-col {isMine
+									class="flex min-w-0 flex-col {isMine
 										? 'items-end'
 										: 'items-start'}"
 								>
 									{#if showName}
 										<span
-											class="mb-1 px-2 text-[11px] font-medium text-muted-foreground"
+											class="mb-0.5 px-2 text-[10px] font-medium text-muted-foreground sm:mb-1 sm:text-[11px]"
 										>
 											{msg.userName}
 										</span>
 									{/if}
-									<div class="group relative">
+									<div>
 										<div
-											class="whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[13.5px] leading-relaxed
+											class="whitespace-pre-wrap break-words rounded-2xl px-3 py-1.5 text-[13px] leading-relaxed sm:px-3.5 sm:py-2 sm:text-[13.5px]
 											{isMine
 												? consecutive
 													? 'rounded-2xl'
@@ -265,7 +272,7 @@
 											{msg.body}
 										</div>
 										<span
-											class="mt-0.5 block px-1 text-[10px] text-muted-foreground/50 {isMine
+											class="mt-0.5 block px-1 text-[9px] text-muted-foreground/50 sm:text-[10px] {isMine
 												? 'text-right'
 												: 'text-left'}"
 										>
@@ -278,8 +285,7 @@
 					{/each}
 				{/each}
 
-				<!-- Bottom spacer -->
-				<div class="h-2"></div>
+				<div class="h-1"></div>
 			</div>
 		{/if}
 
@@ -287,7 +293,7 @@
 		{#if showScrollButton}
 			<button
 				onclick={scrollToBottom}
-				class="absolute bottom-4 left-1/2 z-20 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-background shadow-lg ring-1 ring-border/60 transition-all hover:scale-105 hover:shadow-xl active:scale-95"
+				class="absolute bottom-3 left-1/2 z-20 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-background shadow-lg ring-1 ring-border/60 transition-all hover:scale-105 active:scale-95"
 			>
 				<ArrowDown class="h-4 w-4 text-muted-foreground" />
 			</button>
@@ -295,10 +301,10 @@
 	</div>
 
 	<!-- Input Area -->
-	<div class="border-t bg-background/80 px-4 py-3 backdrop-blur-sm">
+	<div class="shrink-0 border-t bg-background px-3 py-2 sm:px-4 sm:py-3">
 		<div class="mx-auto flex max-w-3xl items-end gap-2">
 			<div
-				class="flex min-h-[44px] flex-1 items-end rounded-xl border border-border/60 bg-muted/30 transition-colors focus-within:border-primary/30 focus-within:bg-muted/40"
+				class="flex min-h-[40px] flex-1 items-end rounded-xl border border-border/60 bg-muted/30 transition-colors focus-within:border-primary/30 focus-within:bg-muted/40 sm:min-h-[44px]"
 			>
 				<textarea
 					bind:this={inputEl}
@@ -307,14 +313,14 @@
 					oninput={autoResizeTextarea}
 					placeholder="Write a message..."
 					rows={1}
-					class="max-h-32 w-full resize-none bg-transparent px-4 py-2.5 text-[13.5px] leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+					class="max-h-32 w-full resize-none bg-transparent px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none sm:px-4 sm:py-2.5 sm:text-[13.5px]"
 				></textarea>
 			</div>
 			<Button
 				onclick={sendMessage}
 				disabled={!newMessage.trim()}
 				size="icon"
-				class="h-[44px] w-[44px] shrink-0 rounded-xl transition-all {newMessage.trim()
+				class="h-10 w-10 shrink-0 rounded-xl transition-all sm:h-[44px] sm:w-[44px] {newMessage.trim()
 					? 'bg-primary shadow-md hover:shadow-lg'
 					: ''}"
 			>
