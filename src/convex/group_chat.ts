@@ -30,6 +30,8 @@ const messageWithReactionsValidator = v.object({
 	userName: v.string(),
 	userImage: v.optional(v.string()),
 	body: v.string(),
+	editedAt: v.optional(v.number()),
+	isDeleted: v.optional(v.boolean()),
 	createdAt: v.number(),
 	reactions: v.array(reactionSummaryValidator)
 });
@@ -47,6 +49,24 @@ async function requireActiveMembership(
 	if (!membership || membership.status !== 'active') {
 		throw new Error('Not a member of this group');
 	}
+}
+
+async function requireMessageAuthor(
+	ctx: MutationCtx,
+	userId: string,
+	groupId: Id<'groups'>,
+	messageId: Id<'group_chat_messages'>
+) {
+	const message = await ctx.db.get(messageId);
+	if (!message || message.groupId !== groupId) {
+		throw new Error('Message not found in this group');
+	}
+
+	if (message.userId !== userId) {
+		throw new Error('Forbidden');
+	}
+
+	return message;
 }
 
 export const sendMessage = mutation({
@@ -67,8 +87,69 @@ export const sendMessage = mutation({
 			userName: user.name ?? 'Anonymous',
 			userImage: user.image || undefined,
 			body: args.body,
+			isDeleted: false,
 			createdAt: Date.now()
 		});
+	}
+});
+
+export const editMessage = mutation({
+	args: {
+		groupId: v.id('groups'),
+		messageId: v.id('group_chat_messages'),
+		body: v.string()
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Not authenticated');
+
+		await requireActiveMembership(ctx, user._id, args.groupId);
+		const message = await requireMessageAuthor(ctx, user._id, args.groupId, args.messageId);
+
+		if (message.isDeleted) {
+			throw new Error('Message has been deleted');
+		}
+
+		const nextBody = args.body.trim();
+		if (!nextBody) {
+			throw new Error('Message body cannot be empty');
+		}
+
+		if (nextBody === message.body) {
+			return null;
+		}
+
+		await ctx.db.patch(args.messageId, {
+			body: nextBody,
+			editedAt: Date.now()
+		});
+		return null;
+	}
+});
+
+export const deleteMessage = mutation({
+	args: {
+		groupId: v.id('groups'),
+		messageId: v.id('group_chat_messages')
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) throw new Error('Not authenticated');
+
+		await requireActiveMembership(ctx, user._id, args.groupId);
+		const message = await requireMessageAuthor(ctx, user._id, args.groupId, args.messageId);
+
+		if (message.isDeleted) {
+			return null;
+		}
+
+		await ctx.db.patch(args.messageId, {
+			body: 'message deleted',
+			isDeleted: true
+		});
+		return null;
 	}
 });
 
@@ -128,13 +209,11 @@ export const getMessages = query({
 
 				return {
 					...message,
-					reactions: ALLOWED_REACTIONS
-						.map((emoji) => ({
-							emoji,
-							count: reactionMap[emoji].count,
-							reactedByMe: reactionMap[emoji].reactedByMe
-						}))
-						.filter((reaction) => reaction.count > 0)
+					reactions: ALLOWED_REACTIONS.map((emoji) => ({
+						emoji,
+						count: reactionMap[emoji].count,
+						reactedByMe: reactionMap[emoji].reactedByMe
+					})).filter((reaction) => reaction.count > 0)
 				};
 			})
 		);
@@ -159,6 +238,9 @@ export const toggleReaction = mutation({
 		const message = await ctx.db.get(args.messageId);
 		if (!message || message.groupId !== args.groupId) {
 			throw new Error('Message not found in this group');
+		}
+		if (message.isDeleted) {
+			throw new Error('Cannot react to a deleted message');
 		}
 
 		const allMessageReactions = await ctx.db

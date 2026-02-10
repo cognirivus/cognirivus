@@ -481,6 +481,8 @@ const schema = defineSchema({
 		userName: v.string(),
 		userImage: v.optional(v.string()),
 		body: v.string(),
+		editedAt: v.optional(v.number()),
+		isDeleted: v.optional(v.boolean()),
 		createdAt: v.number()
 	}).index('by_group_created_at', ['groupId', 'createdAt']),
 	group_chat_reactions: defineTable({
