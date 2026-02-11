@@ -2,7 +2,7 @@
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import { page } from '$app/state';
-	import { tick } from 'svelte';
+	import { tick, onDestroy } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import {
@@ -52,9 +52,38 @@
 	let editingMessageId = $state<Id<'group_chat_messages'> | null>(null);
 	let editingMessageBody = $state('');
 	let isSavingEdit = $state(false);
+	let editingBubbleWidth: number | null = $state(null);
 	let deletingMessageId = $state<Id<'group_chat_messages'> | null>(null);
 	let messageToDelete = $state<Id<'group_chat_messages'> | null>(null);
 	let isDeleteMessageDialogOpen = $state(false);
+	let longPressMessageId = $state<Id<'group_chat_messages'> | null>(null);
+	let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+	let suppressNextClick = false;
+
+	function startLongPress(messageId: Id<'group_chat_messages'>) {
+		cancelLongPress();
+		longPressTimer = setTimeout(() => {
+			longPressMessageId = longPressMessageId === messageId ? null : messageId;
+			suppressNextClick = true;
+			longPressTimer = null;
+		}, 500);
+	}
+
+	function cancelLongPress() {
+		if (longPressTimer) {
+			clearTimeout(longPressTimer);
+			longPressTimer = null;
+		}
+	}
+
+	onDestroy(cancelLongPress);
+
+	function dismissLongPressMenu(event: MouseEvent | TouchEvent) {
+		if (!longPressMessageId) return;
+		const target = event.target as HTMLElement | null;
+		if (target?.closest('[data-longpress-actions]')) return;
+		longPressMessageId = null;
+	}
 
 	const messagesQuery = useQuery(api.group_chat.getMessages, () =>
 		groupId ? { groupId } : 'skip'
@@ -205,11 +234,15 @@
 	}
 
 	function handleDocumentClick(event: MouseEvent) {
-		if (!reactionPickerMessageId) return;
+		if (suppressNextClick) {
+			suppressNextClick = false;
+			return;
+		}
 		const target = event.target as HTMLElement | null;
-		if (!target) return;
-		if (target.closest('[data-reaction-controls]')) return;
-		reactionPickerMessageId = null;
+		if (reactionPickerMessageId && !target?.closest('[data-reaction-controls]')) {
+			reactionPickerMessageId = null;
+		}
+		dismissLongPressMenu(event);
 	}
 
 	async function toggleReaction(messageId: Id<'group_chat_messages'>, emoji: ReactionEmoji) {
@@ -226,8 +259,31 @@
 		}
 	}
 
-	function startEditingMessage(message: GroupChatMessage) {
+	function autoSizeTextarea(node: HTMLTextAreaElement) {
+		function resize() {
+			node.style.height = 'auto';
+			node.style.height = Math.min(node.scrollHeight, 128) + 'px';
+		}
+		function onInput() {
+			resize();
+		}
+		requestAnimationFrame(() => {
+			resize();
+			node.focus();
+		});
+		node.addEventListener('input', onInput);
+		return {
+			destroy() {
+				node.removeEventListener('input', onInput);
+			}
+		};
+	}
+
+	function startEditingMessage(message: GroupChatMessage, bubbleEl?: HTMLElement) {
 		if (message.isDeleted) return;
+		if (bubbleEl) {
+			editingBubbleWidth = bubbleEl.offsetWidth;
+		}
 		editingMessageId = message._id;
 		editingMessageBody = message.body;
 		reactionPickerMessageId = null;
@@ -237,6 +293,7 @@
 		editingMessageId = null;
 		editingMessageBody = '';
 		isSavingEdit = false;
+		editingBubbleWidth = null;
 	}
 
 	async function saveEditedMessage(messageId: Id<'group_chat_messages'>) {
@@ -321,7 +378,7 @@
 				</div>
 				<h3 class="text-sm font-semibold text-foreground sm:text-base">Start the conversation</h3>
 				<p
-					class="mt-1.5 max-w-[280px] text-xs leading-relaxed text-muted-foreground sm:text-[13px]"
+					class="mt-1.5 max-w-70 text-xs leading-relaxed text-muted-foreground sm:text-[13px]"
 				>
 					Be the first to send a message to your group.
 				</p>
@@ -383,71 +440,81 @@
 											{msg.userName}
 										</span>
 									{/if}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
 									<div
-										class="flex max-w-full items-end gap-2 rounded-lg px-3 py-1.5 text-[13px] leading-relaxed sm:px-3.5 sm:py-2 sm:text-[13.5px]
+										data-msg-bubble
+										class="flex max-w-full flex-col rounded-lg px-3 py-1.5 text-[13px] leading-relaxed sm:px-3.5 sm:py-2 sm:text-[13.5px]
 										{isMine ? 'bg-primary text-primary-foreground' : 'bg-muted/70 text-foreground'}"
+										style={isEditing && editingBubbleWidth ? `min-width:${editingBubbleWidth}px` : ''}
+										ontouchstart={() => { if (isMine && !msg.isDeleted && !editingMessageId) startLongPress(msg._id); }}
+										ontouchend={cancelLongPress}
+										ontouchmove={cancelLongPress}
+										ontouchcancel={cancelLongPress}
+										oncontextmenu={(e) => { if (isMine && !msg.isDeleted && !editingMessageId) { e.preventDefault(); cancelLongPress(); longPressMessageId = longPressMessageId === msg._id ? null : msg._id; suppressNextClick = true; } }}
 									>
 										{#if isEditing}
 											<textarea
 												bind:value={editingMessageBody}
 												onkeydown={(event) => handleEditKeydown(event, msg._id)}
-												rows={1}
+												use:autoSizeTextarea
 												placeholder="Edit message"
-												class="max-h-32 min-h-[22px] w-full resize-none bg-transparent text-[13px] leading-relaxed focus:outline-none sm:text-[13.5px]"
+												class="max-h-32 w-full resize-none overflow-hidden bg-transparent text-[13px] leading-relaxed focus:outline-none sm:text-[13.5px]"
 											></textarea>
+											<div class="mt-1.5 flex items-center justify-end gap-1.5">
+												<button
+													type="button"
+													aria-label="Save edit"
+													onclick={() => saveEditedMessage(msg._id)}
+													disabled={!editingMessageBody.trim() || isSavingEdit}
+													class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground transition-colors hover:bg-primary-foreground/20 disabled:cursor-not-allowed disabled:opacity-50"
+												>
+													<Check class="h-3.5 w-3.5" />
+												</button>
+												<button
+													type="button"
+													aria-label="Cancel edit"
+													onclick={cancelEditingMessage}
+													class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground/70 transition-colors hover:bg-primary-foreground/20 hover:text-primary-foreground"
+												>
+													<X class="h-3.5 w-3.5" />
+												</button>
+											</div>
 										{:else}
-											<span
-												class="min-w-0 flex-1 break-words whitespace-pre-wrap {msg.isDeleted
-													? 'italic opacity-80'
-													: ''}"
-											>
-												{msg.body}
-											</span>
-											<div class="shrink-0 text-[9px] leading-none opacity-60 sm:text-[10px]">
-												{#if msg.editedAt && !msg.isDeleted}
-													<span class="mr-1">Edited</span>
-												{/if}
-												<span>{formatTime(msg.createdAt)}</span>
+											<div class="flex items-end gap-2">
+												<span
+													class="min-w-0 flex-1 wrap-break-word whitespace-pre-wrap {msg.isDeleted
+														? 'italic opacity-80'
+														: ''}"
+												>
+													{msg.body}
+												</span>
+												<div class="shrink-0 text-[9px] leading-none opacity-60 sm:text-[10px]">
+													{#if msg.editedAt && !msg.isDeleted}
+														<span class="mr-1">Edited</span>
+													{/if}
+													<span>{formatTime(msg.createdAt)}</span>
+												</div>
 											</div>
 										{/if}
 									</div>
-									{#if isEditing}
-										<div class="mt-1 flex items-center gap-1.5">
-											<button
-												type="button"
-												aria-label="Save edit"
-												onclick={() => saveEditedMessage(msg._id)}
-												disabled={!editingMessageBody.trim() || isSavingEdit}
-												class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-background text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-											>
-												<Check class="h-3.5 w-3.5" />
-											</button>
-											<button
-												type="button"
-												aria-label="Cancel edit"
-												onclick={cancelEditingMessage}
-												class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-											>
-												<X class="h-3.5 w-3.5" />
-											</button>
-										</div>
-									{:else}
+									{#if !isEditing}
 										<div
 											data-reaction-controls
 											class="relative mt-1 flex max-w-full flex-wrap items-center gap-1 {isMine
 												? 'justify-end'
 												: 'justify-start'}"
 										>
-											{#if isMine}
+											{#if isMine && longPressMessageId === msg._id}
 												<div
-													class="mr-1 inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+													data-longpress-actions
+													class="mr-1 inline-flex items-center gap-1 animate-in fade-in zoom-in-95 duration-150"
 												>
 													{#if !msg.isDeleted}
 														<button
 															type="button"
 															aria-label="Edit message"
-															onclick={() => startEditingMessage(msg)}
-															class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+															onclick={(e) => { const bubbleEl = (e.currentTarget as HTMLElement).closest('[data-reaction-controls]')?.parentElement?.querySelector('[data-msg-bubble]') as HTMLElement | null; startEditingMessage(msg, bubbleEl ?? undefined); longPressMessageId = null; }}
+															class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
 														>
 															<Pencil class="h-3.5 w-3.5" />
 														</button>
@@ -455,9 +522,9 @@
 													<button
 														type="button"
 														aria-label="Delete message"
-														onclick={() => requestDeleteMessage(msg._id)}
+														onclick={() => { requestDeleteMessage(msg._id); longPressMessageId = null; }}
 														disabled={deletingMessageId === msg._id || msg.isDeleted}
-														class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+														class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-destructive active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
 													>
 														<Trash2 class="h-3.5 w-3.5" />
 													</button>
@@ -552,7 +619,7 @@
 				class="pointer-events-auto flex items-end gap-2 rounded-xl border border-border/60 bg-background/92 shadow-[0_10px_30px_-16px_rgba(0,0,0,0.35)] backdrop-blur-md"
 			>
 				<div
-					class="flex min-h-[40px] flex-1 items-end rounded-l-xl border-r border-border/50 bg-muted/30 transition-colors focus-within:bg-muted/40 sm:min-h-[44px]"
+					class="flex min-h-10 flex-1 items-end rounded-l-xl border-r border-border/50 bg-muted/30 transition-colors focus-within:bg-muted/40 sm:min-h-11"
 				>
 					<textarea
 						bind:this={inputEl}
@@ -568,11 +635,11 @@
 					onclick={sendMessage}
 					disabled={!newMessage.trim()}
 					size="icon"
-					class="h-10 w-10 shrink-0 rounded-l-none rounded-r-xl transition-all sm:h-[44px] sm:w-[44px] {newMessage.trim()
+					class="h-10 w-10 shrink-0 rounded-l-none rounded-r-xl transition-all sm:h-11 sm:w-11 {newMessage.trim()
 						? 'bg-primary shadow-md hover:shadow-lg'
 						: ''}"
 				>
-					<SendHorizontal class="h-[18px] w-[18px]" />
+					<SendHorizontal class="h-4.5 w-4.5" />
 				</Button>
 			</div>
 		</div>
