@@ -481,10 +481,13 @@ const schema = defineSchema({
 		userName: v.string(),
 		userImage: v.optional(v.string()),
 		body: v.string(),
+		replyTo: v.optional(v.id('group_chat_messages')),
 		editedAt: v.optional(v.number()),
 		isDeleted: v.optional(v.boolean()),
 		createdAt: v.number()
-	}).index('by_group_created_at', ['groupId', 'createdAt']),
+	})
+		.index('by_group_created_at', ['groupId', 'createdAt'])
+		.index('by_reply_to', ['replyTo']),
 	group_chat_reactions: defineTable({
 		groupId: v.id('groups'),
 		messageId: v.id('group_chat_messages'),

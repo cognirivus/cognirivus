@@ -37,6 +37,14 @@ const messageWithReactionsValidator = v.object({
 	userName: v.string(),
 	userImage: v.optional(v.string()),
 	body: v.string(),
+	replyTo: v.optional(
+		v.object({
+			messageId: v.id('group_chat_messages'),
+			userName: v.string(),
+			body: v.string(),
+			isDeleted: v.boolean()
+		})
+	),
 	editedAt: v.optional(v.number()),
 	isDeleted: v.optional(v.boolean()),
 	createdAt: v.number(),
@@ -110,7 +118,8 @@ async function requireMessageAuthor(
 export const sendMessage = mutation({
 	args: {
 		groupId: v.id('groups'),
-		body: v.string()
+		body: v.string(),
+		replyTo: v.optional(v.id('group_chat_messages'))
 	},
 	returns: v.id('group_chat_messages'),
 	handler: async (ctx, args) => {
@@ -126,6 +135,7 @@ export const sendMessage = mutation({
 			userName: user.name ?? 'Anonymous',
 			userImage: user.image || undefined,
 			body,
+			replyTo: args.replyTo,
 			isDeleted: false,
 			createdAt: Date.now()
 		});
@@ -242,12 +252,32 @@ export const getMessages = query({
 			reactionsByMessageId[mid].push(reaction);
 		}
 
+		// For messages that are replies, fetch the parent message content
+		const replyToIds = orderedMessages
+			.map((m) => m.replyTo)
+			.filter((id): id is Id<'group_chat_messages'> => id !== undefined);
+		const parentMessages = await Promise.all(replyToIds.map((id) => ctx.db.get(id)));
+		const parentMessageMap = Object.fromEntries(replyToIds.map((id, i) => [id, parentMessages[i]]));
+
 		return orderedMessages.map((message) => {
 			if (message.isDeleted) {
-				return { ...message, reactions: [] };
+				return { ...message, replyTo: undefined, reactions: [] };
 			}
 
 			const reactions = reactionsByMessageId[message._id] ?? [];
+
+			let replyToContext = undefined;
+			if (message.replyTo) {
+				const parent = parentMessageMap[message.replyTo];
+				replyToContext = {
+					messageId: message.replyTo,
+					userName: parent?.userName ?? 'Unknown User',
+					body: parent?.isDeleted
+						? 'message deleted'
+						: (parent?.body ?? 'Original message not found'),
+					isDeleted: !!parent?.isDeleted
+				};
+			}
 			const reactionMap: Record<
 				AllowedReaction,
 				{
@@ -284,6 +314,7 @@ export const getMessages = query({
 
 			return {
 				...message,
+				replyTo: replyToContext,
 				reactions: ALLOWED_REACTIONS.map((emoji) => ({
 					emoji,
 					count: reactionMap[emoji].count,

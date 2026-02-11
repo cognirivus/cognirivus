@@ -17,7 +17,9 @@
 		Pencil,
 		Trash2,
 		Check,
-		X
+		X,
+		Reply,
+		CornerDownRight
 	} from '@lucide/svelte';
 	import type { Id } from '$convex/_generated/dataModel';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
@@ -38,6 +40,12 @@
 		userName: string;
 		userImage?: string;
 		body: string;
+		replyTo?: {
+			messageId: Id<'group_chat_messages'>;
+			userName: string;
+			body: string;
+			isDeleted: boolean;
+		};
 		editedAt?: number;
 		isDeleted?: boolean;
 		createdAt: number;
@@ -62,8 +70,23 @@
 	let messageToDelete = $state<Id<'group_chat_messages'> | null>(null);
 	let isDeleteMessageDialogOpen = $state(false);
 	let longPressMessageId = $state<Id<'group_chat_messages'> | null>(null);
+	let highlightedMessageId = $state<Id<'group_chat_messages'> | null>(null);
+	let highlightTimer: ReturnType<typeof setTimeout> | null = null;
 	let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 	let suppressNextClick = false;
+
+	let replyingToMessage = $state<GroupChatMessage | null>(null);
+
+	function setReplyingTo(message: GroupChatMessage) {
+		replyingToMessage = message;
+		tick().then(() => {
+			inputEl?.focus();
+		});
+	}
+
+	function cancelReplying() {
+		replyingToMessage = null;
+	}
 
 	function startLongPress(messageId: Id<'group_chat_messages'>) {
 		cancelLongPress();
@@ -144,12 +167,16 @@
 	async function sendMessage() {
 		if (!newMessage.trim() || !groupId) return;
 		const body = newMessage.trim();
+		const replyTo = replyingToMessage?._id;
+
 		newMessage = '';
+		cancelReplying();
 		resetTextareaHeight();
 		try {
 			await client.mutation(api.group_chat.sendMessage, {
 				groupId,
-				body
+				body,
+				replyTo
 			});
 			scrollToBottom();
 		} catch (e) {
@@ -406,6 +433,29 @@
 		messageToDelete = null;
 	}
 
+	function scrollToMessage(messageId: Id<'group_chat_messages'>) {
+		const el = document.getElementById(`msg-${messageId}`);
+		if (el && scrollContainer) {
+			const containerRect = scrollContainer.getBoundingClientRect();
+			const elRect = el.getBoundingClientRect();
+			const relativeTop = elRect.top - containerRect.top + scrollContainer.scrollTop;
+
+			scrollContainer.scrollTo({
+				top: relativeTop - 100, // Offset for context
+				behavior: 'smooth'
+			});
+
+			// Highlight effect
+			if (highlightTimer) clearTimeout(highlightTimer);
+			highlightedMessageId = messageId;
+			highlightTimer = setTimeout(() => {
+				highlightedMessageId = null;
+			}, 2000);
+		} else {
+			toast.error('Message not found in current view');
+		}
+	}
+
 	async function confirmDeleteMessage() {
 		if (!groupId || !messageToDelete || deletingMessageId) return;
 
@@ -511,9 +561,10 @@
 						{@const isEditing = editingMessageId === msg._id}
 
 						<div
+							id={`msg-${msg._id}`}
 							class="group flex {isMine ? 'justify-end' : 'justify-start'} {consecutive
 								? 'mt-0.5'
-								: 'mt-3'}"
+								: 'mt-3'} {highlightedMessageId === msg._id ? 'z-20' : ''}"
 						>
 							<div class="flex max-w-[85%] items-start gap-1.5 sm:max-w-[75%] sm:gap-2">
 								<!-- Avatar -->
@@ -551,19 +602,20 @@
 									<!-- svelte-ignore a11y_no_static_element_interactions -->
 									<div
 										data-msg-bubble
-										class="flex max-w-full flex-col rounded-lg px-3 py-1.5 text-[13px] leading-relaxed sm:px-3.5 sm:py-2 sm:text-[13.5px]
-										{isMine ? 'bg-primary text-primary-foreground' : 'bg-muted/70 text-foreground'}"
+										class="flex max-w-full flex-col rounded-lg px-3 py-1.5 text-[13px] leading-relaxed transition-all duration-500 sm:px-3.5 sm:py-2 sm:text-[13.5px]
+										{isMine ? 'bg-primary text-primary-foreground' : 'bg-muted/70 text-foreground'}
+										{highlightedMessageId === msg._id ? 'ring-2 ring-primary ring-offset-2 ring-offset-background dark:ring-offset-background shadow-lg scale-[1.02]' : ''}"
 										style={isEditing && editingBubbleWidth
 											? `min-width:${editingBubbleWidth}px`
 											: ''}
 										ontouchstart={() => {
-											if (isMine && !msg.isDeleted && !editingMessageId) startLongPress(msg._id);
+											if (!msg.isDeleted && !editingMessageId) startLongPress(msg._id);
 										}}
 										ontouchend={cancelLongPress}
 										ontouchmove={cancelLongPress}
 										ontouchcancel={cancelLongPress}
 										oncontextmenu={(e) => {
-											if (isMine && !msg.isDeleted && !editingMessageId) {
+											if (!msg.isDeleted && !editingMessageId) {
 												e.preventDefault();
 												cancelLongPress();
 												longPressMessageId = longPressMessageId === msg._id ? null : msg._id;
@@ -571,6 +623,17 @@
 											}
 										}}
 									>
+										{#if msg.replyTo && !isEditing}
+											<button
+												type="button"
+												onclick={() => scrollToMessage(msg.replyTo!.messageId)}
+												class="mb-1.5 flex flex-col gap-0.5 rounded-md border-l-2 border-primary/30 bg-black/5 px-2 py-1 text-left text-[11px] leading-tight transition-colors hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10
+												{isMine ? 'border-white/40 text-primary-foreground/90' : 'border-primary/40 text-muted-foreground'}"
+											>
+												<span class="font-semibold">{msg.replyTo.userName}</span>
+												<span class="truncate opacity-80">{msg.replyTo.body}</span>
+											</button>
+										{/if}
 										{#if isEditing}
 											<textarea
 												bind:value={editingMessageBody}
@@ -623,7 +686,7 @@
 												? 'justify-end'
 												: 'justify-start'}"
 										>
-											{#if isMine && longPressMessageId === msg._id}
+											{#if longPressMessageId === msg._id}
 												<div
 													data-longpress-actions
 													class="mr-1 inline-flex animate-in items-center gap-1 duration-150 zoom-in-95 fade-in"
@@ -631,33 +694,47 @@
 													{#if !msg.isDeleted}
 														<button
 															type="button"
-															aria-label="Edit message"
-															onclick={(e) => {
-																const bubbleEl = (e.currentTarget as HTMLElement)
-																	.closest('[data-reaction-controls]')
-																	?.parentElement?.querySelector(
-																		'[data-msg-bubble]'
-																	) as HTMLElement | null;
-																startEditingMessage(msg, bubbleEl ?? undefined);
+															aria-label="Reply to message"
+															onclick={() => {
+																setReplyingTo(msg);
 																longPressMessageId = null;
 															}}
 															class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
 														>
-															<Pencil class="h-3.5 w-3.5" />
+															<Reply class="h-3.5 w-3.5" />
+														</button>
+														{#if isMine}
+															<button
+																type="button"
+																aria-label="Edit message"
+																onclick={(e) => {
+																	const bubbleEl = (e.currentTarget as HTMLElement)
+																		.closest('[data-reaction-controls]')
+																		?.parentElement?.querySelector(
+																			'[data-msg-bubble]'
+																		) as HTMLElement | null;
+																	startEditingMessage(msg, bubbleEl ?? undefined);
+																	longPressMessageId = null;
+																}}
+																class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
+															>
+																<Pencil class="h-3.5 w-3.5" />
+															</button>
+														{/if}
+													{/if}
+													{#if isMine}
+														<button
+															type="button"
+															aria-label="Delete message"
+															onclick={() => {
+																requestDeleteMessage(msg._id);
+																longPressMessageId = null;
+															}}
+															class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-destructive active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+														>
+															<Trash2 class="h-3.5 w-3.5" />
 														</button>
 													{/if}
-													<button
-														type="button"
-														aria-label="Delete message"
-														onclick={() => {
-															requestDeleteMessage(msg._id);
-															longPressMessageId = null;
-														}}
-														disabled={deletingMessageId === msg._id || msg.isDeleted}
-														class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-destructive active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-													>
-														<Trash2 class="h-3.5 w-3.5" />
-													</button>
 												</div>
 											{/if}
 
@@ -785,35 +862,60 @@
 		</div>
 	{/if}
 
-	<!-- Input Area -->
 	<div class="pointer-events-none absolute inset-x-0 bottom-0 z-30">
 		<div class="mx-auto max-w-3xl px-3 pb-3 sm:px-6 sm:pb-4">
-			<div
-				class="pointer-events-auto flex items-end gap-2 rounded-xl border border-border/60 bg-background/92 shadow-[0_10px_30px_-16px_rgba(0,0,0,0.35)] backdrop-blur-md"
-			>
+			{#if replyingToMessage}
 				<div
-					class="flex min-h-10 flex-1 items-end rounded-l-xl border-r border-border/50 bg-muted/30 transition-colors focus-within:bg-muted/40 sm:min-h-11"
+					class="pointer-events-auto mb-2 flex animate-in items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/95 px-3 py-2 shadow-sm slide-in-from-bottom-2"
 				>
-					<textarea
-						bind:this={inputEl}
-						bind:value={newMessage}
-						onkeydown={handleKeydown}
-						oninput={autoResizeTextarea}
-						placeholder="Write a message..."
-						rows={1}
-						class="max-h-32 w-full resize-none bg-transparent px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none sm:px-4 sm:py-2.5 sm:text-[13.5px]"
-					></textarea>
+					<div class="flex min-w-0 items-center gap-2.5">
+						<div
+							class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted/80 text-muted-foreground"
+						>
+							<Reply class="h-3.5 w-3.5" />
+						</div>
+						<div class="flex min-w-0 flex-col py-0.5">
+							<span class="text-[10px] font-semibold tracking-wider text-primary/80 uppercase"
+								>Replying to {replyingToMessage.userName}</span
+							>
+							<p class="truncate text-xs text-muted-foreground/90">{replyingToMessage.body}</p>
+						</div>
+					</div>
+					<button
+						type="button"
+						onclick={cancelReplying}
+						class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/80"
+					>
+						<X class="h-4 w-4" />
+					</button>
 				</div>
-				<Button
-					onclick={sendMessage}
-					disabled={!newMessage.trim()}
-					size="icon"
-					class="h-10 w-10 shrink-0 rounded-l-none rounded-r-xl transition-all sm:h-11 sm:w-11 {newMessage.trim()
-						? 'bg-primary shadow-md hover:shadow-lg'
-						: ''}"
-				>
-					<SendHorizontal class="h-4.5 w-4.5" />
-				</Button>
+			{/if}
+			<div
+				class="pointer-events-auto flex flex-col rounded-xl border border-border/60 bg-background/92 shadow-[0_10px_30px_-16px_rgba(0,0,0,0.35)] backdrop-blur-md"
+			>
+				<div class="flex items-end gap-2">
+					<div class="flex min-h-10 flex-1 items-end bg-transparent transition-colors sm:min-h-11">
+						<textarea
+							bind:this={inputEl}
+							bind:value={newMessage}
+							onkeydown={handleKeydown}
+							oninput={autoResizeTextarea}
+							placeholder="Write a message..."
+							rows={1}
+							class="max-h-32 w-full resize-none bg-transparent px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none sm:px-4 sm:py-2.5 sm:text-[13.5px]"
+						></textarea>
+					</div>
+					<Button
+						onclick={sendMessage}
+						disabled={!newMessage.trim()}
+						size="icon"
+						class="rounded-br-lx rounded-tr-lx h-10 w-10 shrink-0 rounded-none bg-transparent text-primary transition-all hover:bg-muted/30 sm:h-11 sm:w-11 {newMessage.trim()
+							? 'text-primary'
+							: 'text-muted-foreground/40'}"
+					>
+						<SendHorizontal class="h-4.5 w-4.5" />
+					</Button>
+				</div>
 			</div>
 		</div>
 	</div>
