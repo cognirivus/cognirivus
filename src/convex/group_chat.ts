@@ -19,7 +19,14 @@ const reactionValidator = v.union(
 const reactionSummaryValidator = v.object({
 	emoji: reactionValidator,
 	count: v.number(),
-	reactedByMe: v.boolean()
+	reactedByMe: v.boolean(),
+	reactors: v.array(
+		v.object({
+			userId: v.string(),
+			userName: v.string(),
+			userImage: v.optional(v.string())
+		})
+	)
 });
 
 const messageWithReactionsValidator = v.object({
@@ -211,60 +218,80 @@ export const getMessages = query({
 			.take(limit);
 
 		const orderedMessages = messages.reverse();
-		const withReactions = await Promise.all(
-			orderedMessages.map(async (message) => {
-				if (message.isDeleted) {
-					return {
-						...message,
-						reactions: []
-					};
-				}
+		const messageIds = orderedMessages.map((m) => m._id);
 
-				const reactions = await ctx.db
-					.query('group_chat_reactions')
-					.withIndex('by_group_message', (q) =>
-						q.eq('groupId', args.groupId).eq('messageId', message._id)
-					)
-					.collect();
-				const latestReactionByUser: Record<string, (typeof reactions)[number]> = {};
-				for (const reaction of reactions) {
-					const existing = latestReactionByUser[reaction.userId];
-					if (!existing || reaction.createdAt > existing.createdAt) {
-						latestReactionByUser[reaction.userId] = reaction;
-					}
-				}
+		// Bulk fetch all reactions for the returned messages
+		const allReactions = await ctx.db
+			.query('group_chat_reactions')
+			.withIndex('by_group_message', (q) => q.eq('groupId', args.groupId))
+			.filter((q) => q.or(...messageIds.map((id) => q.eq(q.field('messageId'), id))))
+			.collect();
 
-				const reactionMap: Record<AllowedReaction, { count: number; reactedByMe: boolean }> = {
-					'👍': { count: 0, reactedByMe: false },
-					'❤️': { count: 0, reactedByMe: false },
-					'😂': { count: 0, reactedByMe: false },
-					'🎉': { count: 0, reactedByMe: false },
-					'😮': { count: 0, reactedByMe: false },
-					'😢': { count: 0, reactedByMe: false },
-					'👀': { count: 0, reactedByMe: false }
-				};
-
-				for (const reaction of Object.values(latestReactionByUser)) {
-					const emoji = reaction.emoji as AllowedReaction;
-					if (!ALLOWED_REACTIONS.includes(emoji)) continue;
-					reactionMap[emoji].count += 1;
-					if (reaction.userId === user._id) {
-						reactionMap[emoji].reactedByMe = true;
-					}
-				}
-
-				return {
-					...message,
-					reactions: ALLOWED_REACTIONS.map((emoji) => ({
-						emoji,
-						count: reactionMap[emoji].count,
-						reactedByMe: reactionMap[emoji].reactedByMe
-					})).filter((reaction) => reaction.count > 0)
-				};
-			})
+		// Fetch user details for all unique reactors in one go
+		const uniqueUserIds = [...new Set(allReactions.map((r) => r.userId))];
+		const userProfiles = await Promise.all(
+			uniqueUserIds.map((id) => authComponent.getAnyUserById(ctx, id))
 		);
+		const userMap = Object.fromEntries(uniqueUserIds.map((id, i) => [id, userProfiles[i]]));
 
-		return withReactions;
+		// Group reactions by messageId
+		const reactionsByMessageId: Record<string, typeof allReactions> = {};
+		for (const reaction of allReactions) {
+			const mid = reaction.messageId;
+			if (!reactionsByMessageId[mid]) reactionsByMessageId[mid] = [];
+			reactionsByMessageId[mid].push(reaction);
+		}
+
+		return orderedMessages.map((message) => {
+			if (message.isDeleted) {
+				return { ...message, reactions: [] };
+			}
+
+			const reactions = reactionsByMessageId[message._id] ?? [];
+			const reactionMap: Record<
+				AllowedReaction,
+				{
+					count: number;
+					reactedByMe: boolean;
+					reactors: Array<{ userId: string; userName: string; userImage?: string }>;
+				}
+			> = {
+				'👍': { count: 0, reactedByMe: false, reactors: [] },
+				'❤️': { count: 0, reactedByMe: false, reactors: [] },
+				'😂': { count: 0, reactedByMe: false, reactors: [] },
+				'🎉': { count: 0, reactedByMe: false, reactors: [] },
+				'😮': { count: 0, reactedByMe: false, reactors: [] },
+				'😢': { count: 0, reactedByMe: false, reactors: [] },
+				'👀': { count: 0, reactedByMe: false, reactors: [] }
+			};
+
+			for (const reaction of reactions) {
+				const emoji = reaction.emoji as AllowedReaction;
+				if (!ALLOWED_REACTIONS.includes(emoji)) continue;
+
+				const reactor = userMap[reaction.userId];
+				reactionMap[emoji].count += 1;
+				reactionMap[emoji].reactors.push({
+					userId: reaction.userId,
+					userName: reactor?.name ?? 'Unknown User',
+					userImage: (reactor?.image as string | undefined) ?? undefined
+				});
+
+				if (reaction.userId === user._id) {
+					reactionMap[emoji].reactedByMe = true;
+				}
+			}
+
+			return {
+				...message,
+				reactions: ALLOWED_REACTIONS.map((emoji) => ({
+					emoji,
+					count: reactionMap[emoji].count,
+					reactedByMe: reactionMap[emoji].reactedByMe,
+					reactors: reactionMap[emoji].reactors
+				})).filter((reaction) => reaction.count > 0)
+			};
+		});
 	}
 });
 

@@ -3,8 +3,12 @@
 	import { api } from '$convex/_generated/api';
 	import { page } from '$app/state';
 	import { tick, onDestroy } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Popover from '$lib/components/ui/popover';
+	import * as Tabs from '$lib/components/ui/tabs';
+	import * as Avatar from '$lib/components/ui/avatar';
 	import {
 		SendHorizontal,
 		MessageSquare,
@@ -18,6 +22,7 @@
 	import type { Id } from '$convex/_generated/dataModel';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { authClient } from '$lib/auth-client';
+	import { toast } from 'svelte-sonner';
 
 	const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢', '👀'] as const;
 	type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
@@ -25,6 +30,7 @@
 		emoji: ReactionEmoji;
 		count: number;
 		reactedByMe: boolean;
+		reactors: Array<{ userId: string; userName: string; userImage?: string }>;
 	};
 	type GroupChatMessage = {
 		_id: Id<'group_chat_messages'>;
@@ -48,7 +54,6 @@
 	let scrollContainer: HTMLElement | null = $state(null);
 	let showScrollButton = $state(false);
 	let inputEl: HTMLTextAreaElement | null = $state(null);
-	let reactionPickerMessageId = $state<Id<'group_chat_messages'> | null>(null);
 	let editingMessageId = $state<Id<'group_chat_messages'> | null>(null);
 	let editingMessageBody = $state('');
 	let isSavingEdit = $state(false);
@@ -149,6 +154,7 @@
 			scrollToBottom();
 		} catch (e) {
 			console.error('Failed to send message:', e);
+			toast.error('Failed to send message. Please try again.');
 		}
 	}
 
@@ -229,33 +235,107 @@
 		return avatarColors[Math.abs(hash) % avatarColors.length];
 	}
 
-	function toggleReactionPicker(messageId: Id<'group_chat_messages'>) {
-		reactionPickerMessageId = reactionPickerMessageId === messageId ? null : messageId;
-	}
-
 	function handleDocumentClick(event: MouseEvent) {
 		if (suppressNextClick) {
 			suppressNextClick = false;
 			return;
 		}
-		const target = event.target as HTMLElement | null;
-		if (reactionPickerMessageId && !target?.closest('[data-reaction-controls]')) {
-			reactionPickerMessageId = null;
-		}
 		dismissLongPressMenu(event);
 	}
 
 	async function toggleReaction(messageId: Id<'group_chat_messages'>, emoji: ReactionEmoji) {
-		if (!groupId) return;
+		if (!groupId || !currentUserId) return;
+
+		// Use optimistic update for instant feedback
 		try {
-			await client.mutation(api.group_chat.toggleReaction, {
-				groupId,
-				messageId,
-				emoji
-			});
-			reactionPickerMessageId = null;
+			await client.mutation(
+				api.group_chat.toggleReaction,
+				{
+					groupId,
+					messageId,
+					emoji
+				},
+				{
+					optimisticUpdate: (localStore) => {
+						const existingMessages = localStore.getQuery(api.group_chat.getMessages, { groupId });
+						if (!existingMessages) return;
+
+						const messageIndex = existingMessages.findIndex(
+							(m: GroupChatMessage) => m._id === messageId
+						);
+						if (messageIndex === -1) return;
+
+						const message = existingMessages[messageIndex];
+						const newReactions = [...message.reactions];
+
+						// 1. Find and remove any existing reaction by the current user (single reaction rule)
+						let previousEmoji: ReactionEmoji | null = null;
+						for (let i = 0; i < newReactions.length; i++) {
+							const r = newReactions[i];
+							const reactorIndex = r.reactors.findIndex(
+								(u: { userId: string }) => u.userId === currentUserId
+							);
+							if (reactorIndex !== -1) {
+								previousEmoji = r.emoji as ReactionEmoji;
+								const updatedReactors = [...r.reactors];
+								updatedReactors.splice(reactorIndex, 1);
+
+								if (updatedReactors.length === 0) {
+									newReactions.splice(i, 1);
+								} else {
+									newReactions[i] = {
+										...r,
+										count: r.count - 1,
+										reactedByMe: false,
+										reactors: updatedReactors
+									};
+								}
+								break;
+							}
+						}
+
+						// 2. Add the new reaction if it's different from the previous one (toggle behavior)
+						if (previousEmoji !== emoji) {
+							let reactionIndex = newReactions.findIndex((r) => r.emoji === emoji);
+							const userProfile = {
+								userId: currentUserId,
+								userName: $session.data?.user?.name ?? 'Me',
+								userImage: $session.data?.user?.image ?? undefined
+							};
+
+							if (reactionIndex !== -1) {
+								// Emoji group already exists, add to it
+								const r = newReactions[reactionIndex];
+								newReactions[reactionIndex] = {
+									...r,
+									count: r.count + 1,
+									reactedByMe: true,
+									reactors: [...r.reactors, userProfile]
+								};
+							} else {
+								// Create new emoji group
+								newReactions.push({
+									emoji,
+									count: 1,
+									reactedByMe: true,
+									reactors: [userProfile]
+								});
+							}
+						}
+
+						// 3. Update the local cache
+						const newMessages = [...existingMessages];
+						newMessages[messageIndex] = {
+							...message,
+							reactions: newReactions
+						};
+						localStore.setQuery(api.group_chat.getMessages, { groupId }, newMessages);
+					}
+				}
+			);
 		} catch (e) {
 			console.error('Failed to toggle reaction:', e);
+			toast.error('Failed to update reaction. Please try again.');
 		}
 	}
 
@@ -286,7 +366,6 @@
 		}
 		editingMessageId = message._id;
 		editingMessageBody = message.body;
-		reactionPickerMessageId = null;
 	}
 
 	function cancelEditingMessage() {
@@ -311,6 +390,7 @@
 			cancelEditingMessage();
 		} catch (e) {
 			console.error('Failed to edit message:', e);
+			toast.error('Failed to save changes. Please try again.');
 			isSavingEdit = false;
 		}
 	}
@@ -319,7 +399,6 @@
 		if (deletingMessageId) return;
 		messageToDelete = messageId;
 		isDeleteMessageDialogOpen = true;
-		reactionPickerMessageId = null;
 	}
 
 	function closeDeleteMessageDialog() {
@@ -343,6 +422,7 @@
 			closeDeleteMessageDialog();
 		} catch (e) {
 			console.error('Failed to delete message:', e);
+			toast.error('Failed to delete message. Please try again.');
 		} finally {
 			deletingMessageId = null;
 		}
@@ -355,6 +435,36 @@
 		}
 	}
 </script>
+
+{#snippet ReactorList(reactors: any[], showEmoji = false, currentEmoji = '')}
+	<div class="space-y-1">
+		{#each reactors as reactor}
+			<div
+				class="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-muted/40"
+			>
+				<Avatar.Root class="h-7 w-7 border border-border/40">
+					{#if reactor.userImage}
+						<Avatar.Image src={reactor.userImage} alt={reactor.userName} />
+					{/if}
+					<Avatar.Fallback class="text-[9px] font-bold {getAvatarColor(reactor.userId)}">
+						{getInitials(reactor.userName)}
+					</Avatar.Fallback>
+				</Avatar.Root>
+				<div class="flex flex-1 items-center justify-between gap-2 overflow-hidden">
+					<span class="truncate text-xs font-medium">
+						{reactor.userName}
+						{#if reactor.userId === currentUserId}
+							<span class="ml-0.5 text-[10px] font-normal text-muted-foreground/70">(You)</span>
+						{/if}
+					</span>
+					{#if showEmoji}
+						<span class="text-xs">{reactor.reactingWith || currentEmoji}</span>
+					{/if}
+				</div>
+			</div>
+		{/each}
+	</div>
+{/snippet}
 
 <svelte:document onclick={handleDocumentClick} />
 
@@ -377,9 +487,7 @@
 					<MessageSquare class="h-6 w-6 text-muted-foreground/60 sm:h-7 sm:w-7" />
 				</div>
 				<h3 class="text-sm font-semibold text-foreground sm:text-base">Start the conversation</h3>
-				<p
-					class="mt-1.5 max-w-70 text-xs leading-relaxed text-muted-foreground sm:text-[13px]"
-				>
+				<p class="mt-1.5 max-w-70 text-xs leading-relaxed text-muted-foreground sm:text-[13px]">
 					Be the first to send a message to your group.
 				</p>
 			</div>
@@ -445,12 +553,23 @@
 										data-msg-bubble
 										class="flex max-w-full flex-col rounded-lg px-3 py-1.5 text-[13px] leading-relaxed sm:px-3.5 sm:py-2 sm:text-[13.5px]
 										{isMine ? 'bg-primary text-primary-foreground' : 'bg-muted/70 text-foreground'}"
-										style={isEditing && editingBubbleWidth ? `min-width:${editingBubbleWidth}px` : ''}
-										ontouchstart={() => { if (isMine && !msg.isDeleted && !editingMessageId) startLongPress(msg._id); }}
+										style={isEditing && editingBubbleWidth
+											? `min-width:${editingBubbleWidth}px`
+											: ''}
+										ontouchstart={() => {
+											if (isMine && !msg.isDeleted && !editingMessageId) startLongPress(msg._id);
+										}}
 										ontouchend={cancelLongPress}
 										ontouchmove={cancelLongPress}
 										ontouchcancel={cancelLongPress}
-										oncontextmenu={(e) => { if (isMine && !msg.isDeleted && !editingMessageId) { e.preventDefault(); cancelLongPress(); longPressMessageId = longPressMessageId === msg._id ? null : msg._id; suppressNextClick = true; } }}
+										oncontextmenu={(e) => {
+											if (isMine && !msg.isDeleted && !editingMessageId) {
+												e.preventDefault();
+												cancelLongPress();
+												longPressMessageId = longPressMessageId === msg._id ? null : msg._id;
+												suppressNextClick = true;
+											}
+										}}
 									>
 										{#if isEditing}
 											<textarea
@@ -507,13 +626,21 @@
 											{#if isMine && longPressMessageId === msg._id}
 												<div
 													data-longpress-actions
-													class="mr-1 inline-flex items-center gap-1 animate-in fade-in zoom-in-95 duration-150"
+													class="mr-1 inline-flex animate-in items-center gap-1 duration-150 zoom-in-95 fade-in"
 												>
 													{#if !msg.isDeleted}
 														<button
 															type="button"
 															aria-label="Edit message"
-															onclick={(e) => { const bubbleEl = (e.currentTarget as HTMLElement).closest('[data-reaction-controls]')?.parentElement?.querySelector('[data-msg-bubble]') as HTMLElement | null; startEditingMessage(msg, bubbleEl ?? undefined); longPressMessageId = null; }}
+															onclick={(e) => {
+																const bubbleEl = (e.currentTarget as HTMLElement)
+																	.closest('[data-reaction-controls]')
+																	?.parentElement?.querySelector(
+																		'[data-msg-bubble]'
+																	) as HTMLElement | null;
+																startEditingMessage(msg, bubbleEl ?? undefined);
+																longPressMessageId = null;
+															}}
 															class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
 														>
 															<Pencil class="h-3.5 w-3.5" />
@@ -522,7 +649,10 @@
 													<button
 														type="button"
 														aria-label="Delete message"
-														onclick={() => { requestDeleteMessage(msg._id); longPressMessageId = null; }}
+														onclick={() => {
+															requestDeleteMessage(msg._id);
+															longPressMessageId = null;
+														}}
 														disabled={deletingMessageId === msg._id || msg.isDeleted}
 														class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-destructive active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
 													>
@@ -533,57 +663,100 @@
 
 											{#if !msg.isDeleted}
 												{#each msg.reactions as reaction (`${msg._id}-${reaction.emoji}`)}
-													{#if isMine}
-														<span
-															class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background px-2 py-0.5 text-[11px] text-foreground/85 sm:text-xs"
-														>
-															<span>{reaction.emoji}</span>
-															<span class="font-medium">{reaction.count}</span>
-														</span>
-													{:else}
-														<button
-															type="button"
-															aria-label={`Toggle ${reaction.emoji} reaction`}
-															onclick={() => toggleReaction(msg._id, reaction.emoji)}
+													<Popover.Root>
+														<Popover.Trigger
 															class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors sm:text-xs {reaction.reactedByMe
 																? 'border-primary/40 bg-primary/10 text-primary'
 																: 'border-border/70 bg-background text-foreground/85 hover:bg-muted/70'}"
 														>
 															<span>{reaction.emoji}</span>
 															<span class="font-medium">{reaction.count}</span>
-														</button>
-													{/if}
+														</Popover.Trigger>
+														<Popover.Content
+															class="w-64 border-border/50 bg-background/80 p-0 shadow-xl backdrop-blur-md sm:w-80"
+															sideOffset={8}
+															align="start"
+														>
+															<Tabs.Root value={reaction.emoji} class="w-full">
+																<Tabs.List
+																	class="flex h-10 w-full justify-start gap-1 rounded-none border-b border-border/40 bg-transparent px-1 py-1"
+																>
+																	{#if msg.reactions.length > 1}
+																		<Tabs.Trigger
+																			value="all"
+																			class="relative h-8 rounded-md px-3 text-xs font-medium transition-all data-[state=active]:bg-muted/60 data-[state=active]:text-foreground"
+																		>
+																			All
+																			<span class="ml-1 text-[10px] opacity-60"
+																				>{msg.reactions.reduce((acc, r) => acc + r.count, 0)}</span
+																			>
+																		</Tabs.Trigger>
+																	{/if}
+																	{#each msg.reactions as r}
+																		<Tabs.Trigger
+																			value={r.emoji}
+																			class="relative h-8 rounded-md px-3 text-xs font-medium transition-all data-[state=active]:bg-muted/60 data-[state=active]:text-foreground"
+																		>
+																			{r.emoji}
+																			<span class="ml-1 text-[10px] opacity-60">{r.count}</span>
+																		</Tabs.Trigger>
+																	{/each}
+																</Tabs.List>
+
+																{#if msg.reactions.length > 1}
+																	<Tabs.Content value="all" class="max-h-64 overflow-y-auto p-2">
+																		{@render ReactorList(
+																			msg.reactions.flatMap((r) =>
+																				r.reactors.map((u) => ({ ...u, reactingWith: r.emoji }))
+																			),
+																			true
+																		)}
+																	</Tabs.Content>
+																{/if}
+
+																{#each msg.reactions as r}
+																	<Tabs.Content
+																		value={r.emoji}
+																		class="max-h-64 overflow-y-auto p-2"
+																	>
+																		{@render ReactorList(r.reactors, false, r.emoji)}
+																	</Tabs.Content>
+																{/each}
+															</Tabs.Root>
+														</Popover.Content>
+													</Popover.Root>
 												{/each}
 
-												{#if !isMine}
-													<button
-														type="button"
-														aria-label="Add reaction"
-														onclick={() => toggleReactionPicker(msg._id)}
+												<Popover.Root>
+													<Popover.Trigger
 														class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground sm:h-7 sm:w-7"
 													>
 														<SmilePlus class="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-													</button>
-												{/if}
-
-												{#if !isMine && reactionPickerMessageId === msg._id}
-													<div
-														class="absolute bottom-full z-20 mb-1.5 flex items-center gap-0.5 rounded-full border border-border/70 bg-background p-1 shadow-md {isMine
-															? 'right-0'
-															: 'left-0'}"
+													</Popover.Trigger>
+													<Popover.Content
+														class="w-auto rounded-full border border-border/70 bg-background p-1 shadow-md"
+														sideOffset={8}
+														align={isMine ? 'end' : 'start'}
 													>
-														{#each REACTION_EMOJIS as emoji (emoji)}
-															<button
-																type="button"
-																aria-label={`React with ${emoji}`}
-																onclick={() => toggleReaction(msg._id, emoji)}
-																class="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors hover:bg-muted sm:h-8 sm:w-8 sm:text-base"
-															>
-																{emoji}
-															</button>
-														{/each}
-													</div>
-												{/if}
+														<div class="flex items-center gap-0.5" in:fade={{ duration: 150 }}>
+															{#each REACTION_EMOJIS as emoji (emoji)}
+																{@const reactedByMe = msg.reactions.find(
+																	(r) => r.emoji === emoji
+																)?.reactedByMe}
+																<button
+																	type="button"
+																	aria-label={`React with ${emoji}`}
+																	onclick={() => toggleReaction(msg._id, emoji)}
+																	class="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm transition-colors sm:h-8 sm:w-8 sm:text-base {reactedByMe
+																		? 'bg-primary/10 text-primary'
+																		: 'hover:bg-muted'}"
+																>
+																	{emoji}
+																</button>
+															{/each}
+														</div>
+													</Popover.Content>
+												</Popover.Root>
 											{/if}
 										</div>
 									{/if}
