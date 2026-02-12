@@ -31,7 +31,8 @@
 
 	const contentWithCardsQuery = useQuery(api.flashcards.getContentWithFlashcardCounts, () => ({
 		paginationOpts: { numItems: 20, cursor: null },
-		subjectId: selectedSubjectId as any
+		subjectId: selectedSubjectId as any,
+		onlyWithCards: true
 	}));
 </script>
 

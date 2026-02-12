@@ -69,15 +69,23 @@
 		});
 	}
 
-	const contentQuery = useQuery(api.flashcards.getContentWithFlashcardCounts, () => ({
-		subjectId: selectedSubjectId ?? undefined,
-		paginationOpts: { numItems: PAGE_SIZE, cursor: currentCursor }
-	}));
+	const contentQuery = useQuery(api.flashcards.getContentWithFlashcardCounts, () =>
+		viewMode === 'content'
+			? {
+					subjectId: selectedSubjectId ?? undefined,
+					paginationOpts: { numItems: PAGE_SIZE, cursor: currentCursor }
+				}
+			: 'skip'
+	);
 
-	const flashcardsQuery = useQuery(api.flashcards.listPaginated, () => ({
-		subjectId: selectedSubjectId ?? undefined,
-		paginationOpts: { numItems: PAGE_SIZE, cursor: currentCursor }
-	}));
+	const flashcardsQuery = useQuery(api.flashcards.listPaginated, () =>
+		viewMode === 'flashcards'
+			? {
+					subjectId: selectedSubjectId ?? undefined,
+					paginationOpts: { numItems: PAGE_SIZE, cursor: currentCursor }
+				}
+			: 'skip'
+	);
 
 	const statsQuery = useQuery(api.flashcards.getStats, {});
 

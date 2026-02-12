@@ -502,6 +502,7 @@ export const listDue = query({
 export const getContentWithFlashcardCounts = query({
 	args: {
 		subjectId: v.optional(v.id('subjects')),
+		onlyWithCards: v.optional(v.boolean()),
 		paginationOpts: paginationOptsValidator
 	},
 	handler: async (ctx, args) => {
@@ -509,14 +510,17 @@ export const getContentWithFlashcardCounts = query({
 		if (args.subjectId) {
 			queryBuilder = ctx.db
 				.query('content')
-				.withIndex('by_subjectId', (q) => q.eq('subjectId', args.subjectId!))
-				.filter((q) => q.gt(q.field('flashcardCount'), 0));
+				.withIndex('by_subjectId', (q) => q.eq('subjectId', args.subjectId!));
+
+			if (args.onlyWithCards) {
+				queryBuilder = queryBuilder.filter((q) => q.gt(q.field('flashcardCount'), 0));
+			}
 		} else {
-			queryBuilder = ctx.db
-				.query('content')
-				.withIndex('by_created_at')
-				.order('desc')
-				.filter((q) => q.gt(q.field('flashcardCount'), 0));
+			queryBuilder = ctx.db.query('content').withIndex('by_created_at').order('desc');
+
+			if (args.onlyWithCards) {
+				queryBuilder = queryBuilder.filter((q) => q.gt(q.field('flashcardCount'), 0));
+			}
 		}
 
 		const result = await queryBuilder.paginate(args.paginationOpts);
