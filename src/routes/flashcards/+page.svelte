@@ -5,9 +5,18 @@
 	import * as Card from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
-	import { Brain, Sparkles, Clock, History, ChevronRight, CheckCircle2 } from '@lucide/svelte';
+	import {
+		Brain,
+		Sparkles,
+		Clock,
+		History,
+		ChevronRight,
+		CheckCircle2,
+		BarChart3
+	} from '@lucide/svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { Progress } from '$lib/components/ui/progress';
+
 	import { authClient } from '$lib/auth-client';
 
 	const session = authClient.useSession();
@@ -16,9 +25,14 @@
 	const statsQuery = useQuery(api.flashcards.getStats, {});
 	const dueQuery = useQuery(api.flashcards.listDue, {});
 
-	const contentWithCardsQuery = useQuery(api.flashcards.getContentWithFlashcardCounts, {
-		paginationOpts: { numItems: 20, cursor: null }
-	});
+	const subjectsQuery = useQuery(api.subjects.list, {});
+
+	let selectedSubjectId = $state<string | undefined>(undefined);
+
+	const contentWithCardsQuery = useQuery(api.flashcards.getContentWithFlashcardCounts, () => ({
+		paginationOpts: { numItems: 20, cursor: null },
+		subjectId: selectedSubjectId as any
+	}));
 </script>
 
 <svelte:head>
@@ -42,10 +56,22 @@
 				Master your knowledge with scientifically-proven spaced repetition techniques.
 			</p>
 		</div>
-		<Button href="/flashcards/study" size="lg" class="gap-2.5 px-6" disabled={!isAuthenticated}>
-			<Brain class="h-4 w-4" />
-			Start Daily Review
-		</Button>
+		<div class="flex flex-col gap-3 sm:flex-row">
+			<Button
+				href="/flashcards/analytics"
+				variant="outline"
+				size="lg"
+				class="gap-2.5 px-6"
+				disabled={!isAuthenticated}
+			>
+				<BarChart3 class="h-4 w-4" />
+				View Analytics
+			</Button>
+			<Button href="/flashcards/study" size="lg" class="gap-2.5 px-6" disabled={!isAuthenticated}>
+				<Brain class="h-4 w-4" />
+				Start Daily Review
+			</Button>
+		</div>
 	</div>
 
 	<!-- Main Grid -->
@@ -127,11 +153,21 @@
 
 		<!-- Progress Card -->
 		<div class="rounded-xl border bg-card">
-			<div class="flex items-center gap-3 border-b px-6 py-4">
-				<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10">
-					<History class="h-4 w-4 text-violet-600" />
+			<div class="flex items-center justify-between border-b px-6 py-4">
+				<div class="flex items-center gap-3">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10">
+						<History class="h-4 w-4 text-violet-600" />
+					</div>
+					<h2 class="text-sm font-semibold">Your Progress</h2>
 				</div>
-				<h2 class="text-sm font-semibold">Your Progress</h2>
+				<Button
+					href="/flashcards/analytics"
+					variant="ghost"
+					size="icon"
+					class="-mr-2 h-8 w-8 text-muted-foreground"
+				>
+					<BarChart3 class="h-4 w-4" />
+				</Button>
 			</div>
 			<div class="p-6">
 				{#if statsQuery.isLoading}
@@ -196,11 +232,6 @@
 									</div>
 								{/each}
 							</div>
-							{#if statsQuery.data.userStats?.debugId}
-								<p class="truncate pt-2 text-[8px] text-muted-foreground/30">
-									SID: {statsQuery.data.userStats.debugId}
-								</p>
-							{/if}
 						</div>
 					</div>
 				{:else}
@@ -221,6 +252,19 @@
 			<div class="space-y-1">
 				<h2 class="text-xl font-semibold tracking-tight">Study by Topic</h2>
 				<p class="text-sm text-muted-foreground">Master specific content sets at your own pace.</p>
+			</div>
+			<div class="w-[200px]">
+				<select
+					bind:value={selectedSubjectId}
+					class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<option value={undefined}>All Subjects</option>
+					{#if subjectsQuery.data}
+						{#each subjectsQuery.data as subject}
+							<option value={subject._id}>{subject.name}</option>
+						{/each}
+					{/if}
+				</select>
 			</div>
 		</div>
 

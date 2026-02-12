@@ -242,6 +242,18 @@ const schema = defineSchema({
 		.index('by_user_flashcard', ['userId', 'flashcardId'])
 		.index('by_flashcard', ['flashcardId'])
 		.index('by_next_review', ['userId', 'nextReviewAt']),
+	flashcard_reviews: defineTable({
+		userId: v.string(),
+		flashcardId: v.id('flashcards'),
+		contentId: v.id('content'),
+		score: v.number(), // 0-5
+		reviewTime: v.number(),
+		duration: v.optional(v.number())
+	})
+		.index('by_user', ['userId'])
+		.index('by_flashcard', ['flashcardId'])
+		.index('by_content', ['contentId'])
+		.index('by_user_time', ['userId', 'reviewTime']),
 	syllabus: defineTable({
 		title: v.string(),
 		snippet: v.string(),

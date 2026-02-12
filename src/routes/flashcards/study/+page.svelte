@@ -58,18 +58,25 @@
 	const totalCards = $derived(sessionCards.length);
 	const progress = $derived(totalCards > 0 ? (currentIndex / totalCards) * 100 : 0);
 
+	let isSubmitting = $state(false);
+
 	async function handleReview(quality: number) {
+		if (isSubmitting) return;
+
 		const cardToReview = currentCard;
 		if (!cardToReview) return;
 
+		isSubmitting = true;
 		try {
 			await client.mutation(api.flashcards.review, {
 				flashcardId: cardToReview._id,
 				quality
 			});
 
+			console.log('Review:', { quality, isCorrect: quality >= 3 });
 			if (quality >= 3) sessionStats.correct++;
 			sessionStats.total++;
+			console.log('Stats:', $state.snapshot(sessionStats));
 
 			if (totalCards > 0 && currentIndex < totalCards - 1) {
 				isFlipped = false;
@@ -79,6 +86,8 @@
 			}
 		} catch (e: any) {
 			toast.error('Failed to save review: ' + e.message);
+		} finally {
+			isSubmitting = false;
 		}
 	}
 
@@ -296,6 +305,7 @@
 											variant="outline"
 											class="h-auto flex-col gap-1 border-red-200 py-3 text-red-600 hover:bg-red-50 hover:text-red-700"
 											onclick={() => handleReview(1)}
+											disabled={isSubmitting}
 										>
 											<XCircle class="h-4 w-4" />
 											<span class="text-[10px] font-semibold">Again</span>
@@ -304,6 +314,7 @@
 											variant="outline"
 											class="h-auto flex-col gap-1 border-amber-200 py-3 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
 											onclick={() => handleReview(3)}
+											disabled={isSubmitting}
 										>
 											<RotateCcw class="h-4 w-4" />
 											<span class="text-[10px] font-semibold">Hard</span>
@@ -312,6 +323,7 @@
 											variant="outline"
 											class="h-auto flex-col gap-1 border-emerald-200 py-3 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
 											onclick={() => handleReview(4)}
+											disabled={isSubmitting}
 										>
 											<CheckCircle2 class="h-4 w-4" />
 											<span class="text-[10px] font-semibold">Good</span>
@@ -320,6 +332,7 @@
 											variant="outline"
 											class="h-auto flex-col gap-1 border-blue-200 py-3 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
 											onclick={() => handleReview(5)}
+											disabled={isSubmitting}
 										>
 											<Sparkles class="h-4 w-4" />
 											<span class="text-[10px] font-semibold">Easy</span>

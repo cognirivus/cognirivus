@@ -509,9 +509,14 @@ export const getContentWithFlashcardCounts = query({
 		if (args.subjectId) {
 			queryBuilder = ctx.db
 				.query('content')
-				.withIndex('by_subjectId', (q) => q.eq('subjectId', args.subjectId!));
+				.withIndex('by_subjectId', (q) => q.eq('subjectId', args.subjectId!))
+				.filter((q) => q.gt(q.field('flashcardCount'), 0));
 		} else {
-			queryBuilder = ctx.db.query('content').withIndex('by_created_at').order('desc');
+			queryBuilder = ctx.db
+				.query('content')
+				.withIndex('by_created_at')
+				.order('desc')
+				.filter((q) => q.gt(q.field('flashcardCount'), 0));
 		}
 
 		const result = await queryBuilder.paginate(args.paginationOpts);
@@ -618,6 +623,89 @@ export const review = mutation({
 			await ctx.db.insert('user_flashcard_progress', progressData);
 		}
 
+		// Log the review for analytics
+		await ctx.db.insert('flashcard_reviews', {
+			userId: user._id,
+			flashcardId,
+			contentId: card.contentId,
+			score: quality,
+			reviewTime: Date.now()
+		});
+
 		return { nextReviewAt };
+	}
+});
+
+export const getAnalytics = query({
+	args: {},
+	handler: async (ctx) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) return null;
+
+		const now = Date.now();
+		const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+		const reviews = await ctx.db
+			.query('flashcard_reviews')
+			.withIndex('by_user_time', (q) => q.eq('userId', user._id).gte('reviewTime', thirtyDaysAgo))
+			.collect();
+
+		// 1. Activity Heatmap (Reviews per day)
+		const reviewsByDay: Record<string, number> = {};
+		// Initialize last 30 days with 0
+		for (let i = 0; i < 30; i++) {
+			const d = new Date(now - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+			reviewsByDay[d] = 0;
+		}
+
+		// 2. Performance by Subject
+		const subjectPerformance: Record<string, { total: number; sum: number; name: string }> = {};
+
+		for (const review of reviews) {
+			const day = new Date(review.reviewTime).toISOString().split('T')[0];
+			reviewsByDay[day] = (reviewsByDay[day] || 0) + 1;
+		}
+
+		// Group reviews by contentId to minimize DB calls
+		const reviewsByContent: Record<string, number[]> = {};
+		for (const r of reviews) {
+			if (!reviewsByContent[r.contentId]) reviewsByContent[r.contentId] = [];
+			reviewsByContent[r.contentId].push(r.score);
+		}
+
+		const contentIds = Object.keys(reviewsByContent);
+		// Fetch content in batches or parallel
+		const contentDocs = await Promise.all(contentIds.map((id) => ctx.db.get(id as Id<'content'>)));
+
+		const subjectIds = new Set(contentDocs.filter((c) => c).map((c) => c!.subjectId));
+		const subjects = await Promise.all(Array.from(subjectIds).map((id) => ctx.db.get(id)));
+		const subjectMap = new Map(subjects.map((s) => [s?._id, s?.name]));
+
+		for (const content of contentDocs) {
+			if (!content) continue;
+			const subjectName = subjectMap.get(content.subjectId) || 'Unknown';
+			const scores = reviewsByContent[content._id];
+
+			if (!subjectPerformance[subjectName]) {
+				subjectPerformance[subjectName] = { total: 0, sum: 0, name: subjectName };
+			}
+			subjectPerformance[subjectName].total += scores.length;
+			subjectPerformance[subjectName].sum += scores.reduce((a, b) => a + b, 0);
+		}
+
+		const performance = Object.values(subjectPerformance)
+			.map((s) => ({
+				subject: s.name,
+				averageScore: s.total > 0 ? s.sum / s.total : 0,
+				totalReviews: s.total
+			}))
+			.sort((a, b) => b.averageScore - a.averageScore); // Highest performance first
+
+		return {
+			activity: Object.entries(reviewsByDay)
+				.map(([date, count]) => ({ date, count }))
+				.sort((a, b) => a.date.localeCompare(b.date)),
+			performance
+		};
 	}
 });
