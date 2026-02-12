@@ -23,6 +23,9 @@ importers:
       '@convex-dev/rag':
         specifier: ^0.6.1
         version: 0.6.1(@convex-dev/workpool@0.3.1(convex-helpers@0.1.111(@standard-schema/spec@1.1.0)(convex@1.31.7(react@19.2.3))(react@19.2.3)(typescript@5.9.3)(zod@4.3.6))(convex@1.31.7(react@19.2.3)))(convex-helpers@0.1.111(@standard-schema/spec@1.1.0)(convex@1.31.7(react@19.2.3))(react@19.2.3)(typescript@5.9.3)(zod@4.3.6))(convex@1.31.7(react@19.2.3))(zod@4.3.6)
+      '@convex-dev/rate-limiter':
+        specifier: ^0.3.2
+        version: 0.3.2(convex@1.31.7(react@19.2.3))(react@19.2.3)
       '@mmailaender/convex-better-auth-svelte':
         specifier: ^0.5.0
         version: 0.5.0(cb3cfba7da19f9a963647cce61c02faf)
@@ -505,6 +508,15 @@ packages:
       '@convex-dev/workpool': ^0.3.0
       convex: ^1.24.8
       convex-helpers: ^0.1.94
+
+  '@convex-dev/rate-limiter@0.3.2':
+    resolution: {integrity: sha512-+oBPsBfFbzdxiF/9XaaTQmVnvDlvEfg/c69/v8LxTbw4VLuiflIKlfnPQL8OS0azXQQ11hcPWHmU8ytFmHKDXA==}
+    peerDependencies:
+      convex: ^1.24.8
+      react: ^18.2.0 || ^19.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
 
   '@convex-dev/workpool@0.3.1':
     resolution: {integrity: sha512-uw4Mi+irhhoYA/KwaMo5wXyYJ7BbxqeaLcCZbst3t1SxPN5488rpnR0OwBcPDCmwcdQjBVHOx+q8S4GUjq0Csg==}
@@ -4153,6 +4165,12 @@ snapshots:
       convex-helpers: 0.1.111(@standard-schema/spec@1.1.0)(convex@1.31.7(react@19.2.3))(react@19.2.3)(typescript@5.9.3)(zod@4.3.6)
     transitivePeerDependencies:
       - zod
+
+  '@convex-dev/rate-limiter@0.3.2(convex@1.31.7(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      convex: 1.31.7(react@19.2.3)
+    optionalDependencies:
+      react: 19.2.3
 
   '@convex-dev/workpool@0.3.1(convex-helpers@0.1.111(@standard-schema/spec@1.1.0)(convex@1.31.7(react@19.2.3))(react@19.2.3)(typescript@5.9.3)(zod@4.3.6))(convex@1.31.7(react@19.2.3))':
     dependencies:

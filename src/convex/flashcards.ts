@@ -5,6 +5,7 @@ import { api, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { authComponent } from './auth';
 import { getGenerationStats } from './lib/llm_client';
+import { rateLimiter } from './lib/rateLimits';
 
 const checkAdmin = async (ctx: any) => {
 	const user = await authComponent.getAuthUser(ctx);
@@ -234,6 +235,7 @@ export const generateFromContent = action({
 	args: { contentId: v.id('content') },
 	handler: async (ctx, args): Promise<{ success: boolean; count: number; error?: string }> => {
 		const user = await checkAdmin(ctx);
+		await rateLimiter.limit(ctx, 'flashcardGenerate', { key: user._id, throws: true });
 		const content = await ctx.runQuery(api.content.getById, { id: args.contentId });
 
 		if (!content) {
@@ -558,6 +560,7 @@ export const review = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Authentication required');
+		await rateLimiter.limit(ctx, 'flashcardReview', { key: user._id, throws: true });
 
 		const { flashcardId, quality } = args;
 

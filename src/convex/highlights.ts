@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 import { mutation, query, type MutationCtx } from './_generated/server';
 import { authComponent } from './auth';
 import type { Id } from './_generated/dataModel';
+import { rateLimiter } from './lib/rateLimits';
 
 export const createHighlight = mutation({
 	args: {
@@ -15,6 +16,7 @@ export const createHighlight = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'createHighlight', { key: user._id, throws: true });
 
 		if (args.groupId) {
 			// Verify membership
@@ -175,6 +177,7 @@ export const addInlineComment = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'inlineComment', { key: user._id, throws: true });
 
 		return await ctx.db.insert('inline_comments', {
 			highlightId: args.highlightId,
@@ -234,6 +237,7 @@ export const toggleInlineCommentReaction = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'contentReaction', { key: user._id, throws: true });
 
 		const existing = await ctx.db
 			.query('inline_comment_reactions')

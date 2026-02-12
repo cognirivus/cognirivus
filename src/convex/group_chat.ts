@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { authComponent } from './auth';
 import type { Id } from './_generated/dataModel';
+import { rateLimiter } from './lib/rateLimits';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '🎉', '😮', '😢', '👀'] as const;
 type AllowedReaction = (typeof ALLOWED_REACTIONS)[number];
@@ -126,6 +127,7 @@ export const sendMessage = mutation({
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
 
+		await rateLimiter.limit(ctx, 'groupChatMessage', { key: user._id, throws: true });
 		await requireActiveMembership(ctx, user._id, args.groupId);
 		const body = normalizeMessageBody(args.body);
 
@@ -337,6 +339,7 @@ export const toggleReaction = mutation({
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
 
+		await rateLimiter.limit(ctx, 'groupChatReaction', { key: user._id, throws: true });
 		await requireActiveMembership(ctx, user._id, args.groupId);
 
 		const message = await ctx.db.get(args.messageId);

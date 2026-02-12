@@ -16,6 +16,7 @@ import { components, internal, api } from './_generated/api';
 import type { DataModel, Id } from './_generated/dataModel';
 import { rag, RAG_CONFIG } from './rag';
 import { r2 } from './lib/r2';
+import { rateLimiter } from './lib/rateLimits';
 
 const likesAggregate = new TableAggregate<{
 	Key: Id<'blogs'>;
@@ -346,6 +347,7 @@ export const insertMetadata = mutation({
 	handler: async (ctx, args) => {
 		const user = await checkAdmin(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'createBlog', { key: user._id, throws: true });
 
 		return await ctx.db.insert('blogs', {
 			...args,
@@ -684,6 +686,7 @@ export const toggleLike = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'blogReaction', { key: user._id, throws: true });
 
 		const existing = await ctx.db
 			.query('blog_reactions')
@@ -728,6 +731,7 @@ export const toggleDislike = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'blogReaction', { key: user._id, throws: true });
 
 		const existing = await ctx.db
 			.query('blog_reactions')
@@ -777,6 +781,7 @@ export const addComment = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'blogComment', { key: user._id, throws: true });
 
 		const id = await ctx.db.insert('blog_comments', {
 			blogId: args.blogId,
@@ -833,6 +838,7 @@ export const toggleCommentLike = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'blogReaction', { key: user._id, throws: true });
 
 		const existing = await ctx.db
 			.query('comment_reactions')
@@ -870,6 +876,7 @@ export const toggleCommentDislike = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'blogReaction', { key: user._id, throws: true });
 
 		const existing = await ctx.db
 			.query('comment_reactions')

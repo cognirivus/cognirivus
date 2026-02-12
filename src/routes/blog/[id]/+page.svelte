@@ -13,6 +13,7 @@
 	import GroupSelectionDialog from '$lib/components/GroupSelectionDialog.svelte';
 	import { toast } from 'svelte-sonner';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import { handleConvexError } from '$lib/utils/error-handler';
 	import { HighlightWrapper, FloatingToolbar, InlineCommentPane } from '$lib/components/highlights';
 	import { highlightStore } from '$lib/stores/highlights.svelte';
 
@@ -41,7 +42,7 @@
 			});
 		} catch (e) {
 			console.error('Failed to create highlight:', e);
-			toast.error('Failed to save highlight');
+			handleConvexError(e);
 		}
 	}
 
@@ -109,6 +110,7 @@
 			await client.mutation(api.blogs.toggleLike, { blogId: id });
 		} catch (e) {
 			console.error('Failed to toggle like:', e);
+			handleConvexError(e);
 		}
 	}
 
@@ -118,15 +120,20 @@
 			await client.mutation(api.blogs.toggleDislike, { blogId: id });
 		} catch (e) {
 			console.error('Failed to toggle dislike:', e);
+			handleConvexError(e);
 		}
 	}
 
 	async function handleAddComment(body: string, parentId?: string) {
-		await client.mutation(api.blogs.addComment, {
-			blogId: id,
-			body,
-			parentId: parentId as Id<'blog_comments'> | undefined
-		});
+		try {
+			await client.mutation(api.blogs.addComment, {
+				blogId: id,
+				body,
+				parentId: parentId as Id<'blog_comments'> | undefined
+			});
+		} catch (error) {
+			handleConvexError(error);
+		}
 	}
 
 	async function onGroupSelect(groupId: string) {
@@ -143,7 +150,7 @@
 				isGroupDialogOpen = false;
 			}
 		} catch (e: any) {
-			toast.error(e.message || 'Failed to share content');
+			handleConvexError(e);
 			console.error('Group action failed:', e);
 		}
 	}
@@ -163,7 +170,7 @@
 			isDeleteCommentDialogOpen = false;
 			commentToDelete = null;
 		} catch (e: any) {
-			toast.error(e.message || 'Failed to delete comment');
+			handleConvexError(e);
 		}
 	}
 
@@ -180,6 +187,7 @@
 			});
 		} catch (e) {
 			console.error('Failed to toggle comment like:', e);
+			handleConvexError(e);
 		}
 	}
 
@@ -191,6 +199,7 @@
 			});
 		} catch (e) {
 			console.error('Failed to toggle comment dislike:', e);
+			handleConvexError(e);
 		}
 	}
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { ChartLine, BookCheck, Highlighter, Brain } from '@lucide/svelte';
+	import { ChartLine, BookCheck, Highlighter, Brain, ShieldAlert } from '@lucide/svelte';
 	import { cn } from '$lib/utils.js';
 
 	let { children } = $props();
@@ -25,6 +25,11 @@
 			name: 'Memories',
 			href: '/dashboard/memories',
 			icon: Brain
+		},
+		{
+			name: 'Rate Limits',
+			href: '/dashboard/limits',
+			icon: ShieldAlert
 		}
 	];
 

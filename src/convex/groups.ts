@@ -2,6 +2,7 @@ import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import { authComponent } from './auth';
 import type { Id } from './_generated/dataModel';
+import { rateLimiter } from './lib/rateLimits';
 
 export const create = mutation({
 	args: {
@@ -14,6 +15,7 @@ export const create = mutation({
 	handler: async (ctx, { name, groupname, description, icon, isPublic }) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
+		await rateLimiter.limit(ctx, 'createGroup', { key: user._id, throws: true });
 
 		// Check if groupname is unique
 		const existing = await ctx.db
@@ -52,6 +54,7 @@ export const join = mutation({
 	handler: async (ctx, { inviteCode, groupId }) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
+		await rateLimiter.limit(ctx, 'joinGroup', { key: user._id, throws: true });
 
 		let group;
 		if (inviteCode) {
@@ -323,6 +326,7 @@ export const shareContent = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
+		await rateLimiter.limit(ctx, 'shareContent', { key: user._id, throws: true });
 
 		const membership = await ctx.db
 			.query('group_memberships')

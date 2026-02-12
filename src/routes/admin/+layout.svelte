@@ -9,7 +9,8 @@
 		Brain,
 		Sparkles,
 		Bot,
-		Cpu
+		Cpu,
+		ShieldCheck
 	} from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
@@ -80,6 +81,11 @@
 			name: 'Models',
 			href: '/admin/models',
 			icon: Cpu
+		},
+		{
+			name: 'Rate Limits',
+			href: '/admin/limits',
+			icon: ShieldCheck
 		}
 	];
 

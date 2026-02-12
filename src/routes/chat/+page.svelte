@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { useChatContext } from '$lib/chat-state.svelte';
 	import { Sparkles } from '@lucide/svelte';
+	import { handleConvexError } from '$lib/utils/error-handler';
 
 	const client = useConvexClient();
 	const chatState = useChatContext();
@@ -17,19 +18,24 @@
 		chatState.input = ''; // Clear early
 
 		// 1. Create new thread
-		const title = currentInput.slice(0, 30) + (currentInput.length > 30 ? '...' : '');
-		const threadId = await client.mutation(api.threads.create, { title });
+		try {
+			const title = currentInput.slice(0, 30) + (currentInput.length > 30 ? '...' : '');
+			const threadId = await client.mutation(api.threads.create, { title });
 
-		// 2. Save user message to Convex
-		await client.mutation(api.messages.send, {
-			body: currentInput,
-			threadId: threadId,
-			role: 'user'
-		});
+			// 2. Save user message to Convex
+			await client.mutation(api.messages.send, {
+				body: currentInput,
+				threadId: threadId,
+				role: 'user'
+			});
 
-		// 3. Navigate to new thread
-		chatState.shouldTrigger = true;
-		goto(`/chat/${threadId}`);
+			// 3. Navigate to new thread
+			chatState.shouldTrigger = true;
+			goto(`/chat/${threadId}`);
+		} catch (error) {
+			handleConvexError(error);
+			chatState.input = currentInput; // Restore input on error
+		}
 	}
 
 	$effect(() => {

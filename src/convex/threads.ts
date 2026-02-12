@@ -1,6 +1,7 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import { authComponent } from './auth';
+import { rateLimiter } from './lib/rateLimits';
 
 /**
  * Lists all chat threads for the authenticated user.
@@ -56,6 +57,8 @@ export const create = mutation({
 	handler: async (ctx, { title }) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
+
+		await rateLimiter.limit(ctx, 'createThread', { key: user._id, throws: true });
 
 		return await ctx.db.insert('threads', {
 			title,
@@ -173,6 +176,8 @@ export const deleteAll = mutation({
 	handler: async (ctx) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
+
+		await rateLimiter.limit(ctx, 'deleteAllThreads', { key: user._id, throws: true });
 
 		// 1. Delete all messages for this user (using by_user index for speed)
 		const messages = await ctx.db

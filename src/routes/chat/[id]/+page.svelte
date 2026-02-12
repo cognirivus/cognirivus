@@ -8,7 +8,7 @@
 	import { useChatContext } from '$lib/chat-state.svelte';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { toast } from 'svelte-sonner';
+	import { handleConvexError } from '$lib/utils/error-handler';
 
 	import MessageItem from '$lib/components/MessageItem.svelte';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
@@ -114,7 +114,7 @@
 				console.log('Cognirivus: Generation stopped by user.');
 			} else {
 				console.error('Failed to generate response:', e);
-				toast.error('Failed to generate response. Please try again.');
+				handleConvexError(e);
 				chatState.status = 'error';
 			}
 		} finally {
@@ -132,15 +132,20 @@
 		chatState.input = '';
 
 		// Save user message to Convex
-		await client.mutation(api.messages.send, {
-			body: currentInput,
-			threadId: threadId,
-			role: 'user'
-		});
+		try {
+			await client.mutation(api.messages.send, {
+				body: currentInput,
+				threadId: threadId,
+				role: 'user'
+			});
 
-		// Generate AI response
-		triggerResponse();
-		scrollToBottom();
+			// Generate AI response
+			triggerResponse();
+			scrollToBottom();
+		} catch (error) {
+			handleConvexError(error);
+			chatState.input = currentInput; // Restore input on error
+		}
 	}
 
 	$effect(() => {

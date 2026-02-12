@@ -5,6 +5,9 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import { Separator } from '$lib/components/ui/separator';
+	import { Input } from '$lib/components/ui/input';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import { z } from 'zod/v4';
 	import {
 		User,
 		Mail,
@@ -16,7 +19,9 @@
 		ArrowLeft,
 		ExternalLink,
 		Trash2,
-		AlertTriangle
+		AlertTriangle,
+		Pencil,
+		Loader2
 	} from '@lucide/svelte';
 	import { authClient } from '$lib/auth-client';
 	import { goto, invalidateAll } from '$app/navigation';
@@ -35,6 +40,54 @@
 	const session = authClient.useSession();
 	const user = $derived($session.data?.user || data.currentUser);
 	const client = useConvexClient();
+
+	let editNameOpen = $state(false);
+	let editNameValue = $state('');
+	let isUpdatingName = $state(false);
+	let nameError = $state('');
+
+	const NAME_MAX = 50;
+
+	const nameSchema = z
+		.string()
+		.trim()
+		.min(2, 'Name must be at least 2 characters.')
+		.max(NAME_MAX, `Name must be at most ${NAME_MAX} characters.`)
+		.regex(/^[a-zA-Z\s.\-']+$/, 'Name can only contain letters, spaces, hyphens, apostrophes, and dots.');
+
+	function validateName(value: string): string {
+		const result = nameSchema.safeParse(value);
+		return result.success ? '' : result.error.issues[0].message;
+	}
+
+	function openEditName() {
+		editNameValue = user?.name || '';
+		nameError = '';
+		editNameOpen = true;
+	}
+
+	async function handleUpdateName() {
+		const trimmed = editNameValue.trim();
+		nameError = validateName(trimmed);
+		if (nameError) return;
+
+		if (trimmed === user?.name) {
+			editNameOpen = false;
+			return;
+		}
+
+		isUpdatingName = true;
+		try {
+			await authClient.updateUser({ name: trimmed });
+			toast.success('Name updated successfully.');
+			editNameOpen = false;
+		} catch (error) {
+			console.error('Failed to update name:', error);
+			toast.error('Failed to update name. Please try again.');
+		} finally {
+			isUpdatingName = false;
+		}
+	}
 
 	async function signOut() {
 		await authClient.signOut();
@@ -178,6 +231,9 @@
 								</p>
 								<p class="truncate text-sm font-medium">{user.name || 'Not provided'}</p>
 							</div>
+							<Button variant="ghost" size="icon" class="shrink-0" onclick={openEditName}>
+								<Pencil class="h-4 w-4 text-muted-foreground" />
+							</Button>
 						</div>
 
 						<div
@@ -339,3 +395,51 @@
 		</div>
 	{/if}
 </div>
+
+<Dialog.Root bind:open={editNameOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Update Display Name</Dialog.Title>
+			<Dialog.Description>
+				Enter a new display name for your account. You can only change your name once every 24
+				hours.
+			</Dialog.Description>
+		</Dialog.Header>
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				handleUpdateName();
+			}}
+		>
+			<div class="mb-4 space-y-1.5">
+				<Input
+					bind:value={editNameValue}
+					placeholder="Your name"
+					maxlength={NAME_MAX}
+					disabled={isUpdatingName}
+					oninput={() => {
+						if (nameError) nameError = validateName(editNameValue);
+					}}
+					class={nameError ? 'border-destructive' : ''}
+				/>
+				{#if nameError}
+					<p class="text-xs text-destructive">{nameError}</p>
+				{/if}
+				<p class="text-xs text-muted-foreground">
+					{editNameValue.trim().length}/{NAME_MAX} characters
+				</p>
+			</div>
+			<Dialog.Footer>
+				<Button variant="outline" type="button" onclick={() => (editNameOpen = false)}>
+					Cancel
+				</Button>
+				<Button type="submit" disabled={isUpdatingName || !editNameValue.trim()}>
+					{#if isUpdatingName}
+						<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+					{/if}
+					Save
+				</Button>
+			</Dialog.Footer>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>

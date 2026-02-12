@@ -7,6 +7,7 @@ import type { OpenRouterMessage, GeneratedImage, ContextPayload } from './types/
 import { detectIntent, orchestrateMultiAgent, getAgentDisplayName } from './agents/router';
 import { getUserRole } from './agents/lib/permissions';
 import type { AgentWorkResult } from './agents/router';
+import { rateLimiter } from './lib/rateLimits';
 
 /**
  * Generates an AI response for a given chat thread.
@@ -57,6 +58,8 @@ export const generate = action({
 		if (!user) throw new Error('Unauthorized');
 		const userId = user._id;
 		const userRole = getUserRole(user);
+
+		await rateLimiter.limit(ctx, 'aiGenerate', { key: userId, throws: true });
 
 		// 1. Get previous messages
 		const messages = await ctx.runQuery(internal.messages.internalList, {

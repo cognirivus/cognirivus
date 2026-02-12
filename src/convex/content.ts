@@ -10,6 +10,7 @@ import {
 import { api, internal, components } from './_generated/api';
 import type { Id, DataModel } from './_generated/dataModel';
 import { authComponent } from './auth';
+import { rateLimiter } from './lib/rateLimits';
 import { TableAggregate } from '@convex-dev/aggregate';
 
 // Content reactions aggregates
@@ -1072,6 +1073,7 @@ export const toggleLike = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'contentReaction', { key: user._id, throws: true });
 
 		const existing = await ctx.db
 			.query('content_reactions')
@@ -1116,6 +1118,7 @@ export const toggleDislike = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'contentReaction', { key: user._id, throws: true });
 
 		const existing = await ctx.db
 			.query('content_reactions')
@@ -1165,6 +1168,7 @@ export const addComment = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'contentComment', { key: user._id, throws: true });
 
 		const id = await ctx.db.insert('content_comments', {
 			contentId: args.contentId,
@@ -1221,6 +1225,7 @@ export const toggleCommentLike = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'contentReaction', { key: user._id, throws: true });
 
 		const comment = await ctx.db.get(args.commentId);
 		if (!comment) throw new Error('Comment not found');
@@ -1267,6 +1272,7 @@ export const toggleCommentDislike = mutation({
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) throw new Error('Unauthorized');
+		await rateLimiter.limit(ctx, 'contentReaction', { key: user._id, throws: true });
 
 		const comment = await ctx.db.get(args.commentId);
 		if (!comment) throw new Error('Comment not found');

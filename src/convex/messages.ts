@@ -2,6 +2,7 @@ import { mutation, query, internalMutation, internalQuery } from './_generated/s
 import { v } from 'convex/values';
 import { authComponent } from './auth';
 import { paginationOptsValidator } from 'convex/server';
+import { rateLimiter } from './lib/rateLimits';
 
 /**
  * Get a single message by ID (internal use for agent updates)
@@ -119,6 +120,8 @@ export const send = mutation({
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
+
+		await rateLimiter.limit(ctx, 'sendMessage', { key: user._id, throws: true });
 
 		// Verify user owns this thread
 		const thread = await ctx.db.get(threadId);

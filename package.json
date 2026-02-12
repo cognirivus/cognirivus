@@ -54,6 +54,7 @@
 		"@convex-dev/presence": "^0.3.0",
 		"@convex-dev/r2": "^0.8.1",
 		"@convex-dev/rag": "^0.6.1",
+		"@convex-dev/rate-limiter": "^0.3.2",
 		"@mmailaender/convex-better-auth-svelte": "^0.5.0",
 		"@openrouter/ai-sdk-provider": "^1.5.4",
 		"better-auth": "1.4.9",
