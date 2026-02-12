@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { ChartLine, BookCheck, Highlighter, Brain, ShieldAlert } from '@lucide/svelte';
+	import { ChartLine, BookCheck, Highlighter, Brain, ShieldAlert, TrendingUp } from '@lucide/svelte';
 	import { cn } from '$lib/utils.js';
 
 	let { children } = $props();
@@ -10,6 +10,11 @@
 			name: 'Content Progress',
 			href: '/dashboard/content',
 			icon: BookCheck
+		},
+		{
+			name: 'MCQ Stats',
+			href: '/dashboard/mcqs',
+			icon: TrendingUp
 		},
 		{
 			name: 'Highlights',

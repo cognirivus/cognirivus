@@ -165,7 +165,7 @@
 			params.set('cursor', contentQuery.data.continueCursor);
 			params.set('index', String(currentIndex + 1));
 		} else if (!next && currentIndex > 0) {
-			history.back();
+			window.history.back();
 			return;
 		}
 		goto(`${page.url.pathname}?${params.toString()}`, { noScroll: true });

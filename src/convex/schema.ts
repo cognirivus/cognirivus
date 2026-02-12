@@ -538,7 +538,25 @@ const schema = defineSchema({
 		.searchIndex('search_question', {
 			searchField: 'question',
 			filterFields: ['exam', 'mcq_type']
-		})
+		}),
+	mcq_responses: defineTable({
+		userId: v.string(),
+		mcqId: v.id('mcqs'),
+		selectedOption: v.string(),
+		isCorrect: v.boolean(),
+		createdAt: v.number()
+	})
+		.index('by_user', ['userId'])
+		.index('by_user_mcq', ['userId', 'mcqId'])
+		.index('by_created_at', ['createdAt']),
+	mcq_metadata: defineTable({
+		type: v.literal('aggregate'),
+		exams: v.array(v.string()),
+		years: v.array(v.number()),
+		tags: v.array(v.string()),
+		types: v.array(v.string()),
+		updatedAt: v.number()
+	}).index('by_type', ['type'])
 });
 
 export default schema;
