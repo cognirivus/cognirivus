@@ -43,6 +43,7 @@ import type * as lib_r2 from "../lib/r2.js";
 import type * as lib_rateLimits from "../lib/rateLimits.js";
 import type * as lib_semantic from "../lib/semantic.js";
 import type * as location from "../location.js";
+import type * as mcqs from "../mcqs.js";
 import type * as memories from "../memories.js";
 import type * as messages from "../messages.js";
 import type * as models from "../models.js";
@@ -116,6 +117,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimits": typeof lib_rateLimits;
   "lib/semantic": typeof lib_semantic;
   location: typeof location;
+  mcqs: typeof mcqs;
   memories: typeof memories;
   messages: typeof messages;
   models: typeof models;

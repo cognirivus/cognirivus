@@ -43,6 +43,7 @@
 	const navItems = [
 		{ name: 'Chat', href: '/chat', icon: MessageSquare, authRequired: true },
 		{ name: 'Knowledge Base', href: '/content', icon: Library, authRequired: false, inPrep: true },
+		{ name: 'MCQs', href: '/mcqs', icon: BookOpen, authRequired: false, inPrep: true },
 		{ name: 'Flashcards', href: '/flashcards', icon: Brain, authRequired: true, inPrep: true },
 		{ name: 'Groups', href: '/groups', icon: Users, authRequired: true },
 		{ name: 'Blog', href: '/blog', icon: BookOpen, authRequired: false },

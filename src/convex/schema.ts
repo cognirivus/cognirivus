@@ -510,7 +510,35 @@ const schema = defineSchema({
 		.index('by_message', ['messageId'])
 		.index('by_message_user_emoji', ['messageId', 'userId', 'emoji'])
 		.index('by_group', ['groupId'])
-		.index('by_group_message', ['groupId', 'messageId'])
+		.index('by_group_message', ['groupId', 'messageId']),
+	mcqs: defineTable({
+		question: v.string(),
+		option_a: v.string(),
+		option_b: v.string(),
+		option_c: v.string(),
+		option_d: v.string(),
+		correct_option: v.union(
+			v.literal('A'),
+			v.literal('B'),
+			v.literal('C'),
+			v.literal('D'),
+			v.literal('X')
+		),
+		exam: v.string(),
+		mcq_type: v.string(),
+		year: v.number(),
+		question_no: v.number(),
+		tags: v.array(v.string()),
+		search_text: v.string(),
+		is_vectorised: v.boolean()
+	})
+		.index('by_exam', ['exam'])
+		.index('by_year', ['year'])
+		.index('by_mcq_type', ['mcq_type'])
+		.searchIndex('search_question', {
+			searchField: 'question',
+			filterFields: ['exam', 'mcq_type']
+		})
 });
 
 export default schema;
