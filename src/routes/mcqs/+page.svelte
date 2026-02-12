@@ -83,10 +83,12 @@
 	let showExplanations = $state<Record<string, boolean>>({});
 	let selectedHistoryAttempt = $state<any>(null);
 
-	// Reset history when MCQ changes
+	// Reset state when MCQ changes
 	$effect(() => {
 		if (mcq?._id) {
 			selectedHistoryAttempt = null;
+			selectedOptions = {};
+			showExplanations = {};
 		}
 	});
 
@@ -166,7 +168,7 @@
 	});
 </script>
 
-<div class="flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden bg-muted/20 lg:flex-row">
+<div class="flex flex-1 min-h-0 flex-col overflow-hidden bg-muted/20 lg:flex-row">
 	<!-- Hierarchical Sidebar Filters (Desktop) -->
 	<aside class="hidden border-r bg-background lg:block lg:w-80">
 		<div class="flex h-full flex-col p-6">
@@ -458,7 +460,7 @@
 	{/if}
 
 	<!-- Main Study Area -->
-	<main class="flex min-w-0 flex-1 flex-col bg-background lg:bg-muted/10">
+	<main class="flex min-h-0 min-w-0 flex-1 flex-col bg-background lg:bg-muted/10">
 		<!-- Search & Progress Bar -->
 		<header class="flex items-center gap-3 border-b bg-background px-4 py-2 sm:px-6">
 			<Button
@@ -525,8 +527,9 @@
 		</header>
 
 		<!-- Question View -->
-		<div class="flex flex-1 items-start justify-center overflow-y-auto p-4 pb-24 sm:p-8 lg:p-12">
-			{#if mcqsQuery.isLoading || !mounted}
+		<div class="flex-1 overflow-y-auto">
+			<div class="flex min-h-full items-start justify-center p-4 pb-24 sm:p-8 lg:p-12">
+				{#if mcqsQuery.isLoading || !mounted}
 				<div class="flex flex-col items-center gap-4 py-20">
 					<Loader size="lg" />
 					<p class="animate-pulse text-sm text-muted-foreground">Loading question...</p>
@@ -571,7 +574,7 @@
 
 							<!-- Attempt History Bubbles -->
 							<div class="flex items-center gap-1.5">
-								{#each [...mcqHistory].reverse() as attempt}
+								{#each mcqHistory as attempt}
 									<Tooltip.Provider delayDuration={0}>
 										<Tooltip.Root>
 											<Tooltip.Trigger>
@@ -581,7 +584,9 @@
 														: 'bg-rose-500'} {selectedHistoryAttempt?._id === attempt._id
 														? 'ring-2 ring-primary ring-offset-2'
 														: ''}"
-													onclick={() => (selectedHistoryAttempt = attempt)}
+													onclick={() =>
+														(selectedHistoryAttempt =
+															selectedHistoryAttempt?._id === attempt._id ? null : attempt)}
 													aria-label="View past attempt"
 												></button>
 											</Tooltip.Trigger>
@@ -667,7 +672,10 @@
 									<span
 										>Viewing Attempt from {new Date(
 											selectedHistoryAttempt.createdAt
-										).toLocaleDateString()}</span
+										).toLocaleString(undefined, {
+											dateStyle: 'short',
+											timeStyle: 'short'
+										})}</span
 									>
 									<Button
 										variant="ghost"
@@ -763,6 +771,7 @@
 					{/if}
 				</div>
 			{/if}
+			</div>
 		</div>
 
 		<!-- Bottom Navigation Bar -->
@@ -820,7 +829,4 @@
 </div>
 
 <style>
-	:global(body) {
-		overflow: hidden;
-	}
 </style>

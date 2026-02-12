@@ -19,12 +19,18 @@
 	const showNavbar = $derived(
 		!page.url.pathname.startsWith('/chat') && !page.url.pathname.startsWith('/image')
 	);
+
+	const isAppPage = $derived(
+		page.url.pathname.startsWith('/mcqs') ||
+			page.url.pathname.startsWith('/chat') ||
+			page.url.pathname.startsWith('/image')
+	);
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 <ModeWatcher />
 
-<div class="flex h-screen flex-col overflow-auto">
+<div class="flex h-[100dvh] flex-col {isAppPage ? 'overflow-hidden' : 'overflow-auto'}">
 	{#if showNavbar}
 		<Navbar />
 	{:else}
