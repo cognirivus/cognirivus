@@ -234,6 +234,90 @@ export const getSourceItemCount = query({
 	}
 });
 
+const truncate = (str: string, max: number) =>
+	str.length > max ? str.slice(0, max) + '...' : str;
+
+export const listSourceItemsForTable = query({
+	args: {
+		sourceType: v.string(),
+		limit: v.optional(v.number()),
+		cursor: v.optional(v.string())
+	},
+	returns: v.array(
+		v.object({
+			_id: v.string(),
+			title: v.string(),
+			snippet: v.string(),
+			date: v.optional(v.string()),
+			topic: v.optional(v.string())
+		})
+	),
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		const limit = args.limit ?? 100;
+		const offset = args.cursor ? parseInt(args.cursor, 10) : 0;
+		const take = offset + limit;
+
+		switch (args.sourceType) {
+			case 'news': {
+				const items = await ctx.db
+					.query('news')
+					.withIndex('by_date')
+					.order('desc')
+					.take(take);
+				return items.slice(offset).map((item) => ({
+					_id: item._id as string,
+					title: truncate(item.snippet, 80),
+					snippet: truncate(item.snippet, 150),
+					date: item.date
+				}));
+			}
+			case 'syllabus': {
+				const items = await ctx.db
+					.query('syllabus')
+					.withIndex('by_created_at')
+					.order('desc')
+					.take(take);
+				return items.slice(offset).map((item) => ({
+					_id: item._id as string,
+					title: item.title,
+					snippet: truncate(item.snippet, 150),
+					topic: item.topic
+				}));
+			}
+			case 'blog': {
+				const items = await ctx.db
+					.query('blogs')
+					.withIndex('by_created_at')
+					.order('desc')
+					.take(take);
+				return items.slice(offset).map((item) => ({
+					_id: item._id as string,
+					title: item.title,
+					snippet: truncate(item.snippet, 150)
+				}));
+			}
+			case 'content': {
+				const items = await ctx.db
+					.query('content')
+					.withIndex('by_created_at')
+					.order('desc')
+					.take(take);
+				return items.slice(offset).map((item) => ({
+					_id: item._id as string,
+					title: item.title,
+					snippet: truncate(item.body, 150),
+					topic: item.topic,
+					date: item.date
+				}));
+			}
+			default:
+				return [];
+		}
+	}
+});
+
 export const getSourceItemMetadata = internalQuery({
 	args: {
 		sourceType: v.string(),

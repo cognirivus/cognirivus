@@ -9,6 +9,8 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
+	import { Checkbox } from '$lib/components/ui/checkbox';
+	import * as Table from '$lib/components/ui/table';
 	import {
 		Play,
 		RefreshCw,
@@ -20,7 +22,11 @@
 		Database,
 		Sparkles,
 		ListChecks,
-		ChevronDown
+		ChevronDown,
+		ChevronUp,
+		Search,
+		X,
+		TableIcon
 	} from '@lucide/svelte';
 
 	const client = useConvexClient();
@@ -37,6 +43,46 @@
 	let batchSize = $state(10);
 	let isSubmitting = $state(false);
 	let error = $state('');
+
+	// Source item selection state
+	let showSourceTable = $state(false);
+	let selectedSourceIds = $state<Set<string>>(new Set());
+	let searchFilter = $state('');
+
+	// Source item type
+	type SourceTableItem = {
+		_id: string;
+		title: string;
+		snippet: string;
+		date?: string;
+		topic?: string;
+	};
+
+	// Source items query (reactive to sourceType)
+	const sourceItemsQuery = useQuery(
+		api.extraction.listSourceItemsForTable,
+		() => (showSourceTable ? { sourceType, limit: 100 } : 'skip')
+	);
+
+	// Filtered source items based on search
+	let filteredSourceItems = $derived(() => {
+		const items = (sourceItemsQuery.data ?? []) as SourceTableItem[];
+		if (!searchFilter.trim()) return items;
+		const q = searchFilter.toLowerCase();
+		return items.filter(
+			(item) =>
+				item.title.toLowerCase().includes(q) ||
+				item.snippet.toLowerCase().includes(q) ||
+				(item.topic && item.topic.toLowerCase().includes(q)) ||
+				(item.date && item.date.includes(q))
+		);
+	});
+
+	// Whether all visible items are selected
+	let allVisibleSelected = $derived(() => {
+		const items = filteredSourceItems();
+		return items.length > 0 && items.every((item) => selectedSourceIds.has(item._id));
+	});
 
 	// Source type options
 	const sourceTypes = [
@@ -96,12 +142,49 @@
 		}
 	}
 
+	// Toggle source item selection
+	function toggleSourceItem(id: string) {
+		const next = new Set(selectedSourceIds);
+		if (next.has(id)) {
+			next.delete(id);
+		} else {
+			next.add(id);
+		}
+		selectedSourceIds = next;
+	}
+
+	// Toggle all visible items
+	function toggleAllVisible() {
+		const items = filteredSourceItems();
+		if (allVisibleSelected()) {
+			const next = new Set(selectedSourceIds);
+			for (const item of items) {
+				next.delete(item._id);
+			}
+			selectedSourceIds = next;
+		} else {
+			const next = new Set(selectedSourceIds);
+			for (const item of items) {
+				next.add(item._id);
+			}
+			selectedSourceIds = next;
+		}
+	}
+
+	// Clear all selections
+	function clearSelection() {
+		selectedSourceIds = new Set();
+	}
+
 	// Handle source type change
 	function handleSourceTypeChange(value: string | undefined) {
 		if (!value) return;
 		sourceType = value;
 		// Reset to default field
 		selectedFields = ['body'];
+		// Clear source item selection when source type changes
+		selectedSourceIds = new Set();
+		searchFilter = '';
 	}
 
 	// Start extraction
@@ -119,13 +202,17 @@
 		error = '';
 		isSubmitting = true;
 
+		const sourceIds =
+			selectedSourceIds.size > 0 ? Array.from(selectedSourceIds) : undefined;
+
 		try {
 			for (const extractionType of selectedExtractionTypes) {
 				const jobId = await client.mutation(api.extraction.createJob, {
 					sourceType,
 					extractionType,
 					selectedFields,
-					batchSize
+					sourceIds,
+					batchSize: sourceIds ? sourceIds.length : batchSize
 				});
 
 				// Start the job
@@ -136,6 +223,7 @@
 
 			// Reset form
 			selectedExtractionTypes = [];
+			selectedSourceIds = new Set();
 		} catch (e: any) {
 			error = e.message || 'Failed to create extraction job';
 		} finally {
@@ -290,6 +378,152 @@
 					{/if}
 				</div>
 
+				<!-- Source Item Selector -->
+				<div class="space-y-3">
+					<button
+						class="flex w-full items-center justify-between rounded-lg border px-4 py-2.5 text-left transition-colors hover:bg-muted/50 {selectedSourceIds.size > 0 ? 'border-primary/30 bg-primary/5' : 'border-border'}"
+						onclick={() => (showSourceTable = !showSourceTable)}
+					>
+						<div class="flex items-center gap-2">
+							<TableIcon class="h-4 w-4 text-muted-foreground" />
+							<span class="text-sm font-medium">Select Specific Items</span>
+							{#if selectedSourceIds.size > 0}
+								<Badge variant="default" class="h-5 px-1.5 text-[10px] font-bold">
+									{selectedSourceIds.size} selected
+								</Badge>
+							{:else}
+								<span class="text-xs text-muted-foreground">(optional — defaults to batch)</span>
+							{/if}
+						</div>
+						{#if showSourceTable}
+							<ChevronUp class="h-4 w-4 text-muted-foreground" />
+						{:else}
+							<ChevronDown class="h-4 w-4 text-muted-foreground" />
+						{/if}
+					</button>
+
+					{#if showSourceTable}
+						<div class="space-y-3 rounded-lg border bg-background p-3">
+							<!-- Search + Actions bar -->
+							<div class="flex items-center gap-2">
+								<div class="relative flex-1">
+									<Search class="pointer-events-none absolute top-2.5 left-2.5 h-4 w-4 text-muted-foreground" />
+									<Input
+										type="text"
+										placeholder="Search items..."
+										bind:value={searchFilter}
+										class="h-9 pl-9 text-sm"
+									/>
+									{#if searchFilter}
+										<button
+											class="absolute top-2.5 right-2.5 text-muted-foreground hover:text-foreground"
+											onclick={() => (searchFilter = '')}
+										>
+											<X class="h-4 w-4" />
+										</button>
+									{/if}
+								</div>
+								{#if selectedSourceIds.size > 0}
+									<Button variant="ghost" size="sm" class="h-9 text-xs" onclick={clearSelection}>
+										Clear ({selectedSourceIds.size})
+									</Button>
+								{/if}
+							</div>
+
+							<!-- Table -->
+							{#if sourceItemsQuery.data}
+								<div class="max-h-[320px] overflow-auto rounded-md border">
+									<Table.Root>
+										<Table.Header>
+											<Table.Row class="bg-muted/50 hover:bg-muted/50">
+												<Table.Head class="w-10 px-3">
+													<Checkbox
+														checked={allVisibleSelected()}
+														onCheckedChange={toggleAllVisible}
+													/>
+												</Table.Head>
+												<Table.Head class="text-xs font-semibold">Title</Table.Head>
+												{#if sourceType === 'news' || sourceType === 'content'}
+													<Table.Head class="w-24 text-xs font-semibold">Date</Table.Head>
+												{/if}
+												{#if sourceType === 'syllabus' || sourceType === 'content'}
+													<Table.Head class="w-32 text-xs font-semibold">Topic</Table.Head>
+												{/if}
+											</Table.Row>
+										</Table.Header>
+										<Table.Body>
+											{#each filteredSourceItems() as item (item._id)}
+												<Table.Row
+													class="cursor-pointer transition-colors {selectedSourceIds.has(item._id)
+														? 'bg-primary/5'
+														: ''}"
+													onclick={() => toggleSourceItem(item._id)}
+												>
+													<Table.Cell class="px-3">
+														<Checkbox
+															checked={selectedSourceIds.has(item._id)}
+															onCheckedChange={() => toggleSourceItem(item._id)}
+														/>
+													</Table.Cell>
+													<Table.Cell>
+														<div class="max-w-[300px]">
+															<div class="truncate text-sm font-medium">{item.title}</div>
+															{#if item.snippet !== item.title}
+																<div class="mt-0.5 truncate text-xs text-muted-foreground">
+																	{item.snippet}
+																</div>
+															{/if}
+														</div>
+													</Table.Cell>
+													{#if sourceType === 'news' || sourceType === 'content'}
+														<Table.Cell class="text-xs tabular-nums text-muted-foreground">
+															{item.date ?? '—'}
+														</Table.Cell>
+													{/if}
+													{#if sourceType === 'syllabus' || sourceType === 'content'}
+														<Table.Cell>
+															{#if item.topic}
+																<Badge variant="secondary" class="text-[10px]">{item.topic}</Badge>
+															{:else}
+																<span class="text-xs text-muted-foreground">—</span>
+															{/if}
+														</Table.Cell>
+													{/if}
+												</Table.Row>
+											{:else}
+												<Table.Row>
+													<Table.Cell
+														colspan={sourceType === 'content' ? 4 : sourceType === 'news' || sourceType === 'syllabus' ? 3 : 2}
+														class="py-8 text-center text-sm text-muted-foreground"
+													>
+														{searchFilter ? 'No items match your search' : 'No items found'}
+													</Table.Cell>
+												</Table.Row>
+											{/each}
+										</Table.Body>
+									</Table.Root>
+								</div>
+								<div class="flex items-center justify-between text-xs text-muted-foreground">
+									<span>
+										Showing {filteredSourceItems().length} of {sourceItemsQuery.data.length} items
+									</span>
+									{#if selectedSourceIds.size > 0}
+										<span class="font-medium text-primary">
+											{selectedSourceIds.size} item{selectedSourceIds.size !== 1 ? 's' : ''} will be extracted
+										</span>
+									{/if}
+								</div>
+							{:else}
+								<div class="space-y-2 p-2">
+									{#each Array(5) as _}
+										<Skeleton class="h-10 w-full rounded" />
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/if}
+				</div>
+
 				<!-- Fields to Extract From -->
 				<div class="space-y-2">
 					<p class="text-sm font-medium">Fields to Extract From</p>
@@ -348,21 +582,37 @@
 
 				<Separator />
 
-				<!-- Batch Size -->
-				<div class="space-y-2">
-					<label for="batchSize" class="text-sm font-medium">Batch Size</label>
-					<div class="flex items-center gap-4">
-						<Input
-							id="batchSize"
-							type="number"
-							bind:value={batchSize}
-							min={1}
-							max={100}
-							class="h-9 w-32"
-						/>
-						<span class="text-xs text-muted-foreground">Items per batch (1-100)</span>
+				<!-- Batch Size (only shown when no specific items selected) -->
+				{#if selectedSourceIds.size > 0}
+					<div
+						class="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3"
+					>
+						<CheckCircle2 class="h-4 w-4 text-primary" />
+						<div>
+							<p class="text-sm font-medium">
+								{selectedSourceIds.size} specific item{selectedSourceIds.size !== 1 ? 's' : ''} selected
+							</p>
+							<p class="text-xs text-muted-foreground">
+								Extraction will run on selected items only
+							</p>
+						</div>
 					</div>
-				</div>
+				{:else}
+					<div class="space-y-2">
+						<label for="batchSize" class="text-sm font-medium">Batch Size</label>
+						<div class="flex items-center gap-4">
+							<Input
+								id="batchSize"
+								type="number"
+								bind:value={batchSize}
+								min={1}
+								max={100}
+								class="h-9 w-32"
+							/>
+							<span class="text-xs text-muted-foreground">Items per batch (1-100)</span>
+						</div>
+					</div>
+				{/if}
 
 				{#if error}
 					<div
@@ -384,7 +634,11 @@
 						Starting...
 					{:else}
 						<Play class="h-4 w-4" />
-						Start Extraction
+						{#if selectedSourceIds.size > 0}
+							Extract {selectedSourceIds.size} Item{selectedSourceIds.size !== 1 ? 's' : ''}
+						{:else}
+							Start Extraction
+						{/if}
 					{/if}
 				</Button>
 			</div>
