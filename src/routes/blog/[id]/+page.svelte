@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { page } from '$app/state';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '../../../convex/_generated/api';
@@ -67,6 +68,47 @@
 
 	const blog = $derived(blogQuery.data);
 	const comments = $derived(commentsQuery.data ?? []);
+	let blogBody = $state('');
+	let lastFetchedBodyUrl = '';
+	let blogBodyFetchToken = 0;
+
+	$effect(() => {
+		const snippet = blog?.body ?? '';
+		const bodyUrl = blog?.bodyUrl;
+
+		if (!bodyUrl || !browser) {
+			blogBody = snippet;
+			lastFetchedBodyUrl = '';
+			return;
+		}
+
+		if (bodyUrl === lastFetchedBodyUrl) {
+			if (!blogBody) {
+				blogBody = snippet;
+			}
+			return;
+		}
+
+		blogBody = snippet;
+		lastFetchedBodyUrl = bodyUrl;
+		const fetchToken = ++blogBodyFetchToken;
+
+		void (async () => {
+			try {
+				const response = await fetch(bodyUrl);
+				if (!response.ok) {
+					throw new Error(`Failed to fetch blog body (${response.status})`);
+				}
+
+				const fullBody = await response.text();
+				if (fetchToken === blogBodyFetchToken && fullBody.trim().length > 0) {
+					blogBody = fullBody;
+				}
+			} catch (error) {
+				console.error('Failed to fetch full blog body:', error);
+			}
+		})();
+	});
 
 	const isAuthenticated = $derived(!!$session.data?.user);
 	const currentUserId = $derived($session.data?.user?.id);
@@ -208,109 +250,111 @@
 	}
 </script>
 
-{#if blogQuery.isLoading}
-	<article class="animate-pulse">
-		<header class="mb-10">
-			<Skeleton class="h-5 w-28 rounded-full" />
-			<Skeleton class="mt-5 h-10 w-4/5" />
-			<Skeleton class="mt-3 h-10 w-2/3" />
-			<div class="mt-8 flex items-center gap-4 border-b border-border/50 pb-6">
-				<Skeleton class="h-9 w-24 rounded-lg" />
-				<Skeleton class="h-9 w-24 rounded-lg" />
+<div id="blog-detail-toolbar-anchor">
+	{#if blogQuery.isLoading}
+		<article class="animate-pulse">
+			<header class="mb-10">
+				<Skeleton class="h-5 w-28 rounded-full" />
+				<Skeleton class="mt-5 h-10 w-4/5" />
+				<Skeleton class="mt-3 h-10 w-2/3" />
+				<div class="mt-8 flex items-center gap-4 border-b border-border/50 pb-6">
+					<Skeleton class="h-9 w-24 rounded-lg" />
+					<Skeleton class="h-9 w-24 rounded-lg" />
+				</div>
+			</header>
+			<div class="space-y-4">
+				<Skeleton class="h-4 w-full" />
+				<Skeleton class="h-4 w-full" />
+				<Skeleton class="h-4 w-3/4" />
+				<Skeleton class="mt-6 h-4 w-full" />
+				<Skeleton class="h-4 w-5/6" />
 			</div>
-		</header>
-		<div class="space-y-4">
-			<Skeleton class="h-4 w-full" />
-			<Skeleton class="h-4 w-full" />
-			<Skeleton class="h-4 w-3/4" />
-			<Skeleton class="mt-6 h-4 w-full" />
-			<Skeleton class="h-4 w-5/6" />
+		</article>
+	{:else if blogQuery.error}
+		<div class="rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center">
+			<p class="text-sm text-destructive">Failed to load the blog post. Please try again.</p>
 		</div>
-	</article>
-{:else if blogQuery.error}
-	<div class="rounded-xl border border-destructive/20 bg-destructive/5 p-6 text-center">
-		<p class="text-sm text-destructive">Failed to load the blog post. Please try again.</p>
-	</div>
-{:else if blog}
-	<article>
-		<!-- Header -->
-		<header class="mb-10">
-			<Badge variant="secondary" class="gap-1.5 px-2.5 py-1 text-xs">
-				<Calendar class="h-3 w-3" />
-				{formatDate(blog.createdAt)}
-			</Badge>
-			<h1 class="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
-				{blog.title}
-			</h1>
+	{:else if blog}
+		<article>
+			<!-- Header -->
+			<header class="mb-10">
+				<Badge variant="secondary" class="gap-1.5 px-2.5 py-1 text-xs">
+					<Calendar class="h-3 w-3" />
+					{formatDate(blog.createdAt)}
+				</Badge>
+				<h1 class="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
+					{blog.title}
+				</h1>
 
-			<!-- Reactions Bar -->
-			<div
-				class="mt-8 flex flex-col gap-4 border-b border-border/50 pb-6 sm:flex-row sm:items-center sm:justify-between"
+				<!-- Reactions Bar -->
+				<div
+					class="mt-8 flex flex-col gap-4 border-b border-border/50 pb-6 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<ReactionsBar
+						likes={blog.likes}
+						dislikes={blog.dislikes}
+						commentCount={blog.commentCount}
+						userReaction={blog.userReaction}
+						{isAuthenticated}
+						onLike={handleLike}
+						onDislike={handleDislike}
+						onScrollToComments={scrollToComments}
+					/>
+
+					{#if isAuthenticated}
+						<Button
+							variant="outline"
+							size="sm"
+							class="gap-2 text-xs font-semibold"
+							onclick={handleShareToGroup}
+						>
+							<Share2 class="h-3.5 w-3.5" />
+							Share to Group
+						</Button>
+					{/if}
+				</div>
+			</header>
+
+			<!-- Content -->
+			<HighlightWrapper
+				{highlights}
+				{currentUserId}
+				{isAuthenticated}
+				onAddHighlight={handleAddHighlight}
+				onRemoveHighlight={handleRemoveHighlight}
+				onAddComment={(id) => (activeCommentId = id)}
 			>
-				<ReactionsBar
-					likes={blog.likes}
-					dislikes={blog.dislikes}
-					commentCount={blog.commentCount}
-					userReaction={blog.userReaction}
-					{isAuthenticated}
-					onLike={handleLike}
-					onDislike={handleDislike}
-					onScrollToComments={scrollToComments}
-				/>
+				<div
+					class="prose prose-neutral dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-p:leading-relaxed max-w-none"
+				>
+					<Markdown content={blogBody} />
+				</div>
+			</HighlightWrapper>
 
-				{#if isAuthenticated}
-					<Button
-						variant="outline"
-						size="sm"
-						class="gap-2 text-xs font-semibold"
-						onclick={handleShareToGroup}
-					>
-						<Share2 class="h-3.5 w-3.5" />
-						Share to Group
-					</Button>
-				{/if}
-			</div>
-		</header>
+			<!-- Comments Section -->
+			<CommentsSection
+				{comments}
+				isLoading={commentsQuery.isLoading}
+				{isAuthenticated}
+				{currentUserId}
+				{currentUserInitial}
+				blogId={id}
+				onAddComment={handleAddComment}
+				onDeleteComment={handleDeleteComment}
+				onCommentLike={handleCommentLike}
+				onCommentDislike={handleCommentDislike}
+			/>
+		</article>
+		<div class="h-24"></div>
+	{:else}
+		<div class="flex h-48 flex-col items-center justify-center text-center">
+			<p class="text-muted-foreground">Blog post not found.</p>
+			<Button href="/blog" variant="outline" class="mt-4">Back to Blog</Button>
+		</div>
+	{/if}
+</div>
 
-		<!-- Content -->
-		<HighlightWrapper
-			{highlights}
-			{currentUserId}
-			{isAuthenticated}
-			onAddHighlight={handleAddHighlight}
-			onRemoveHighlight={handleRemoveHighlight}
-			onAddComment={(id) => (activeCommentId = id)}
-		>
-			<div
-				class="prose prose-neutral dark:prose-invert prose-headings:font-semibold prose-headings:tracking-tight prose-p:leading-relaxed max-w-none"
-			>
-				<Markdown content={blog.body} />
-			</div>
-		</HighlightWrapper>
-
-		<!-- Comments Section -->
-		<CommentsSection
-			{comments}
-			isLoading={commentsQuery.isLoading}
-			{isAuthenticated}
-			{currentUserId}
-			{currentUserInitial}
-			blogId={id}
-			onAddComment={handleAddComment}
-			onDeleteComment={handleDeleteComment}
-			onCommentLike={handleCommentLike}
-			onCommentDislike={handleCommentDislike}
-		/>
-	</article>
-	<div class="h-24"></div>
-{:else}
-	<div class="flex h-48 flex-col items-center justify-center text-center">
-		<p class="text-muted-foreground">Blog post not found.</p>
-		<Button href="/blog" variant="outline" class="mt-4">Back to Blog</Button>
-	</div>
-{/if}
-
-<FloatingToolbar {authors} {isAuthenticated} />
+<FloatingToolbar {authors} {isAuthenticated} anchorSelector="#blog-detail-toolbar-anchor" />
 
 {#if activeCommentId}
 	<InlineCommentPane highlightId={activeCommentId} onClose={() => (activeCommentId = null)} />
