@@ -5,7 +5,7 @@
 import type { Id } from '../../_generated/dataModel';
 
 // Source types that can be extracted from
-export type SourceType = 'news' | 'syllabus' | 'blog' | 'content';
+export type SourceType = 'news' | 'syllabus' | 'blog' | 'content' | 'mcq';
 
 // Available extraction types
 // Note: Flashcards are generated separately via flashcards.generateFromContent
@@ -28,6 +28,17 @@ export interface SourceItem {
 	date?: string;
 	subjectId?: Id<'subjects'>;
 	topic?: string;
+	question?: string;
+	option_a?: string;
+	option_b?: string;
+	option_c?: string;
+	option_d?: string;
+	correct_option?: 'A' | 'B' | 'C' | 'D' | 'X';
+	exam?: string;
+	mcq_type?: string;
+	year?: number;
+	question_no?: number;
+	tags?: string[];
 }
 
 // Subject reference
@@ -96,6 +107,18 @@ export const SOURCE_FIELDS: Record<SourceType, { key: string; label: string }[]>
 		{ key: 'title', label: 'Title' },
 		{ key: 'body', label: 'Content' },
 		{ key: 'topic', label: 'Topic' }
+	],
+	mcq: [
+		{ key: 'question', label: 'Question' },
+		{ key: 'option_a', label: 'Option A' },
+		{ key: 'option_b', label: 'Option B' },
+		{ key: 'option_c', label: 'Option C' },
+		{ key: 'option_d', label: 'Option D' },
+		{ key: 'correct_option', label: 'Correct Option' },
+		{ key: 'exam', label: 'Exam' },
+		{ key: 'mcq_type', label: 'MCQ Type' },
+		{ key: 'year', label: 'Year' },
+		{ key: 'tags', label: 'Tags' }
 	]
 };
 

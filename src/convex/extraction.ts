@@ -28,6 +28,13 @@ const checkAdmin = async (ctx: any) => {
 	return user;
 };
 
+const toEntitySlug = (value: string) =>
+	value
+		.toLowerCase()
+		.replace(/[^\w\s-]/g, '')
+		.replace(/[\s_-]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+
 export const ENTITY_CATEGORIES = [
 	'Place-Landform',
 	'Protected Site',
@@ -214,7 +221,7 @@ export const getSourceItemCount = query({
 	handler: async (ctx, args) => {
 		await checkAdmin(ctx);
 
-		const getCount = async (table: 'news' | 'syllabus' | 'blogs' | 'content') => {
+		const getCount = async (table: 'news' | 'syllabus' | 'blogs' | 'content' | 'mcqs') => {
 			const items = await ctx.db.query(table).take(501);
 			return items.length > 500 ? 500 : items.length;
 		};
@@ -228,14 +235,15 @@ export const getSourceItemCount = query({
 				return await getCount('blogs');
 			case 'content':
 				return await getCount('content');
+			case 'mcq':
+				return await getCount('mcqs');
 			default:
 				return 0;
 		}
 	}
 });
 
-const truncate = (str: string, max: number) =>
-	str.length > max ? str.slice(0, max) + '...' : str;
+const truncate = (str: string, max: number) => (str.length > max ? str.slice(0, max) + '...' : str);
 
 export const listSourceItemsForTable = query({
 	args: {
@@ -261,11 +269,7 @@ export const listSourceItemsForTable = query({
 
 		switch (args.sourceType) {
 			case 'news': {
-				const items = await ctx.db
-					.query('news')
-					.withIndex('by_date')
-					.order('desc')
-					.take(take);
+				const items = await ctx.db.query('news').withIndex('by_date').order('desc').take(take);
 				return items.slice(offset).map((item) => ({
 					_id: item._id as string,
 					title: truncate(item.snippet, 80),
@@ -312,6 +316,14 @@ export const listSourceItemsForTable = query({
 					date: item.date
 				}));
 			}
+			case 'mcq': {
+				const items = await ctx.db.query('mcqs').withIndex('by_year').order('desc').take(take);
+				return items.slice(offset).map((item) => ({
+					_id: item._id as string,
+					title: truncate(item.question, 80),
+					snippet: truncate(`${item.exam} ${item.year} (${item.mcq_type}) - ${item.question}`, 150)
+				}));
+			}
 			default:
 				return [];
 		}
@@ -334,6 +346,8 @@ export const getSourceItemMetadata = internalQuery({
 				return await ctx.db.get(id as Id<'blogs'>);
 			case 'content':
 				return await ctx.db.get(id as Id<'content'>);
+			case 'mcq':
+				return await ctx.db.get(id as Id<'mcqs'>);
 			default:
 				return null;
 		}
@@ -362,13 +376,29 @@ export const getSourceItem = internalAction({
 			} catch (e) {
 				console.error(`Failed to fetch full body from R2 for ${id}:`, e);
 			}
+		} else if (sourceType === 'mcq') {
+			const mcq = item as any;
+			body = [
+				mcq.question ? `question: ${mcq.question}` : '',
+				mcq.option_a ? `option_a: ${mcq.option_a}` : '',
+				mcq.option_b ? `option_b: ${mcq.option_b}` : '',
+				mcq.option_c ? `option_c: ${mcq.option_c}` : '',
+				mcq.option_d ? `option_d: ${mcq.option_d}` : '',
+				mcq.correct_option ? `correct_option: ${mcq.correct_option}` : '',
+				mcq.exam ? `exam: ${mcq.exam}` : '',
+				mcq.mcq_type ? `mcq_type: ${mcq.mcq_type}` : '',
+				mcq.year ? `year: ${mcq.year}` : '',
+				mcq.tags?.length ? `tags: ${mcq.tags.join(', ')}` : ''
+			]
+				.filter(Boolean)
+				.join('\n');
 		} else if ((item as any).body) {
 			body = (item as any).body;
 		}
 
 		return {
 			_id: item._id,
-			title: (item as any).title ?? '',
+			title: (item as any).title ?? (item as any).question ?? '',
 			body: body,
 			date:
 				(item as any).date ??
@@ -376,7 +406,18 @@ export const getSourceItem = internalAction({
 					? new Date((item as any).createdAt).toISOString().split('T')[0]
 					: undefined),
 			subjectId: (item as any).subjectId,
-			topic: (item as any).topic
+			topic: (item as any).topic,
+			question: (item as any).question,
+			option_a: (item as any).option_a,
+			option_b: (item as any).option_b,
+			option_c: (item as any).option_c,
+			option_d: (item as any).option_d,
+			correct_option: (item as any).correct_option,
+			exam: (item as any).exam,
+			mcq_type: (item as any).mcq_type,
+			year: (item as any).year,
+			question_no: (item as any).question_no,
+			tags: (item as any).tags
 		};
 	}
 });
@@ -426,14 +467,24 @@ export const fetchSourceItems = internalQuery({
 							.order('desc')
 							.take(limit ?? 10);
 				break;
+			case 'mcq':
+				items = ids
+					? await Promise.all(ids.map((id) => ctx.db.get(id as Id<'mcqs'>)))
+					: await ctx.db
+							.query('mcqs')
+							.withIndex('by_year')
+							.order('desc')
+							.take(limit ?? 10);
+				break;
 		}
 
 		return items
 			.filter((item): item is NonNullable<typeof item> => !!item)
 			.map((item) => ({
+				...item,
 				_id: item._id,
-				title: item.title ?? '',
-				body: item.body ?? item.snippet ?? '',
+				title: item.title ?? item.question ?? '',
+				body: item.body ?? item.snippet ?? item.question ?? '',
 				date:
 					item.date ??
 					(item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : undefined),
@@ -532,24 +583,28 @@ export const saveExtractedContent = internalMutation({
 			for (const entityInput of entities) {
 				const entityName = entityInput.name.trim();
 				const entityType = entityInput.type;
+				const entitySlug = toEntitySlug(entityName);
 
 				let entity = await ctx.db
 					.query('entities')
-					.withIndex('by_name', (q) => q.eq('name', entityName))
-					.filter((q) => q.eq(q.field('type'), entityType))
+					.withIndex('by_slug_and_type', (q) => q.eq('slug', entitySlug).eq('type', entityType))
 					.first();
 
 				if (!entity) {
-					const slug = entityName
-						.toLowerCase()
-						.replace(/[^\w\s-]/g, '')
-						.replace(/[\s_-]+/g, '-')
-						.replace(/^-+|-+$/g, '');
+					const alias = await ctx.db
+						.query('entity_aliases')
+						.withIndex('by_slug_and_type', (q) => q.eq('slug', entitySlug).eq('type', entityType))
+						.first();
+					if (alias) {
+						entity = await ctx.db.get(alias.entityId);
+					}
+				}
 
+				if (!entity) {
 					const entityId = await ctx.db.insert('entities', {
 						name: entityName,
 						type: entityType,
-						slug
+						slug: entitySlug
 					});
 					entity = await ctx.db.get(entityId);
 				}
@@ -582,7 +637,7 @@ export const createJob = mutation({
 			throw new Error(`Invalid extraction type: ${args.extractionType}`);
 		}
 
-		if (!['news', 'syllabus', 'blog', 'content'].includes(args.sourceType)) {
+		if (!['news', 'syllabus', 'blog', 'content', 'mcq'].includes(args.sourceType)) {
 			throw new Error(`Invalid source type: ${args.sourceType}`);
 		}
 
@@ -590,7 +645,7 @@ export const createJob = mutation({
 		if (args.sourceIds && args.sourceIds.length > 0) {
 			totalItems = args.sourceIds.length;
 		} else {
-			const getCount = async (table: 'news' | 'syllabus' | 'blogs' | 'content') => {
+			const getCount = async (table: 'news' | 'syllabus' | 'blogs' | 'content' | 'mcqs') => {
 				const items = await ctx.db.query(table).take(501);
 				return items.length > 500 ? 500 : items.length;
 			};
@@ -607,6 +662,9 @@ export const createJob = mutation({
 					break;
 				case 'content':
 					totalItems = await getCount('content');
+					break;
+				case 'mcq':
+					totalItems = await getCount('mcqs');
 					break;
 			}
 		}
