@@ -200,13 +200,26 @@ const schema = defineSchema({
 	})
 		.index('by_type', ['type'])
 		.index('by_slug', ['slug'])
-		.index('by_name', ['name']),
+		.index('by_name', ['name'])
+		.index('by_slug_and_type', ['slug', 'type']),
+	entity_aliases: defineTable({
+		slug: v.string(),
+		type: v.string(),
+		entityId: v.id('entities'),
+		sourceEntityId: v.id('entities'),
+		sourceName: v.string(),
+		createdAt: v.number()
+	})
+		.index('by_slug_and_type', ['slug', 'type'])
+		.index('by_entity', ['entityId'])
+		.index('by_source_entity', ['sourceEntityId']),
 	content_entities: defineTable({
 		contentId: v.id('content'),
 		entityId: v.id('entities')
 	})
 		.index('by_content', ['contentId'])
-		.index('by_entity', ['entityId']),
+		.index('by_entity', ['entityId'])
+		.index('by_content_and_entity', ['contentId', 'entityId']),
 	article_archive: defineTable({
 		entityId: v.id('entities'),
 		article: v.string(),
@@ -360,7 +373,8 @@ const schema = defineSchema({
 		sharedAt: v.number()
 	})
 		.index('by_group', ['groupId'])
-		.index('by_shared_by', ['sharedById']),
+		.index('by_shared_by', ['sharedById'])
+		.index('by_entity', ['entityId']),
 
 	highlights: defineTable({
 		userId: v.string(),

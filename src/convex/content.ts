@@ -333,6 +333,49 @@ const checkAdmin = async (ctx: any) => {
 	return user;
 };
 
+const toEntitySlug = (value: string) =>
+	value
+		.toLowerCase()
+		.replace(/[^\w\s-]/g, '')
+		.replace(/[\s_-]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+
+const getGroupShareKey = (
+	share: {
+		groupId: Id<'groups'>;
+		contentId?: Id<'content'>;
+		blogId?: Id<'blogs'>;
+		newsId?: Id<'news'>;
+		entityId?: Id<'entities'>;
+	},
+	entityIdOverride?: Id<'entities'>
+) => {
+	return [
+		share.groupId,
+		share.contentId ?? '',
+		share.blogId ?? '',
+		share.newsId ?? '',
+		entityIdOverride ?? share.entityId ?? ''
+	].join('|');
+};
+
+async function resolveEntityBySlugAndType(ctx: any, slug: string, type: string) {
+	const direct = await ctx.db
+		.query('entities')
+		.withIndex('by_slug_and_type', (q: any) => q.eq('slug', slug).eq('type', type))
+		.first();
+
+	if (direct) return direct;
+
+	const alias = await ctx.db
+		.query('entity_aliases')
+		.withIndex('by_slug_and_type', (q: any) => q.eq('slug', slug).eq('type', type))
+		.first();
+
+	if (!alias) return null;
+	return await ctx.db.get(alias.entityId);
+}
+
 export const insert = mutation({
 	args: {
 		title: v.string(),
@@ -777,20 +820,11 @@ async function saveFactLogic(
 	});
 
 	const entityName = title.trim();
+	const slug = toEntitySlug(entityName);
 
-	let entity = await ctx.db
-		.query('entities')
-		.withIndex('by_name', (q: any) => q.eq('name', entityName))
-		.filter((q: any) => q.eq(q.field('type'), entityType))
-		.first();
+	let entity = await resolveEntityBySlugAndType(ctx, slug, entityType);
 
 	if (!entity) {
-		const slug = entityName
-			.toLowerCase()
-			.replace(/[^\w\s-]/g, '')
-			.replace(/[\s_-]+/g, '-')
-			.replace(/^-+|-+$/g, '');
-
 		const entityId = await ctx.db.insert('entities', {
 			name: entityName,
 			type: entityType,
@@ -923,11 +957,20 @@ export const listEntities = query({
 export const getEntityBySlug = query({
 	args: { slug: v.string(), type: v.string() },
 	handler: async (ctx, args) => {
-		return await ctx.db
+		const direct = await ctx.db
 			.query('entities')
-			.withIndex('by_slug', (q) => q.eq('slug', args.slug))
-			.filter((q) => q.eq(q.field('type'), args.type))
-			.unique();
+			.withIndex('by_slug_and_type', (q) => q.eq('slug', args.slug).eq('type', args.type))
+			.first();
+
+		if (direct) return direct;
+
+		const alias = await ctx.db
+			.query('entity_aliases')
+			.withIndex('by_slug_and_type', (q) => q.eq('slug', args.slug).eq('type', args.type))
+			.first();
+
+		if (!alias) return null;
+		return await ctx.db.get(alias.entityId);
 	}
 });
 
@@ -935,6 +978,524 @@ export const getEntity = query({
 	args: { id: v.id('entities') },
 	handler: async (ctx, args) => {
 		return await ctx.db.get(args.id);
+	}
+});
+
+export const createEntity = mutation({
+	args: {
+		name: v.string(),
+		type: v.string(),
+		slug: v.optional(v.string())
+	},
+	returns: v.id('entities'),
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		const name = args.name.trim();
+		const type = args.type.trim();
+		const slug = toEntitySlug(args.slug?.trim() || name);
+
+		if (!name) throw new Error('Entity name is required');
+		if (!type) throw new Error('Entity type is required');
+		if (!slug) throw new Error('Entity slug is required');
+
+		const existing = await ctx.db
+			.query('entities')
+			.withIndex('by_slug_and_type', (q) => q.eq('slug', slug).eq('type', type))
+			.first();
+		if (existing) {
+			throw new Error('An entity with the same slug and type already exists');
+		}
+
+		const alias = await ctx.db
+			.query('entity_aliases')
+			.withIndex('by_slug_and_type', (q) => q.eq('slug', slug).eq('type', type))
+			.first();
+		if (alias) {
+			throw new Error('Slug/type is reserved by a merged entity alias');
+		}
+
+		return await ctx.db.insert('entities', {
+			name,
+			type,
+			slug
+		});
+	}
+});
+
+export const updateEntity = mutation({
+	args: {
+		id: v.id('entities'),
+		name: v.string(),
+		type: v.string(),
+		slug: v.optional(v.string())
+	},
+	returns: v.id('entities'),
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		const entity = await ctx.db.get(args.id);
+		if (!entity) throw new Error('Entity not found');
+
+		const name = args.name.trim();
+		const type = args.type.trim();
+		const slug = toEntitySlug(args.slug?.trim() || name);
+
+		if (!name) throw new Error('Entity name is required');
+		if (!type) throw new Error('Entity type is required');
+		if (!slug) throw new Error('Entity slug is required');
+
+		const conflict = await ctx.db
+			.query('entities')
+			.withIndex('by_slug_and_type', (q) => q.eq('slug', slug).eq('type', type))
+			.first();
+		if (conflict && conflict._id !== args.id) {
+			throw new Error('Another entity already uses this slug and type');
+		}
+
+		const aliasConflict = await ctx.db
+			.query('entity_aliases')
+			.withIndex('by_slug_and_type', (q) => q.eq('slug', slug).eq('type', type))
+			.first();
+		if (aliasConflict && aliasConflict.entityId !== args.id) {
+			throw new Error('Slug/type is reserved by a merged entity alias');
+		}
+
+		const slugOrTypeChanged = entity.slug !== slug || entity.type !== type;
+		await ctx.db.patch(args.id, { name, type, slug });
+
+		if (slugOrTypeChanged) {
+			const existingAlias = await ctx.db
+				.query('entity_aliases')
+				.withIndex('by_slug_and_type', (q) => q.eq('slug', entity.slug).eq('type', entity.type))
+				.first();
+
+			if (existingAlias) {
+				await ctx.db.patch(existingAlias._id, {
+					entityId: args.id,
+					sourceEntityId: args.id,
+					sourceName: entity.name,
+					createdAt: Date.now()
+				});
+			} else {
+				await ctx.db.insert('entity_aliases', {
+					slug: entity.slug,
+					type: entity.type,
+					entityId: args.id,
+					sourceEntityId: args.id,
+					sourceName: entity.name,
+					createdAt: Date.now()
+				});
+			}
+		}
+
+		return args.id;
+	}
+});
+
+export const deleteEntity = mutation({
+	args: { id: v.id('entities') },
+	returns: v.id('entities'),
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		const entity = await ctx.db.get(args.id);
+		if (!entity) throw new Error('Entity not found');
+
+		const links = await ctx.db
+			.query('content_entities')
+			.withIndex('by_entity', (q) => q.eq('entityId', args.id))
+			.collect();
+		for (const link of links) {
+			await ctx.db.delete(link._id);
+		}
+
+		const archiveEntries = await ctx.db
+			.query('article_archive')
+			.withIndex('by_entity', (q) => q.eq('entityId', args.id))
+			.collect();
+		for (const entry of archiveEntries) {
+			await ctx.db.delete(entry._id);
+		}
+
+		const sharedEntries = await ctx.db
+			.query('group_shared_content')
+			.withIndex('by_entity', (q) => q.eq('entityId', args.id))
+			.collect();
+		for (const shared of sharedEntries) {
+			await ctx.db.delete(shared._id);
+		}
+
+		const aliasesByEntity = await ctx.db
+			.query('entity_aliases')
+			.withIndex('by_entity', (q) => q.eq('entityId', args.id))
+			.collect();
+		for (const alias of aliasesByEntity) {
+			await ctx.db.delete(alias._id);
+		}
+
+		const aliasesBySource = await ctx.db
+			.query('entity_aliases')
+			.withIndex('by_source_entity', (q) => q.eq('sourceEntityId', args.id))
+			.collect();
+		for (const alias of aliasesBySource) {
+			await ctx.db.delete(alias._id);
+		}
+
+		await ctx.db.delete(args.id);
+		return args.id;
+	}
+});
+
+export const previewEntityMerge = query({
+	args: {
+		canonicalEntityId: v.id('entities'),
+		sourceEntityIds: v.array(v.id('entities'))
+	},
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		const canonical = await ctx.db.get(args.canonicalEntityId);
+		if (!canonical) throw new Error('Canonical entity not found');
+
+		const sourceIds = Array.from(
+			new Set(args.sourceEntityIds.filter((id) => id !== args.canonicalEntityId))
+		);
+		if (sourceIds.length === 0) {
+			throw new Error('Provide at least one source entity different from the canonical entity');
+		}
+
+		const sourceEntities = await Promise.all(sourceIds.map((id) => ctx.db.get(id)));
+		const missingSourceIds = sourceIds.filter((_, index) => !sourceEntities[index]);
+		if (missingSourceIds.length > 0) {
+			throw new Error(`Source entity not found: ${missingSourceIds.join(', ')}`);
+		}
+
+		const validSourceEntities = sourceEntities.filter(
+			(entity): entity is NonNullable<typeof entity> => entity !== null
+		);
+
+		const typeMismatches = validSourceEntities
+			.filter((source) => source.type !== canonical.type)
+			.map((source) => ({
+				id: source._id,
+				name: source.name,
+				type: source.type
+			}));
+
+		const canonicalContentLinks = await ctx.db
+			.query('content_entities')
+			.withIndex('by_entity', (q) => q.eq('entityId', canonical._id))
+			.collect();
+		const canonicalContentIds = new Set(canonicalContentLinks.map((link) => link.contentId));
+
+		let totalSourceContentLinks = 0;
+		const sourceLinkCountByContentId = new Map<Id<'content'>, number>();
+		for (const source of validSourceEntities) {
+			const links = await ctx.db
+				.query('content_entities')
+				.withIndex('by_entity', (q) => q.eq('entityId', source._id))
+				.collect();
+			totalSourceContentLinks += links.length;
+			for (const link of links) {
+				sourceLinkCountByContentId.set(
+					link.contentId,
+					(sourceLinkCountByContentId.get(link.contentId) ?? 0) + 1
+				);
+			}
+		}
+
+		let contentLinksToDelete = 0;
+		for (const [contentId, count] of sourceLinkCountByContentId.entries()) {
+			if (canonicalContentIds.has(contentId)) {
+				contentLinksToDelete += count;
+			} else if (count > 1) {
+				contentLinksToDelete += count - 1;
+			}
+		}
+		const contentLinksToPatch = totalSourceContentLinks - contentLinksToDelete;
+
+		const canonicalGroupShares = await ctx.db
+			.query('group_shared_content')
+			.withIndex('by_entity', (q) => q.eq('entityId', canonical._id))
+			.collect();
+		const canonicalGroupShareKeys = new Set(
+			canonicalGroupShares.map((share) => getGroupShareKey(share, canonical._id))
+		);
+
+		let totalSourceGroupShares = 0;
+		const sourceGroupShareCounts = new Map<string, number>();
+		for (const source of validSourceEntities) {
+			const shares = await ctx.db
+				.query('group_shared_content')
+				.withIndex('by_entity', (q) => q.eq('entityId', source._id))
+				.collect();
+			totalSourceGroupShares += shares.length;
+			for (const share of shares) {
+				const patchedKey = getGroupShareKey(share, canonical._id);
+				sourceGroupShareCounts.set(patchedKey, (sourceGroupShareCounts.get(patchedKey) ?? 0) + 1);
+			}
+		}
+
+		let groupSharesToDelete = 0;
+		for (const [key, count] of sourceGroupShareCounts.entries()) {
+			if (canonicalGroupShareKeys.has(key)) {
+				groupSharesToDelete += count;
+			} else if (count > 1) {
+				groupSharesToDelete += count - 1;
+			}
+		}
+		const groupSharesToPatch = totalSourceGroupShares - groupSharesToDelete;
+
+		let articleArchivesToPatch = 0;
+		let sourceCurrentArticlesToArchive = 0;
+		for (const source of validSourceEntities) {
+			const sourceArchives = await ctx.db
+				.query('article_archive')
+				.withIndex('by_entity', (q) => q.eq('entityId', source._id))
+				.collect();
+			articleArchivesToPatch += sourceArchives.length;
+			if (source.article) sourceCurrentArticlesToArchive++;
+		}
+
+		return {
+			canonical: {
+				id: canonical._id,
+				name: canonical.name,
+				type: canonical.type,
+				slug: canonical.slug,
+				hasArticle: !!canonical.article
+			},
+			sources: validSourceEntities.map((source) => ({
+				id: source._id,
+				name: source.name,
+				type: source.type,
+				slug: source.slug,
+				hasArticle: !!source.article
+			})),
+			typeMismatches,
+			counts: {
+				totalSources: validSourceEntities.length,
+				contentLinksTotal: totalSourceContentLinks,
+				contentLinksToPatch,
+				contentLinksToDelete,
+				groupSharesTotal: totalSourceGroupShares,
+				groupSharesToPatch,
+				groupSharesToDelete,
+				articleArchivesToPatch,
+				sourceCurrentArticlesToArchive
+			}
+		};
+	}
+});
+
+export const mergeEntities = mutation({
+	args: {
+		canonicalEntityId: v.id('entities'),
+		sourceEntityIds: v.array(v.id('entities')),
+		allowCrossType: v.optional(v.boolean())
+	},
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		await checkAdmin(ctx);
+
+		const canonical = await ctx.db.get(args.canonicalEntityId);
+		if (!canonical) throw new Error('Canonical entity not found');
+
+		const sourceIds = Array.from(
+			new Set(args.sourceEntityIds.filter((id) => id !== args.canonicalEntityId))
+		);
+		if (sourceIds.length === 0) {
+			throw new Error('Provide at least one source entity different from the canonical entity');
+		}
+
+		const sourceEntities = await Promise.all(sourceIds.map((id) => ctx.db.get(id)));
+		const missingSourceIds = sourceIds.filter((_, index) => !sourceEntities[index]);
+		if (missingSourceIds.length > 0) {
+			throw new Error(`Source entity not found: ${missingSourceIds.join(', ')}`);
+		}
+
+		const validSourceEntities = sourceEntities.filter(
+			(entity): entity is NonNullable<typeof entity> => entity !== null
+		);
+		const crossTypeSources = validSourceEntities.filter((source) => source.type !== canonical.type);
+		if (crossTypeSources.length > 0 && !args.allowCrossType) {
+			throw new Error(
+				`Type mismatch for ${crossTypeSources.length} source entity/entities. ` +
+					'Pass allowCrossType=true to force merge.'
+			);
+		}
+
+		const stats = {
+			contentLinksPatched: 0,
+			contentLinksDeleted: 0,
+			groupSharesPatched: 0,
+			groupSharesDeleted: 0,
+			articleArchivesPatched: 0,
+			sourceArticlesArchived: 0,
+			aliasesUpserted: 0,
+			sourceEntitiesDeleted: 0,
+			canonicalArticleFilledFromSource: false
+		};
+
+		const now = Date.now();
+		let bestSourceArticle: { article: string; generatedAt: number } | null = null;
+
+		const canonicalContentLinks = await ctx.db
+			.query('content_entities')
+			.withIndex('by_entity', (q) => q.eq('entityId', canonical._id))
+			.collect();
+		const canonicalContentIds = new Set(canonicalContentLinks.map((link) => link.contentId));
+
+		const sourceLinksByContentId = new Map<Id<'content'>, Array<Id<'content_entities'>>>();
+		for (const source of validSourceEntities) {
+			const links = await ctx.db
+				.query('content_entities')
+				.withIndex('by_entity', (q) => q.eq('entityId', source._id))
+				.collect();
+			for (const link of links) {
+				const list = sourceLinksByContentId.get(link.contentId) ?? [];
+				list.push(link._id);
+				sourceLinksByContentId.set(link.contentId, list);
+			}
+		}
+
+		for (const [contentId, linkIds] of sourceLinksByContentId.entries()) {
+			if (canonicalContentIds.has(contentId)) {
+				for (const linkId of linkIds) {
+					await ctx.db.delete(linkId);
+					stats.contentLinksDeleted++;
+				}
+				continue;
+			}
+
+			const [firstLinkId, ...duplicates] = linkIds;
+			await ctx.db.patch(firstLinkId, { entityId: canonical._id });
+			stats.contentLinksPatched++;
+			canonicalContentIds.add(contentId);
+
+			for (const duplicateLinkId of duplicates) {
+				await ctx.db.delete(duplicateLinkId);
+				stats.contentLinksDeleted++;
+			}
+		}
+
+		const canonicalGroupShares = await ctx.db
+			.query('group_shared_content')
+			.withIndex('by_entity', (q) => q.eq('entityId', canonical._id))
+			.collect();
+		const canonicalGroupShareKeys = new Set(
+			canonicalGroupShares.map((share) => getGroupShareKey(share, canonical._id))
+		);
+
+		const sourceSharesByKey = new Map<string, Array<Id<'group_shared_content'>>>();
+		for (const source of validSourceEntities) {
+			const shares = await ctx.db
+				.query('group_shared_content')
+				.withIndex('by_entity', (q) => q.eq('entityId', source._id))
+				.collect();
+
+			for (const share of shares) {
+				const key = getGroupShareKey(share, canonical._id);
+				const list = sourceSharesByKey.get(key) ?? [];
+				list.push(share._id);
+				sourceSharesByKey.set(key, list);
+			}
+		}
+
+		for (const [key, shareIds] of sourceSharesByKey.entries()) {
+			if (canonicalGroupShareKeys.has(key)) {
+				for (const shareId of shareIds) {
+					await ctx.db.delete(shareId);
+					stats.groupSharesDeleted++;
+				}
+				continue;
+			}
+
+			const [firstShareId, ...duplicates] = shareIds;
+			await ctx.db.patch(firstShareId, { entityId: canonical._id });
+			stats.groupSharesPatched++;
+			canonicalGroupShareKeys.add(key);
+
+			for (const duplicateShareId of duplicates) {
+				await ctx.db.delete(duplicateShareId);
+				stats.groupSharesDeleted++;
+			}
+		}
+
+		for (const source of validSourceEntities) {
+			const archives = await ctx.db
+				.query('article_archive')
+				.withIndex('by_entity', (q) => q.eq('entityId', source._id))
+				.collect();
+			for (const archive of archives) {
+				await ctx.db.patch(archive._id, { entityId: canonical._id });
+				stats.articleArchivesPatched++;
+			}
+
+			if (source.article) {
+				await ctx.db.insert('article_archive', {
+					entityId: canonical._id,
+					article: source.article,
+					createdAt: source.articleGeneratedAt ?? now
+				});
+				stats.sourceArticlesArchived++;
+
+				const sourceArticleTime = source.articleGeneratedAt ?? 0;
+				if (!bestSourceArticle || sourceArticleTime > bestSourceArticle.generatedAt) {
+					bestSourceArticle = {
+						article: source.article,
+						generatedAt: sourceArticleTime
+					};
+				}
+			}
+
+			if (!(source.slug === canonical.slug && source.type === canonical.type)) {
+				const existingAlias = await ctx.db
+					.query('entity_aliases')
+					.withIndex('by_slug_and_type', (q) => q.eq('slug', source.slug).eq('type', source.type))
+					.first();
+
+				if (existingAlias) {
+					await ctx.db.patch(existingAlias._id, {
+						entityId: canonical._id,
+						sourceEntityId: source._id,
+						sourceName: source.name,
+						createdAt: now
+					});
+				} else {
+					await ctx.db.insert('entity_aliases', {
+						slug: source.slug,
+						type: source.type,
+						entityId: canonical._id,
+						sourceEntityId: source._id,
+						sourceName: source.name,
+						createdAt: now
+					});
+				}
+				stats.aliasesUpserted++;
+			}
+		}
+
+		if (!canonical.article && bestSourceArticle) {
+			await ctx.db.patch(canonical._id, {
+				article: bestSourceArticle.article,
+				articleGeneratedAt: bestSourceArticle.generatedAt || now
+			});
+			stats.canonicalArticleFilledFromSource = true;
+		}
+
+		for (const sourceId of sourceIds) {
+			await ctx.db.delete(sourceId);
+			stats.sourceEntitiesDeleted++;
+		}
+
+		return {
+			canonicalEntityId: canonical._id,
+			mergedSourceIds: sourceIds,
+			stats
+		};
 	}
 });
 
@@ -1059,6 +1620,32 @@ export const removeEntitiesBulk = mutation({
 				.collect();
 			for (const entry of archiveEntries) {
 				await ctx.db.delete(entry._id);
+			}
+
+			// Delete group-shared entity references
+			const sharedEntries = await ctx.db
+				.query('group_shared_content')
+				.withIndex('by_entity', (q) => q.eq('entityId', id))
+				.collect();
+			for (const shared of sharedEntries) {
+				await ctx.db.delete(shared._id);
+			}
+
+			// Delete aliases referencing this entity
+			const aliasesByEntity = await ctx.db
+				.query('entity_aliases')
+				.withIndex('by_entity', (q) => q.eq('entityId', id))
+				.collect();
+			for (const alias of aliasesByEntity) {
+				await ctx.db.delete(alias._id);
+			}
+
+			const aliasesBySource = await ctx.db
+				.query('entity_aliases')
+				.withIndex('by_source_entity', (q) => q.eq('sourceEntityId', id))
+				.collect();
+			for (const alias of aliasesBySource) {
+				await ctx.db.delete(alias._id);
 			}
 
 			await ctx.db.delete(id);

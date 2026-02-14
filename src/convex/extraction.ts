@@ -28,6 +28,13 @@ const checkAdmin = async (ctx: any) => {
 	return user;
 };
 
+const toEntitySlug = (value: string) =>
+	value
+		.toLowerCase()
+		.replace(/[^\w\s-]/g, '')
+		.replace(/[\s_-]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+
 export const ENTITY_CATEGORIES = [
 	'Place-Landform',
 	'Protected Site',
@@ -236,8 +243,7 @@ export const getSourceItemCount = query({
 	}
 });
 
-const truncate = (str: string, max: number) =>
-	str.length > max ? str.slice(0, max) + '...' : str;
+const truncate = (str: string, max: number) => (str.length > max ? str.slice(0, max) + '...' : str);
 
 export const listSourceItemsForTable = query({
 	args: {
@@ -263,11 +269,7 @@ export const listSourceItemsForTable = query({
 
 		switch (args.sourceType) {
 			case 'news': {
-				const items = await ctx.db
-					.query('news')
-					.withIndex('by_date')
-					.order('desc')
-					.take(take);
+				const items = await ctx.db.query('news').withIndex('by_date').order('desc').take(take);
 				return items.slice(offset).map((item) => ({
 					_id: item._id as string,
 					title: truncate(item.snippet, 80),
@@ -300,26 +302,22 @@ export const listSourceItemsForTable = query({
 					snippet: truncate(item.snippet, 150)
 				}));
 			}
-				case 'content': {
-					const items = await ctx.db
-						.query('content')
-						.withIndex('by_created_at')
-						.order('desc')
-						.take(take);
-					return items.slice(offset).map((item) => ({
-						_id: item._id as string,
-						title: item.title,
-						snippet: truncate(item.body, 150),
-						topic: item.topic,
-						date: item.date
-					}));
-				}
-			case 'mcq': {
+			case 'content': {
 				const items = await ctx.db
-					.query('mcqs')
-					.withIndex('by_year')
+					.query('content')
+					.withIndex('by_created_at')
 					.order('desc')
 					.take(take);
+				return items.slice(offset).map((item) => ({
+					_id: item._id as string,
+					title: item.title,
+					snippet: truncate(item.body, 150),
+					topic: item.topic,
+					date: item.date
+				}));
+			}
+			case 'mcq': {
+				const items = await ctx.db.query('mcqs').withIndex('by_year').order('desc').take(take);
 				return items.slice(offset).map((item) => ({
 					_id: item._id as string,
 					title: truncate(item.question, 80),
@@ -585,24 +583,28 @@ export const saveExtractedContent = internalMutation({
 			for (const entityInput of entities) {
 				const entityName = entityInput.name.trim();
 				const entityType = entityInput.type;
+				const entitySlug = toEntitySlug(entityName);
 
 				let entity = await ctx.db
 					.query('entities')
-					.withIndex('by_name', (q) => q.eq('name', entityName))
-					.filter((q) => q.eq(q.field('type'), entityType))
+					.withIndex('by_slug_and_type', (q) => q.eq('slug', entitySlug).eq('type', entityType))
 					.first();
 
 				if (!entity) {
-					const slug = entityName
-						.toLowerCase()
-						.replace(/[^\w\s-]/g, '')
-						.replace(/[\s_-]+/g, '-')
-						.replace(/^-+|-+$/g, '');
+					const alias = await ctx.db
+						.query('entity_aliases')
+						.withIndex('by_slug_and_type', (q) => q.eq('slug', entitySlug).eq('type', entityType))
+						.first();
+					if (alias) {
+						entity = await ctx.db.get(alias.entityId);
+					}
+				}
 
+				if (!entity) {
 					const entityId = await ctx.db.insert('entities', {
 						name: entityName,
 						type: entityType,
-						slug
+						slug: entitySlug
 					});
 					entity = await ctx.db.get(entityId);
 				}
