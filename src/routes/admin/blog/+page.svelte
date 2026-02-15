@@ -10,7 +10,21 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
-	import { Plus, Pencil, Trash2, Eye, EyeOff, Save, X, ArrowLeft, BookOpen, CheckSquare, Square, Loader2 } from '@lucide/svelte';
+	import {
+		Plus,
+		Pencil,
+		Trash2,
+		Eye,
+		EyeOff,
+		Save,
+		X,
+		ArrowLeft,
+		BookOpen,
+		CheckSquare,
+		Square,
+		Loader2,
+		Upload
+	} from '@lucide/svelte';
 
 	const blogsQuery = useQuery(api.blogs.list, { onlyPublished: false });
 	const client = useConvexClient();
@@ -19,6 +33,8 @@
 	let editingId = $state<Id<'blogs'> | null>(null);
 	let title = $state('');
 	let body = $state('');
+	let bodyUrl = $state<string | null>(null);
+	let isLoadingFullBody = $state(false);
 	let published = $state(false);
 	let error = $state('');
 	let isSaving = $state(false);
@@ -30,6 +46,7 @@
 		editingId = null;
 		title = '';
 		body = '';
+		bodyUrl = null;
 		published = false;
 		error = '';
 	}
@@ -39,8 +56,24 @@
 		editingId = blog._id;
 		title = blog.title;
 		body = blog.body;
+		bodyUrl = blog.bodyUrl || null;
 		published = blog.published;
 		error = '';
+	}
+
+	async function loadFullBody() {
+		if (!bodyUrl) return;
+		isLoadingFullBody = true;
+		error = '';
+		try {
+			const res = await fetch(bodyUrl);
+			if (!res.ok) throw new Error('Failed to fetch full blog body from storage.');
+			body = await res.text();
+		} catch (e: any) {
+			error = e.message || 'Failed to load full blog body.';
+		} finally {
+			isLoadingFullBody = false;
+		}
 	}
 
 	async function handleSubmit(event: Event) {
@@ -191,14 +224,33 @@
 						/>
 					</div>
 
-					<div class="space-y-2">
-						<div class="flex items-center justify-between">
-							<label for="body" class="text-sm font-medium">Content (Markdown)</label>
-							<Badge variant="outline" class="text-[10px] font-medium tracking-wider uppercase"
-								>Markdown Supported</Badge
-							>
-						</div>
-						<Textarea
+						<div class="space-y-2">
+							<div class="flex items-center justify-between">
+								<label for="body" class="text-sm font-medium">Content (Markdown)</label>
+								<div class="flex items-center gap-2">
+									{#if editingId && bodyUrl && body.length < 600}
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											onclick={loadFullBody}
+											disabled={isLoadingFullBody}
+											class="h-7 gap-1.5 text-xs font-medium"
+										>
+											{#if isLoadingFullBody}
+												<Loader2 class="h-3 w-3 animate-spin" />
+											{:else}
+												<Upload class="h-3 w-3" />
+											{/if}
+											Load Full Body
+										</Button>
+									{/if}
+									<Badge variant="outline" class="text-[10px] font-medium tracking-wider uppercase"
+										>Markdown Supported</Badge
+									>
+								</div>
+							</div>
+							<Textarea
 							id="body"
 							bind:value={body}
 							required

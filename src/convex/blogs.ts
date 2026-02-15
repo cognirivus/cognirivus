@@ -417,10 +417,8 @@ export const update = action({
 		const blog = await ctx.runQuery(api.blogs.get, { id: args.id });
 		if (!blog) throw new Error('Blog not found');
 
-		let r2Key = blog.r2Key;
-		if (!r2Key) {
-			r2Key = `blogs/${args.id}-${Date.now()}.txt`;
-		}
+		const previousR2Key = blog.r2Key;
+		const r2Key = `blogs/${args.id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}.txt`;
 
 		await r2.store(ctx, new Blob([args.body], { type: 'text/plain' }), {
 			key: r2Key,
@@ -434,6 +432,14 @@ export const update = action({
 			published: args.published,
 			r2Key
 		});
+
+		if (previousR2Key && previousR2Key !== r2Key) {
+			try {
+				await r2.deleteObject(ctx, previousR2Key);
+			} catch (e) {
+				console.error(`Failed to delete previous blog body ${previousR2Key}:`, e);
+			}
+		}
 
 		await ctx.scheduler.runAfter(0, internal.blogs.syncRag, {
 			blogId: args.id,
