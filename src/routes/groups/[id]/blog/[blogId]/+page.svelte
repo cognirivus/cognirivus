@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import { page } from '$app/state';
@@ -67,6 +68,47 @@
 	// Fetch Blog Info
 	const blogQuery = useQuery(api.blogs.get, () => (blogId ? { id: blogId } : 'skip'));
 	const blog = $derived(blogQuery.data);
+	let blogBody = $state('');
+	let lastFetchedBodyUrl = '';
+	let blogBodyFetchToken = 0;
+
+	$effect(() => {
+		const snippet = blog?.body ?? '';
+		const bodyUrl = blog?.bodyUrl;
+
+		if (!bodyUrl || !browser) {
+			blogBody = snippet;
+			lastFetchedBodyUrl = '';
+			return;
+		}
+
+		if (bodyUrl === lastFetchedBodyUrl) {
+			if (!blogBody) {
+				blogBody = snippet;
+			}
+			return;
+		}
+
+		blogBody = snippet;
+		lastFetchedBodyUrl = bodyUrl;
+		const fetchToken = ++blogBodyFetchToken;
+
+		void (async () => {
+			try {
+				const response = await fetch(bodyUrl);
+				if (!response.ok) {
+					throw new Error(`Failed to fetch blog body (${response.status})`);
+				}
+
+				const fullBody = await response.text();
+				if (fetchToken === blogBodyFetchToken && fullBody.trim().length > 0) {
+					blogBody = fullBody;
+				}
+			} catch (error) {
+				console.error('Failed to fetch full blog body:', error);
+			}
+		})();
+	});
 
 	// Group-Scoped Interactions
 	const reactionsQuery = useQuery((api as any).blogs.getReactionCounts, () =>
@@ -194,7 +236,7 @@
 
 <div class="flex h-full w-full overflow-hidden">
 	<div class="flex-1 overflow-y-auto">
-		<div class="mx-auto max-w-4xl px-4 pt-8 pb-32 sm:px-6">
+		<div id="group-blog-detail-toolbar-anchor" class="mx-auto max-w-4xl px-4 pt-8 pb-32 sm:px-6">
 			{#if blogQuery.isLoading || groupQuery.isLoading}
 				<div class="flex h-[50vh] items-center justify-center">
 					<Loader variant="circular" size="lg" />
@@ -288,7 +330,7 @@
 							<div
 								class="prose prose-zinc dark:prose-invert prose-headings:font-semibold prose-p:leading-relaxed max-w-none"
 							>
-								<Markdown content={blog.body} />
+								<Markdown content={blogBody} />
 							</div>
 						</div>
 					</HighlightWrapper>
@@ -333,7 +375,12 @@
 	</div>
 </div>
 
-<FloatingToolbar {authors} {groupId} {isAuthenticated} />
+<FloatingToolbar
+	{authors}
+	{groupId}
+	{isAuthenticated}
+	anchorSelector="#group-blog-detail-toolbar-anchor"
+/>
 
 {#if activeCommentId}
 	<InlineCommentPane highlightId={activeCommentId} onClose={() => (activeCommentId = null)} />

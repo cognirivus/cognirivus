@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import type { RouteId } from '$app/types';
 	import {
 		Shield,
 		BookOpen,
@@ -10,16 +12,39 @@
 		Sparkles,
 		Bot,
 		Cpu,
-		ShieldCheck
+		ShieldCheck,
+		Database
 	} from '@lucide/svelte';
 	import { buttonVariants } from '$lib/components/ui/button';
-	import { Separator } from '$lib/components/ui/separator';
 	import { cn } from '$lib/utils.js';
-	import { redirect } from '@sveltejs/kit';
 
 	let { children } = $props();
 
-	const user = $derived(page.data.currentUser as any);
+	type AdminUser = {
+		role?: string | string[];
+	} | null;
+
+	type AdminNavHref =
+		| '/admin'
+		| '/admin/blog'
+		| '/admin/content'
+		| '/admin/news'
+		| '/admin/syllabus'
+		| '/admin/flashcards'
+		| '/admin/extraction'
+		| '/admin/article'
+		| '/admin/entities'
+		| '/admin/agents'
+		| '/admin/models'
+		| '/admin/limits';
+
+	type NavItem = {
+		name: string;
+		href: Extract<Exclude<RouteId, null>, AdminNavHref>;
+		icon: typeof Shield;
+	};
+
+	const user = $derived(page.data.currentUser as AdminUser);
 	const isAdmin = $derived(
 		user?.role && (Array.isArray(user.role) ? user.role.includes('admin') : user.role === 'admin')
 	);
@@ -31,7 +56,7 @@
 		}
 	});
 
-	const navItems = [
+	const navItems: NavItem[] = [
 		{
 			name: 'Users',
 			href: '/admin',
@@ -73,6 +98,11 @@
 			icon: FileText
 		},
 		{
+			name: 'Entities',
+			href: '/admin/entities',
+			icon: Database
+		},
+		{
 			name: 'Agents',
 			href: '/admin/agents',
 			icon: Bot
@@ -105,10 +135,10 @@
 				</div>
 			</div>
 			<nav class="flex w-full items-center gap-0.5 overflow-x-auto pb-1 sm:w-auto sm:pb-0">
-				{#each navItems as item}
+				{#each navItems as item (item.href)}
 					{@const isActive = activePath === item.href}
 					<a
-						href={item.href}
+						href={resolve(item.href)}
 						class={cn(
 							buttonVariants({
 								variant: isActive ? 'secondary' : 'ghost',

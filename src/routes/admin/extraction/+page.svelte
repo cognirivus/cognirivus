@@ -89,6 +89,7 @@
 		{ value: 'news', label: 'News' },
 		{ value: 'syllabus', label: 'Syllabus' },
 		{ value: 'blog', label: 'Blogs' },
+		{ value: 'mcq', label: 'MCQs' },
 		{ value: 'content', label: 'Content (Re-extract)' }
 	];
 
@@ -106,6 +107,18 @@
 		blog: [
 			{ key: 'title', label: 'Title' },
 			{ key: 'body', label: 'Content' }
+		],
+		mcq: [
+			{ key: 'question', label: 'Question' },
+			{ key: 'option_a', label: 'Option A' },
+			{ key: 'option_b', label: 'Option B' },
+			{ key: 'option_c', label: 'Option C' },
+			{ key: 'option_d', label: 'Option D' },
+			{ key: 'correct_option', label: 'Correct Option' },
+			{ key: 'exam', label: 'Exam' },
+			{ key: 'mcq_type', label: 'MCQ Type' },
+			{ key: 'year', label: 'Year' },
+			{ key: 'tags', label: 'Tags' }
 		],
 		content: [
 			{ key: 'title', label: 'Title' },
@@ -180,8 +193,9 @@
 	function handleSourceTypeChange(value: string | undefined) {
 		if (!value) return;
 		sourceType = value;
-		// Reset to default field
-		selectedFields = ['body'];
+		const nextFields = fieldsBySource[value] ?? [];
+		const defaultField = nextFields.find((field) => field.key === 'body')?.key ?? nextFields[0]?.key;
+		selectedFields = defaultField ? [defaultField] : [];
 		// Clear source item selection when source type changes
 		selectedSourceIds = new Set();
 		searchFilter = '';
@@ -459,12 +473,12 @@
 														: ''}"
 													onclick={() => toggleSourceItem(item._id)}
 												>
-													<Table.Cell class="px-3">
-														<Checkbox
-															checked={selectedSourceIds.has(item._id)}
-															onCheckedChange={() => toggleSourceItem(item._id)}
-														/>
-													</Table.Cell>
+														<Table.Cell class="px-3" onclick={(e) => e.stopPropagation()}>
+															<Checkbox
+																checked={selectedSourceIds.has(item._id)}
+																onCheckedChange={() => toggleSourceItem(item._id)}
+															/>
+														</Table.Cell>
 													<Table.Cell>
 														<div class="max-w-[300px]">
 															<div class="truncate text-sm font-medium">{item.title}</div>
