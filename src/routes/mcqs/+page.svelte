@@ -34,11 +34,25 @@
 	// State from URL
 	const selectedMcqId = $derived(page.url.searchParams.get('id') || undefined);
 	const searchQuery = $derived(page.url.searchParams.get('q') || undefined);
-	const selectedType = $derived(page.url.searchParams.get('type') || undefined);
-	const selectedExam = $derived(page.url.searchParams.get('exam') || undefined);
-	const selectedYear = $derived(
-		page.url.searchParams.get('year') ? Number(page.url.searchParams.get('year')) : undefined
-	);
+	const selectedType = $derived.by(() => {
+		const value = page.url.searchParams.get('type');
+		if (!value || value === 'all') return undefined;
+		return value;
+	});
+	const selectedExam = $derived.by(() => {
+		const value = page.url.searchParams.get('exam');
+		if (!value || value === 'all') return undefined;
+		return value;
+	});
+	const selectedYear = $derived.by(() => {
+		const value = page.url.searchParams.get('year');
+		if (!value || value === 'all') return undefined;
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? parsed : undefined;
+	});
+	const selectedTypeValue = $derived(selectedType || 'all');
+	const selectedExamValue = $derived(selectedExam || 'all');
+	const selectedYearValue = $derived(selectedYear !== undefined ? String(selectedYear) : 'all');
 	const currentCursor = $derived(page.url.searchParams.get('cursor') || null);
 	const currentIndex = $derived(Number(page.url.searchParams.get('index') || 0));
 
@@ -160,6 +174,12 @@
 		updateFilters({ q: searchInput || undefined });
 	}
 
+	function parseYearValue(value: string): number | undefined {
+		if (!value || value === 'all') return undefined;
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? parsed : undefined;
+	}
+
 	let isMobileFiltersOpen = $state(false);
 
 	let mounted = $state(false);
@@ -168,7 +188,7 @@
 	});
 </script>
 
-<div class="flex flex-1 min-h-0 flex-col overflow-hidden bg-muted/20 lg:flex-row">
+<div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/20 lg:flex-row">
 	<!-- Hierarchical Sidebar Filters (Desktop) -->
 	<aside class="hidden border-r bg-background lg:block lg:w-80">
 		<div class="flex h-full flex-col p-6">
@@ -192,10 +212,9 @@
 							<select
 								id="desktop-type-select"
 								class="flex h-10 w-full appearance-none items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm capitalize ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-								value={selectedType || ''}
+								value={selectedTypeValue}
 								onchange={(e) => updateFilters({ type: e.currentTarget.value })}
 							>
-								<option value="">Select Type</option>
 								<option value="all">All Types</option>
 								{#if mounted}
 									{#each hierarchyQuery.data?.types || [] as type (type)}
@@ -213,9 +232,7 @@
 					<div class="space-y-2">
 						<label
 							for="desktop-exam-select"
-							class="flex items-center gap-2 text-xs font-bold tracking-wider text-muted-foreground uppercase {!selectedType
-								? 'opacity-40'
-								: ''}"
+							class="flex items-center gap-2 text-xs font-bold tracking-wider text-muted-foreground uppercase"
 						>
 							<GraduationCap class="h-3 w-3" />
 							2. Exam
@@ -224,11 +241,9 @@
 							<select
 								id="desktop-exam-select"
 								class="flex h-10 w-full appearance-none items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm uppercase ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-								value={selectedExam || ''}
+								value={selectedExamValue}
 								onchange={(e) => updateFilters({ exam: e.currentTarget.value })}
-								disabled={!selectedType}
 							>
-								<option value="">Select Exam</option>
 								<option value="all">All Exams</option>
 								{#if mounted}
 									{#each hierarchyQuery.data?.exams || [] as exam (exam)}
@@ -246,9 +261,7 @@
 					<div class="space-y-2">
 						<label
 							for="desktop-year-select"
-							class="flex items-center gap-2 text-xs font-bold tracking-wider text-muted-foreground uppercase {!selectedExam
-								? 'opacity-40'
-								: ''}"
+							class="flex items-center gap-2 text-xs font-bold tracking-wider text-muted-foreground uppercase"
 						>
 							<Calendar class="h-3 w-3" />
 							3. Year
@@ -257,14 +270,12 @@
 							<select
 								id="desktop-year-select"
 								class="flex h-10 w-full appearance-none items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-								value={selectedYear ? String(selectedYear) : ''}
+								value={selectedYearValue}
 								onchange={(e) =>
 									updateFilters({
-										year: e.currentTarget.value ? Number(e.currentTarget.value) : undefined
+										year: parseYearValue(e.currentTarget.value)
 									})}
-								disabled={!selectedExam}
 							>
-								<option value="">Select Year</option>
 								<option value="all">All Years</option>
 								{#if mounted}
 									{#each hierarchyQuery.data?.years || [] as year (year)}
@@ -356,13 +367,12 @@
 							<select
 								id="mobile-type-select"
 								class="w-full rounded-md border p-2 text-sm capitalize"
-								value={selectedType || ''}
+								value={selectedTypeValue}
 								onchange={(e) => {
 									updateFilters({ type: e.currentTarget.value });
 									isMobileFiltersOpen = false;
 								}}
 							>
-								<option value="">Select Type</option>
 								<option value="all">All Types</option>
 								{#each hierarchyQuery.data?.types || [] as type}
 									<option value={type}>{type}</option>
@@ -379,14 +389,12 @@
 							<select
 								id="mobile-exam-select"
 								class="w-full rounded-md border p-2 text-sm uppercase"
-								value={selectedExam || ''}
+								value={selectedExamValue}
 								onchange={(e) => {
 									updateFilters({ exam: e.currentTarget.value });
 									isMobileFiltersOpen = false;
 								}}
-								disabled={!selectedType}
 							>
-								<option value="">Select Exam</option>
 								<option value="all">All Exams</option>
 								{#each hierarchyQuery.data?.exams || [] as exam}
 									<option value={exam}>{exam}</option>
@@ -403,16 +411,14 @@
 							<select
 								id="mobile-year-select"
 								class="w-full rounded-md border p-2 text-sm"
-								value={selectedYear || ''}
+								value={selectedYearValue}
 								onchange={(e) => {
 									updateFilters({
-										year: e.currentTarget.value ? Number(e.currentTarget.value) : undefined
+										year: parseYearValue(e.currentTarget.value)
 									});
 									isMobileFiltersOpen = false;
 								}}
-								disabled={!selectedExam}
 							>
-								<option value="">Select Year</option>
 								<option value="all">All Years</option>
 								{#each hierarchyQuery.data?.years || [] as year}
 									<option value={String(year)}>{year}</option>
@@ -476,16 +482,13 @@
 				<Search class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 				<Input
 					placeholder="Search..."
-					class="h-9 w-full pl-10 pr-8"
+					class="h-9 w-full pr-8 pl-10"
 					bind:value={searchInput}
 					onkeydown={(e) => e.key === 'Enter' && handleSearch()}
 				/>
 				{#if searchQuery}
 					<div class="absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-1">
-						<Badge
-							variant="secondary"
-							class="h-5 gap-1 rounded-sm px-1.5 text-[10px] font-medium"
-						>
+						<Badge variant="secondary" class="h-5 gap-1 rounded-sm px-1.5 text-[10px] font-medium">
 							{searchQuery}
 						</Badge>
 						<Button
@@ -530,247 +533,255 @@
 		<div class="flex-1 overflow-y-auto">
 			<div class="flex min-h-full items-start justify-center p-4 pb-24 sm:p-8 lg:p-12">
 				{#if mcqsQuery.isLoading || !mounted}
-				<div class="flex flex-col items-center gap-4 py-20">
-					<Loader size="lg" />
-					<p class="animate-pulse text-sm text-muted-foreground">Loading question...</p>
-				</div>
-			{:else if !mcq}
-				<div class="max-w-sm py-20 text-center">
-					<div
-						class="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-muted"
-					>
-						<HelpCircle class="h-10 w-10 text-muted-foreground" />
+					<div class="flex flex-col items-center gap-4 py-20">
+						<Loader size="lg" />
+						<p class="animate-pulse text-sm text-muted-foreground">Loading question...</p>
 					</div>
-					<h3 class="mb-2 text-xl font-bold">No matching questions</h3>
-					<p class="mb-6 text-muted-foreground">
-						Try broadening your filters or clearing your search.
-					</p>
-					<Button onclick={() => goto('/mcqs')}>Clear Filters</Button>
-				</div>
-			{:else}
-				{@const isAnswered = !!selectedOptions[mcq._id] || !!selectedHistoryAttempt}
-				{@const activeResponse = selectedHistoryAttempt || {
-					selectedOption: selectedOptions[mcq._id],
-					isCorrect: selectedOptions[mcq._id] === mcq.correct_option
-				}}
-				{@const isCorrect = activeResponse.isCorrect}
+				{:else if !mcq}
+					<div class="max-w-sm py-20 text-center">
+						<div
+							class="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-muted"
+						>
+							<HelpCircle class="h-10 w-10 text-muted-foreground" />
+						</div>
+						<h3 class="mb-2 text-xl font-bold">No matching questions</h3>
+						<p class="mb-6 text-muted-foreground">
+							Try broadening your filters or clearing your search.
+						</p>
+						<Button onclick={() => goto('/mcqs')}>Clear Filters</Button>
+					</div>
+				{:else}
+					{@const isAnswered = !!selectedOptions[mcq._id] || !!selectedHistoryAttempt}
+					{@const activeResponse = selectedHistoryAttempt || {
+						selectedOption: selectedOptions[mcq._id],
+						isCorrect: selectedOptions[mcq._id] === mcq.correct_option
+					}}
+					{@const isCorrect = activeResponse.isCorrect}
 
-				<div class="w-full max-w-4xl space-y-8">
-					<!-- Question Header & Text -->
-					<div class="space-y-6">
-						<div class="flex items-center justify-between border-b pb-4">
-							<div class="flex gap-2">
-								<Badge variant="outline" class="bg-background font-bold uppercase">
-									{mcq.exam}
-									{mcq.year}
-								</Badge>
-								<Badge variant="secondary" class="font-bold">
-									Q. {mcq.question_no}
-								</Badge>
-								<div class="ml-2 text-xs font-bold tracking-widest text-muted-foreground uppercase">
-									{mcq.mcq_type}
+					<div class="w-full max-w-4xl space-y-8">
+						<!-- Question Header & Text -->
+						<div class="space-y-6">
+							<div class="flex items-center justify-between border-b pb-4">
+								<div class="flex gap-2">
+									<Badge variant="outline" class="bg-background font-bold uppercase">
+										{mcq.exam}
+										{mcq.year}
+									</Badge>
+									<Badge variant="secondary" class="font-bold">
+										Q. {mcq.question_no}
+									</Badge>
+									<div
+										class="ml-2 text-xs font-bold tracking-widest text-muted-foreground uppercase"
+									>
+										{mcq.mcq_type}
+									</div>
+								</div>
+
+								<!-- Attempt History Bubbles -->
+								<div class="flex items-center gap-1.5">
+									{#each mcqHistory as attempt}
+										<Tooltip.Provider delayDuration={0}>
+											<Tooltip.Root>
+												<Tooltip.Trigger>
+													<button
+														class="h-3 w-3 rounded-full transition-all hover:scale-125 {attempt.isCorrect
+															? 'bg-emerald-500'
+															: 'bg-rose-500'} {selectedHistoryAttempt?._id === attempt._id
+															? 'ring-2 ring-primary ring-offset-2'
+															: ''}"
+														onclick={() =>
+															(selectedHistoryAttempt =
+																selectedHistoryAttempt?._id === attempt._id ? null : attempt)}
+														aria-label="View past attempt"
+													></button>
+												</Tooltip.Trigger>
+												<Tooltip.Content>
+													<p class="text-[10px] font-bold">
+														{new Date(attempt.createdAt).toLocaleString(undefined, {
+															month: 'short',
+															day: 'numeric',
+															hour: '2-digit',
+															minute: '2-digit'
+														})}
+													</p>
+												</Tooltip.Content>
+											</Tooltip.Root>
+										</Tooltip.Provider>
+									{/each}
 								</div>
 							</div>
 
-							<!-- Attempt History Bubbles -->
-							<div class="flex items-center gap-1.5">
-								{#each mcqHistory as attempt}
-									<Tooltip.Provider delayDuration={0}>
-										<Tooltip.Root>
-											<Tooltip.Trigger>
-												<button
-													class="h-3 w-3 rounded-full transition-all hover:scale-125 {attempt.isCorrect
-														? 'bg-emerald-500'
-														: 'bg-rose-500'} {selectedHistoryAttempt?._id === attempt._id
-														? 'ring-2 ring-primary ring-offset-2'
-														: ''}"
-													onclick={() =>
-														(selectedHistoryAttempt =
-															selectedHistoryAttempt?._id === attempt._id ? null : attempt)}
-													aria-label="View past attempt"
-												></button>
-											</Tooltip.Trigger>
-											<Tooltip.Content>
-												<p class="text-[10px] font-bold">
-													{new Date(attempt.createdAt).toLocaleString(undefined, {
-														month: 'short',
-														day: 'numeric',
-														hour: '2-digit',
-														minute: '2-digit'
-													})}
-												</p>
-											</Tooltip.Content>
-										</Tooltip.Root>
-									</Tooltip.Provider>
-								{/each}
+							<div class="space-y-4">
+								<div class="flex flex-wrap gap-1.5">
+									{#each mcq.tags as tag (tag)}
+										<Badge
+											variant="secondary"
+											class="cursor-pointer text-[10px] font-bold transition-colors hover:bg-primary/20"
+											onclick={() => updateFilters({ q: tag })}
+										>
+											#{tag}
+										</Badge>
+									{/each}
+								</div>
+								<h2 class="text-lg leading-relaxed font-semibold whitespace-pre-wrap sm:text-xl">
+									{mcq.question}
+								</h2>
 							</div>
 						</div>
 
-						<div class="space-y-4">
-							<div class="flex flex-wrap gap-1.5">
-								{#each mcq.tags as tag (tag)}
-									<Badge
-										variant="secondary"
-										class="cursor-pointer text-[10px] font-bold transition-colors hover:bg-primary/20"
-										onclick={() => updateFilters({ q: tag })}
-									>
-										#{tag}
-									</Badge>
-								{/each}
-							</div>
-							<h2 class="text-lg leading-relaxed font-semibold whitespace-pre-wrap sm:text-xl">
-								{mcq.question}
-							</h2>
-						</div>
-					</div>
+						<!-- Options Grid -->
+						<div class="grid gap-4 sm:grid-cols-2">
+							{#each [['A', mcq.option_a], ['B', mcq.option_b], ['C', mcq.option_c], ['D', mcq.option_d]] as [label, text]}
+								{@const isSelected = activeResponse.selectedOption === label}
+								{@const isCorrectOption = label === mcq.correct_option}
 
-					<!-- Options Grid -->
-					<div class="grid gap-4 sm:grid-cols-2">
-						{#each [['A', mcq.option_a], ['B', mcq.option_b], ['C', mcq.option_c], ['D', mcq.option_d]] as [label, text]}
-							{@const isSelected = activeResponse.selectedOption === label}
-							{@const isCorrectOption = label === mcq.correct_option}
-
-							<button
-								class="flex w-full items-start gap-4 rounded-xl border-2 p-5 text-left transition-all duration-200
+								<button
+									class="flex w-full items-start gap-4 rounded-xl border-2 p-5 text-left transition-all duration-200
 								{isAnswered
-									? isCorrectOption
-										? 'border-emerald-500 bg-emerald-500/10'
-										: isSelected
-											? 'border-rose-500 bg-rose-500/10'
-											: 'opacity-40 grayscale-[0.3]'
-									: 'hover:border-primary hover:bg-primary/5 active:scale-[0.99]'}"
-								onclick={() => handleOptionSelect(mcq._id, label)}
-								disabled={isAnswered}
-							>
-								<div
-									class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm font-black
+										? isCorrectOption
+											? 'border-emerald-500 bg-emerald-500/10'
+											: isSelected
+												? 'border-rose-500 bg-rose-500/10'
+												: 'opacity-40 grayscale-[0.3]'
+										: 'hover:border-primary hover:bg-primary/5 active:scale-[0.99]'}"
+									onclick={() => handleOptionSelect(mcq._id, label)}
+									disabled={isAnswered}
+								>
+									<div
+										class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm font-black
 								{isSelected
-										? 'border-primary bg-primary text-primary-foreground'
-										: 'border-border bg-background text-muted-foreground'}
+											? 'border-primary bg-primary text-primary-foreground'
+											: 'border-border bg-background text-muted-foreground'}
 								{isAnswered && isCorrectOption ? 'border-emerald-500 bg-emerald-500 text-white' : ''}
 								{isAnswered && isSelected && !isCorrectOption ? 'border-rose-500 bg-rose-500 text-white' : ''}"
-								>
-									{label}
-								</div>
-								<span class="pt-0.5 text-base font-medium">{text}</span>
-								{#if isAnswered && isCorrectOption}
-									<CheckCircle2 class="ml-auto h-6 w-6 text-emerald-500" />
-								{:else if isAnswered && isSelected && !isCorrectOption}
-									<XCircle class="ml-auto h-6 w-6 text-rose-500" />
-								{/if}
-							</button>
-						{/each}
-					</div>
-
-					<!-- Explanation / Feedback Area -->
-					{#if isAnswered}
-						<div class="space-y-6 pt-6">
-							{#if selectedHistoryAttempt}
-								<div
-									class="flex items-center justify-between rounded-lg bg-primary/10 px-4 py-2 text-xs font-bold tracking-widest text-primary uppercase"
-								>
-									<span
-										>Viewing Attempt from {new Date(
-											selectedHistoryAttempt.createdAt
-										).toLocaleString(undefined, {
-											dateStyle: 'short',
-											timeStyle: 'short'
-										})}</span
 									>
-									<Button
-										variant="ghost"
-										size="sm"
-										class="h-6 px-2 text-[10px]"
-										onclick={() => (selectedHistoryAttempt = null)}
-									>
-										Back to Practice
-									</Button>
-								</div>
-							{/if}
-							<div
-								class="flex flex-col items-center justify-between gap-6 rounded-2xl border bg-muted/30 p-6 sm:flex-row"
-							>
-								<div class="flex items-center gap-4">
-									{#if isCorrect}
-										<div
-											class="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-										>
-											<Trophy class="h-7 w-7" />
-										</div>
-										<div>
-											<p class="text-base font-black tracking-wider text-emerald-600 uppercase">
-												{selectedHistoryAttempt ? 'Past Success' : 'Spot On!'}
-											</p>
-											<p class="text-sm text-muted-foreground">
-												{selectedHistoryAttempt
-													? 'You got this right before.'
-													: `Excellent work on this ${mcq.year} PYQ.`}
-											</p>
-										</div>
-									{:else}
-										<div
-											class="flex h-12 w-12 items-center justify-center rounded-full bg-rose-500 text-white shadow-lg shadow-rose-500/20"
-										>
-											<HelpCircle class="h-7 w-7" />
-										</div>
-										<div>
-											<p class="text-base font-black tracking-wider text-rose-600 uppercase">
-												{selectedHistoryAttempt ? 'Past Attempt' : 'Keep Learning'}
-											</p>
-											<p class="text-sm text-muted-foreground">
-												The correct answer is <span class="font-bold text-foreground"
-													>Option {mcq.correct_option}</span
-												>.
-											</p>
-										</div>
+										{label}
+									</div>
+									<span class="pt-0.5 text-base font-medium">{text}</span>
+									{#if isAnswered && isCorrectOption}
+										<CheckCircle2 class="ml-auto h-6 w-6 text-emerald-500" />
+									{:else if isAnswered && isSelected && !isCorrectOption}
+										<XCircle class="ml-auto h-6 w-6 text-rose-500" />
 									{/if}
-								</div>
-
-								<div class="flex w-full gap-3 sm:w-auto">
-									<Button
-										variant="outline"
-										size="lg"
-										class="flex-1 gap-2 sm:flex-initial"
-										onclick={() => {
-											resetMcq(mcq._id);
-											selectedHistoryAttempt = null;
-										}}
-									>
-										<RefreshCcw class="h-4 w-4" />
-										Retry
-									</Button>
-									<Button
-										size="lg"
-										class="flex-1 gap-2 sm:flex-initial"
-										onclick={() => {
-											selectedHistoryAttempt = null;
-											goToPage(true);
-										}}
-										disabled={!hasNextPage}
-									>
-										Next Question
-										<ChevronRight class="h-4 w-4" />
-									</Button>
-								</div>
-							</div>
-
-							<div class="space-y-4 rounded-2xl border bg-background p-8 shadow-sm">
-								<div class="flex items-center gap-2 text-primary">
-									<BookOpen class="h-6 w-6" />
-									<span class="text-xs font-bold tracking-widest uppercase">Analysis & Context</span
-									>
-								</div>
-								<div class="prose prose-sm dark:prose-invert max-w-none">
-									<p class="text-base leading-relaxed whitespace-pre-wrap text-muted-foreground">
-										{mcq.search_text.split(mcq.question).pop()?.split(mcq.option_d).pop()?.trim() ||
-											'Analyze the question based on Art & Culture and Polity standard references.'}
-									</p>
-								</div>
-							</div>
+								</button>
+							{/each}
 						</div>
-					{/if}
-				</div>
-			{/if}
+
+						<!-- Explanation / Feedback Area -->
+						{#if isAnswered}
+							<div class="space-y-6 pt-6">
+								{#if selectedHistoryAttempt}
+									<div
+										class="flex items-center justify-between rounded-lg bg-primary/10 px-4 py-2 text-xs font-bold tracking-widest text-primary uppercase"
+									>
+										<span
+											>Viewing Attempt from {new Date(
+												selectedHistoryAttempt.createdAt
+											).toLocaleString(undefined, {
+												dateStyle: 'short',
+												timeStyle: 'short'
+											})}</span
+										>
+										<Button
+											variant="ghost"
+											size="sm"
+											class="h-6 px-2 text-[10px]"
+											onclick={() => (selectedHistoryAttempt = null)}
+										>
+											Back to Practice
+										</Button>
+									</div>
+								{/if}
+								<div
+									class="flex flex-col items-center justify-between gap-6 rounded-2xl border bg-muted/30 p-6 sm:flex-row"
+								>
+									<div class="flex items-center gap-4">
+										{#if isCorrect}
+											<div
+												class="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+											>
+												<Trophy class="h-7 w-7" />
+											</div>
+											<div>
+												<p class="text-base font-black tracking-wider text-emerald-600 uppercase">
+													{selectedHistoryAttempt ? 'Past Success' : 'Spot On!'}
+												</p>
+												<p class="text-sm text-muted-foreground">
+													{selectedHistoryAttempt
+														? 'You got this right before.'
+														: `Excellent work on this ${mcq.year} PYQ.`}
+												</p>
+											</div>
+										{:else}
+											<div
+												class="flex h-12 w-12 items-center justify-center rounded-full bg-rose-500 text-white shadow-lg shadow-rose-500/20"
+											>
+												<HelpCircle class="h-7 w-7" />
+											</div>
+											<div>
+												<p class="text-base font-black tracking-wider text-rose-600 uppercase">
+													{selectedHistoryAttempt ? 'Past Attempt' : 'Keep Learning'}
+												</p>
+												<p class="text-sm text-muted-foreground">
+													The correct answer is <span class="font-bold text-foreground"
+														>Option {mcq.correct_option}</span
+													>.
+												</p>
+											</div>
+										{/if}
+									</div>
+
+									<div class="flex w-full gap-3 sm:w-auto">
+										<Button
+											variant="outline"
+											size="lg"
+											class="flex-1 gap-2 sm:flex-initial"
+											onclick={() => {
+												resetMcq(mcq._id);
+												selectedHistoryAttempt = null;
+											}}
+										>
+											<RefreshCcw class="h-4 w-4" />
+											Retry
+										</Button>
+										<Button
+											size="lg"
+											class="flex-1 gap-2 sm:flex-initial"
+											onclick={() => {
+												selectedHistoryAttempt = null;
+												goToPage(true);
+											}}
+											disabled={!hasNextPage}
+										>
+											Next Question
+											<ChevronRight class="h-4 w-4" />
+										</Button>
+									</div>
+								</div>
+
+								<div class="space-y-4 rounded-2xl border bg-background p-8 shadow-sm">
+									<div class="flex items-center gap-2 text-primary">
+										<BookOpen class="h-6 w-6" />
+										<span class="text-xs font-bold tracking-widest uppercase"
+											>Analysis & Context</span
+										>
+									</div>
+									<div class="prose prose-sm dark:prose-invert max-w-none">
+										<p class="text-base leading-relaxed whitespace-pre-wrap text-muted-foreground">
+											{mcq.search_text
+												.split(mcq.question)
+												.pop()
+												?.split(mcq.option_d)
+												.pop()
+												?.trim() ||
+												'Analyze the question based on Art & Culture and Polity standard references.'}
+										</p>
+									</div>
+								</div>
+							</div>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</div>
 
