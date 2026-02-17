@@ -371,7 +371,9 @@ export const removeHighlightsByContext = mutation({
 			return;
 		}
 
-		const highlights = (await highlightsQuery.collect()).filter((h) => h.groupId === args.groupId);
+		const highlights = await highlightsQuery
+			.filter((q) => q.eq(q.field('groupId'), args.groupId))
+			.collect();
 
 		for (const h of highlights) {
 			const comments = await ctx.db

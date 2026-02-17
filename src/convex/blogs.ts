@@ -10,6 +10,7 @@ import {
 	type MutationCtx
 } from './_generated/server';
 import { authComponent } from './auth';
+import { paginationOptsValidator } from 'convex/server';
 
 import { TableAggregate } from '@convex-dev/aggregate';
 import { components, internal, api } from './_generated/api';
@@ -228,17 +229,22 @@ export const searchInternal = internalQuery({
 });
 
 export const list = query({
-	args: { onlyPublished: v.boolean() },
+	args: { onlyPublished: v.boolean(), limit: v.optional(v.number()) },
 	handler: async (ctx, args) => {
+		const limit =
+			typeof args.limit === 'number' && Number.isFinite(args.limit)
+				? Math.max(1, Math.min(200, Math.trunc(args.limit)))
+				: 100;
+
 		let blogs;
 		if (args.onlyPublished) {
 			blogs = await ctx.db
 				.query('blogs')
 				.withIndex('by_published', (q) => q.eq('published', true))
 				.order('desc')
-				.collect();
+				.take(limit);
 		} else {
-			blogs = await ctx.db.query('blogs').order('desc').collect();
+			blogs = await ctx.db.query('blogs').order('desc').take(limit);
 		}
 
 		const enrichedBlogs = await Promise.all(
@@ -280,6 +286,64 @@ export const list = query({
 		);
 
 		return enrichedBlogs;
+	}
+});
+
+export const listPaginated = query({
+	args: {
+		onlyPublished: v.boolean(),
+		paginationOpts: paginationOptsValidator
+	},
+	handler: async (ctx, args) => {
+		const result = args.onlyPublished
+			? await ctx.db
+					.query('blogs')
+					.withIndex('by_published', (q) => q.eq('published', true))
+					.order('desc')
+					.paginate(args.paginationOpts)
+			: await ctx.db.query('blogs').order('desc').paginate(args.paginationOpts);
+
+		const enrichedPage = await Promise.all(
+			result.page.map(async (blog) => {
+				const [likes, dislikes, commentCount] = await Promise.all([
+					likesAggregate.count(ctx, {
+						bounds: {
+							lower: { key: blog._id, inclusive: true },
+							upper: { key: blog._id, inclusive: true }
+						}
+					}),
+					dislikesAggregate.count(ctx, {
+						bounds: {
+							lower: { key: blog._id, inclusive: true },
+							upper: { key: blog._id, inclusive: true }
+						}
+					}),
+					commentsAggregate.count(ctx, {
+						bounds: {
+							lower: { key: blog._id, inclusive: true },
+							upper: { key: blog._id, inclusive: true }
+						}
+					})
+				]);
+				let bodyUrl = null;
+				if (blog.r2Key) {
+					bodyUrl = await r2.getUrl(blog.r2Key);
+				}
+				return {
+					...blog,
+					body: blog.snippet,
+					bodyUrl,
+					likes,
+					dislikes,
+					commentCount
+				};
+			})
+		);
+
+		return {
+			...result,
+			page: enrichedPage
+		};
 	}
 });
 

@@ -3,11 +3,13 @@
 	import { api } from '../../../convex/_generated/api';
 	import { Calendar, ThumbsUp, ThumbsDown, MessageCircle } from '@lucide/svelte';
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 
 	let { children } = $props();
+	const skeletonRows = [0, 1, 2];
 
-	const blogsQuery = useQuery(api.blogs.list, { onlyPublished: true });
+	const blogsQuery = useQuery(api.blogs.list, { onlyPublished: true, limit: 30 });
 	const currentId = $derived(page.params.id);
 	const otherBlogs = $derived(
 		blogsQuery.data?.filter((b) => b._id !== currentId).slice(0, 5) ?? []
@@ -40,13 +42,13 @@
 				</h3>
 				<div class="space-y-1">
 					{#if blogsQuery.isLoading}
-						{#each Array(3) as _}
+						{#each skeletonRows as row (row)}
 							<Skeleton class="h-20 w-full rounded-lg" />
 						{/each}
 					{:else}
-						{#each otherBlogs as other}
+						{#each otherBlogs as other (other._id)}
 							<a
-								href="/blog/{other._id}"
+								href={resolve(`/blog/${other._id}`)}
 								class="group flex flex-col gap-2 rounded-lg p-3 transition-colors hover:bg-muted/50 {currentId ===
 								other._id
 									? 'bg-muted'

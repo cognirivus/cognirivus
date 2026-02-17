@@ -229,11 +229,16 @@ export const listPaginated = query({
 		}
 
 		if (gsPapers && gsPapers.length > 0) {
-			// Get all subject IDs for these GS papers
-			const subjects = await ctx.db.query('subjects').collect();
-			const filteredSubjectIds = subjects
-				.filter((s) => gsPapers.includes(s.gsPaper))
-				.map((s) => s._id);
+			// Get all subject IDs for these GS papers using index
+			const subjectDocs = await Promise.all(
+				gsPapers.map((gsPaper) =>
+					ctx.db
+						.query('subjects')
+						.withIndex('by_gsPaper', (q) => q.eq('gsPaper', gsPaper))
+						.collect()
+				)
+			);
+			const filteredSubjectIds = subjectDocs.flat().map((s) => s._id);
 
 			if (filteredSubjectIds.length > 0) {
 				queryBuilder = queryBuilder.filter((q) =>
@@ -245,15 +250,25 @@ export const listPaginated = query({
 		}
 
 		if (entityTypes && entityTypes.length > 0) {
-			const entities = await ctx.db.query('entities').collect();
-			const selectedEntityIds = new Set(
-				entities.filter((e) => entityTypes.includes(e.type)).map((e) => e._id)
+			const entityDocs = await Promise.all(
+				entityTypes.map((type) =>
+					ctx.db
+						.query('entities')
+						.withIndex('by_type', (q) => q.eq('type', type))
+						.collect()
+				)
 			);
+			const selectedEntityIds = new Set(entityDocs.flat().map((e) => e._id));
 
-			const links = await ctx.db.query('content_entities').collect();
-			const allowedContentIds = Array.from(
-				new Set(links.filter((l) => selectedEntityIds.has(l.entityId)).map((l) => l.contentId))
+			const linkDocs = await Promise.all(
+				Array.from(selectedEntityIds).map((entityId) =>
+					ctx.db
+						.query('content_entities')
+						.withIndex('by_entity', (q) => q.eq('entityId', entityId))
+						.collect()
+				)
 			);
+			const allowedContentIds = Array.from(new Set(linkDocs.flat().map((l) => l.contentId)));
 
 			if (allowedContentIds.length > 0) {
 				queryBuilder = queryBuilder.filter((q) =>
@@ -266,10 +281,15 @@ export const listPaginated = query({
 
 		// Filter by specific entity IDs
 		if (entityIds && entityIds.length > 0) {
-			const links = await ctx.db.query('content_entities').collect();
-			const allowedContentIds = Array.from(
-				new Set(links.filter((l) => entityIds.includes(l.entityId)).map((l) => l.contentId))
+			const linkDocs = await Promise.all(
+				entityIds.map((entityId) =>
+					ctx.db
+						.query('content_entities')
+						.withIndex('by_entity', (q) => q.eq('entityId', entityId))
+						.collect()
+				)
 			);
+			const allowedContentIds = Array.from(new Set(linkDocs.flat().map((l) => l.contentId)));
 
 			if (allowedContentIds.length > 0) {
 				queryBuilder = queryBuilder.filter((q) =>
@@ -1927,13 +1947,18 @@ export const getComments = query({
 				const userDoc = await authComponent.getAnyUserById(ctx, comment.userId);
 				const currentUserName = userDoc?.name || comment.userName || 'Anonymous';
 				if (args.groupId) {
+					likes = 0;
+					dislikes = 0;
 					const reactions = await ctx.db
 						.query('content_comment_reactions')
-						.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
-						.filter((q) => q.eq(q.field('commentId'), comment._id))
+						.withIndex('by_group_comment', (q) =>
+							q.eq('groupId', args.groupId).eq('commentId', comment._id)
+						)
 						.collect();
-					likes = reactions.filter((r) => r.like_dislike === 1).length;
-					dislikes = reactions.filter((r) => r.like_dislike === -1).length;
+					for (const r of reactions) {
+						if (r.like_dislike === 1) likes++;
+						else if (r.like_dislike === -1) dislikes++;
+					}
 				} else {
 					[likes, dislikes] = await Promise.all([
 						contentCommentLikesAggregate.count(ctx, {
@@ -1985,18 +2010,24 @@ export const getReactionCounts = query({
 		let likes, dislikes, commentCount;
 
 		if (args.groupId) {
+			likes = 0;
+			dislikes = 0;
 			const reactions = await ctx.db
 				.query('content_reactions')
-				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
-				.filter((q) => q.eq(q.field('contentId'), args.contentId))
+				.withIndex('by_group_content', (q) =>
+					q.eq('groupId', args.groupId).eq('contentId', args.contentId)
+				)
 				.collect();
-			likes = reactions.filter((r) => r.like_dislike === 1).length;
-			dislikes = reactions.filter((r) => r.like_dislike === -1).length;
+			for (const r of reactions) {
+				if (r.like_dislike === 1) likes++;
+				else if (r.like_dislike === -1) dislikes++;
+			}
 
 			const comments = await ctx.db
 				.query('content_comments')
-				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
-				.filter((q) => q.eq(q.field('contentId'), args.contentId))
+				.withIndex('by_group_content', (q) =>
+					q.eq('groupId', args.groupId).eq('contentId', args.contentId)
+				)
 				.collect();
 			commentCount = comments.length;
 		} else {

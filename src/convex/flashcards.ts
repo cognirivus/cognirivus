@@ -394,12 +394,12 @@ GUIDELINES:
 export const getStats = query({
 	args: {},
 	handler: async (ctx) => {
-		const allCards = await ctx.db.query('flashcards').collect();
-
+		let total = 0;
 		const byDifficulty: Record<number, number> = {};
 		const byType: Record<string, number> = {};
 
-		for (const card of allCards) {
+		for await (const card of ctx.db.query('flashcards')) {
+			total++;
 			byDifficulty[card.difficulty] = (byDifficulty[card.difficulty] || 0) + 1;
 			byType[card.type] = (byType[card.type] || 0) + 1;
 		}
@@ -407,24 +407,28 @@ export const getStats = query({
 		let userStats = null;
 		const user = await authComponent.getAuthUser(ctx);
 		if (user) {
-			const progress = await ctx.db
-				.query('user_flashcard_progress')
-				.withIndex('by_user', (q) => q.eq('userId', user._id))
-				.collect();
+			let learning = 0;
+			let mastered = 0;
+			let progressCount = 0;
 
-			const learning = progress.filter((p) => p.interval < 21).length;
-			const mastered = progress.filter((p) => p.interval >= 21).length;
+			for await (const p of ctx.db
+				.query('user_flashcard_progress')
+				.withIndex('by_user', (q) => q.eq('userId', user._id))) {
+				progressCount++;
+				if (p.interval < 21) learning++;
+				else mastered++;
+			}
 
 			userStats = {
 				learning,
 				mastered,
-				new: Math.max(0, allCards.length - progress.length),
+				new: Math.max(0, total - progressCount),
 				debugId: user._id
 			};
 		}
 
 		return {
-			total: allCards.length,
+			total,
 			byDifficulty,
 			byType,
 			userStats
@@ -486,13 +490,14 @@ export const listDue = query({
 			if (dueCards.length >= maxCards) break;
 		}
 
-		const allFlashcards = await ctx.db.query('flashcards').collect();
 		const sessionCards = [...dueCards];
 
-		for (const card of allFlashcards) {
-			if (sessionCards.length >= maxCards) break;
-			if (progressMap.has(card._id)) continue;
-			sessionCards.push({ ...card, progress: null });
+		if (sessionCards.length < maxCards) {
+			for await (const card of ctx.db.query('flashcards')) {
+				if (sessionCards.length >= maxCards) break;
+				if (progressMap.has(card._id)) continue;
+				sessionCards.push({ ...card, progress: null });
+			}
 		}
 
 		return sessionCards;
@@ -538,17 +543,19 @@ export const getContentWithFlashcardCounts = query({
 		const enrichedPage = await Promise.all(
 			result.page.map(async (content) => {
 				const subject = await ctx.db.get(content.subjectId);
-				const cards = await ctx.db
+				let flashcardCount = 0;
+				let attemptedCount = 0;
+				for await (const card of ctx.db
 					.query('flashcards')
-					.withIndex('by_content', (q) => q.eq('contentId', content._id))
-					.collect();
-
-				const attemptedCount = cards.filter((c) => progressMap.has(c._id)).length;
+					.withIndex('by_content', (q) => q.eq('contentId', content._id))) {
+					flashcardCount++;
+					if (progressMap.has(card._id)) attemptedCount++;
+				}
 
 				return {
 					...content,
 					subject,
-					flashcardCount: content.flashcardCount ?? 0,
+					flashcardCount: content.flashcardCount ?? flashcardCount,
 					attemptedCount
 				};
 			})

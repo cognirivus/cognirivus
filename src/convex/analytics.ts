@@ -17,23 +17,21 @@ export const getDashboardStats = query({
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) return null;
 
-		const usageLogs = await ctx.db
-			.query('usage_logs')
-			.withIndex('by_user', (q) => q.eq('userId', user._id))
-			.collect();
-
 		let totalTokens = 0;
 		let totalPromptTokens = 0;
 		let totalCompletionTokens = 0;
 		let totalCost = 0;
 		let cancelledCount = 0;
-		let totalGenerations = usageLogs.length;
+		let totalGenerations = 0;
 
 		const modelStats: Record<string, { tokens: number; cost: number; count: number }> = {};
 		const purposeStats: Record<string, { tokens: number; cost: number; count: number }> = {};
 		const dailyStats: Record<string, { tokens: number; cost: number }> = {};
 
-		for (const log of usageLogs) {
+		for await (const log of ctx.db
+			.query('usage_logs')
+			.withIndex('by_user', (q) => q.eq('userId', user._id))) {
+			totalGenerations++;
 			totalTokens += log.totalTokens;
 			totalPromptTokens += log.promptTokens;
 			totalCompletionTokens += log.completionTokens;

@@ -593,50 +593,31 @@ export const list = query({
 	},
 	handler: async (ctx, args) => {
 		if (args.search) {
-			const searchLower = args.search.toLowerCase();
+			const results = await ctx.db
+				.query('mcqs')
+				.withSearchIndex('search_question', (q) => {
+					let sq = q.search('question', args.search!);
+					if (args.exam) sq = sq.eq('exam', args.exam);
+					if (args.mcqType) sq = sq.eq('mcq_type', args.mcqType);
+					if (args.year) sq = sq.eq('year', args.year);
+					return sq;
+				})
+				.collect();
 
-			// Use an index for the base query if possible to avoid full table scan
-			let baseQuery;
-			if (args.exam) {
-				baseQuery = ctx.db.query('mcqs').withIndex('by_exam', (q) => q.eq('exam', args.exam!));
-			} else if (args.year) {
-				baseQuery = ctx.db.query('mcqs').withIndex('by_year', (q) => q.eq('year', args.year!));
-			} else if (args.mcqType) {
-				baseQuery = ctx.db
-					.query('mcqs')
-					.withIndex('by_mcq_type', (q) => q.eq('mcq_type', args.mcqType!));
-			} else if (args.isVectorised !== undefined) {
-				baseQuery = ctx.db
-					.query('mcqs')
-					.withIndex('by_is_vectorised', (q) => q.eq('is_vectorised', args.isVectorised!));
-			} else if (args.isSimilarityCached === true) {
-				baseQuery = ctx.db
-					.query('mcqs')
-					.withIndex('by_is_similarity_cached', (q) => q.eq('is_similarity_cached', true));
-			} else {
-				baseQuery = ctx.db.query('mcqs');
-			}
-
-			const results = await baseQuery.collect();
-
-			const filtered = results.filter((m) => {
-				// Secondary filters (since we only used one index)
-				if (args.exam && m.exam !== args.exam) return false;
-				if (args.year && m.year !== args.year) return false;
-				if (args.mcqType && m.mcq_type !== args.mcqType) return false;
-				if (args.isVectorised !== undefined && m.is_vectorised !== args.isVectorised) return false;
+			const matchedById = new Map<Id<'mcqs'>, Doc<'mcqs'>>();
+			for (const m of results) {
+				if (args.isVectorised !== undefined && m.is_vectorised !== args.isVectorised) continue;
 				if (
 					args.isSimilarityCached !== undefined &&
 					Boolean(m.is_similarity_cached) !== args.isSimilarityCached
 				)
-					return false;
+					continue;
+				matchedById.set(m._id, m);
+			}
 
-				// Search filter (question or tags)
-				return (
-					m.question.toLowerCase().includes(searchLower) ||
-					m.tags?.some((t) => t.toLowerCase().includes(searchLower))
-				);
-			});
+			const filtered = Array.from(matchedById.values()).sort(
+				(a, b) => b._creationTime - a._creationTime
+			);
 
 			// Manual pagination
 			const cursor = args.paginationOpts.cursor ? Number(args.paginationOpts.cursor) : 0;
@@ -765,45 +746,81 @@ export const getFilterHierarchy = query({
 		search: v.optional(v.string())
 	},
 	handler: async (ctx, args) => {
-		// Optimize: Use metadata for initial load (no filters)
 		const metadata = await ctx.db
 			.query('mcq_metadata')
 			.withIndex('by_type', (q) => q.eq('type', 'aggregate'))
 			.first();
 
+		// Types always come from metadata — they don't depend on filters
+		const types = metadata?.types ?? [];
+
+		// Fast path: no filters active, return cached metadata
 		if (metadata && !args.type && !args.exam && !args.year && !args.search) {
 			return {
-				types: metadata.types,
+				types,
 				exams: metadata.exams,
 				years: metadata.years,
 				tags: metadata.tags
 			};
 		}
 
-		// Calculate hierarchy dynamically based on active filters
-		// This ensures dependent dropdowns (e.g., selecting an Exam filters the available Years and Tags)
-		const allMcqs = await ctx.db.query('mcqs').collect();
-		let filtered = allMcqs;
+		// Build an indexed query to narrow results instead of full table scan
+		const exams = new Set<string>();
+		const years = new Set<number>();
+		const tags = new Set<string>();
 
-		if (args.type) filtered = filtered.filter((m) => m.mcq_type === args.type);
-		if (args.exam) filtered = filtered.filter((m) => m.exam === args.exam);
-		if (args.year) filtered = filtered.filter((m) => m.year === args.year);
-
-		// Handle implicit tag filtering via search
 		if (args.search) {
-			const searchLower = args.search.toLowerCase();
-			filtered = filtered.filter(
-				(m) =>
-					m.tags?.some((t) => t.toLowerCase().includes(searchLower)) ||
-					m.question.toLowerCase().includes(searchLower)
-			);
+			// Use the search index with available filter fields
+			let searchQuery = ctx.db.query('mcqs').withSearchIndex('search_question', (q) => {
+				let sq = q.search('question', args.search!);
+				if (args.exam) sq = sq.eq('exam', args.exam);
+				if (args.type) sq = sq.eq('mcq_type', args.type);
+				if (args.year) sq = sq.eq('year', args.year);
+				return sq;
+			});
+
+			for await (const mcq of searchQuery) {
+				exams.add(mcq.exam);
+				years.add(mcq.year);
+				for (const tag of mcq.tags) tags.add(tag);
+			}
+		} else {
+			// Pick the best index based on which filters are active
+			let indexedQuery;
+			if (args.exam && args.year) {
+				indexedQuery = ctx.db
+					.query('mcqs')
+					.withIndex('by_exam_year', (q) => q.eq('exam', args.exam!).eq('year', args.year!));
+			} else if (args.exam) {
+				indexedQuery = ctx.db.query('mcqs').withIndex('by_exam', (q) => q.eq('exam', args.exam!));
+			} else if (args.type) {
+				indexedQuery = ctx.db
+					.query('mcqs')
+					.withIndex('by_mcq_type', (q) => q.eq('mcq_type', args.type!));
+			} else if (args.year) {
+				indexedQuery = ctx.db.query('mcqs').withIndex('by_year', (q) => q.eq('year', args.year!));
+			} else {
+				// No indexed filter applicable — shouldn't reach here due to fast path above
+				indexedQuery = ctx.db.query('mcqs');
+			}
+
+			// Stream and apply remaining in-memory filters, collecting only needed fields
+			for await (const mcq of indexedQuery) {
+				if (args.type && mcq.mcq_type !== args.type) continue;
+				if (args.exam && mcq.exam !== args.exam) continue;
+				if (args.year && mcq.year !== args.year) continue;
+
+				exams.add(mcq.exam);
+				years.add(mcq.year);
+				for (const tag of mcq.tags) tags.add(tag);
+			}
 		}
 
 		return {
-			types: Array.from(new Set(allMcqs.map((m) => m.mcq_type))).sort(),
-			exams: Array.from(new Set(filtered.map((m) => m.exam))).sort(),
-			years: Array.from(new Set(filtered.map((m) => m.year))).sort((a, b) => b - a),
-			tags: Array.from(new Set(filtered.flatMap((m) => m.tags || []))).sort()
+			types,
+			exams: Array.from(exams).sort(),
+			years: Array.from(years).sort((a, b) => b - a),
+			tags: Array.from(tags).sort()
 		};
 	}
 });
@@ -815,42 +832,44 @@ export const count = query({
 		mcqType: v.optional(v.string()),
 		search: v.optional(v.string())
 	},
+	returns: v.number(),
 	handler: async (ctx, args) => {
-		if (args.search) {
-			const searchLower = args.search.toLowerCase();
+		const hasFilters = args.exam || args.year || args.mcqType;
 
-			let baseQuery;
-			if (args.exam) {
-				baseQuery = ctx.db.query('mcqs').withIndex('by_exam', (q) => q.eq('exam', args.exam!));
-			} else if (args.year) {
-				baseQuery = ctx.db.query('mcqs').withIndex('by_year', (q) => q.eq('year', args.year!));
-			} else if (args.mcqType) {
-				baseQuery = ctx.db
-					.query('mcqs')
-					.withIndex('by_mcq_type', (q) => q.eq('mcq_type', args.mcqType!));
-			} else {
-				baseQuery = ctx.db.query('mcqs');
+		if (args.search) {
+			// Use searchIndex instead of collect + JS filter
+			let searchQuery = ctx.db.query('mcqs').withSearchIndex('search_question', (q) => {
+				let sq = q.search('question', args.search!);
+				if (args.exam) sq = sq.eq('exam', args.exam);
+				if (args.mcqType) sq = sq.eq('mcq_type', args.mcqType);
+				if (args.year) sq = sq.eq('year', args.year);
+				return sq;
+			});
+
+			const matchedIds = new Set<Id<'mcqs'>>();
+			for await (const _doc of searchQuery) {
+				matchedIds.add(_doc._id);
 			}
 
-			const results = await baseQuery.collect();
-
-			return results.filter((m) => {
-				if (args.exam && m.exam !== args.exam) return false;
-				if (args.year && m.year !== args.year) return false;
-				if (args.mcqType && m.mcq_type !== args.mcqType) return false;
-
-				return (
-					m.question.toLowerCase().includes(searchLower) ||
-					m.tags?.some((t) => t.toLowerCase().includes(searchLower))
-				);
-			}).length;
+			return matchedIds.size;
 		}
 
-		// Standard query logic
+		// No filters: use pre-computed stats
+		if (!hasFilters) {
+			const stats = await getMcqStatsDoc(ctx);
+			if (stats) return stats.total;
+		}
+
+		// Filtered: use best available index, stream count
 		let mcqsQuery;
-		if (args.exam) {
+		if (args.exam && args.year) {
+			mcqsQuery = ctx.db
+				.query('mcqs')
+				.withIndex('by_exam_year', (q) => q.eq('exam', args.exam!).eq('year', args.year!));
+			if (args.mcqType)
+				mcqsQuery = mcqsQuery.filter((q) => q.eq(q.field('mcq_type'), args.mcqType));
+		} else if (args.exam) {
 			mcqsQuery = ctx.db.query('mcqs').withIndex('by_exam', (q) => q.eq('exam', args.exam!));
-			if (args.year) mcqsQuery = mcqsQuery.filter((q) => q.eq(q.field('year'), args.year));
 			if (args.mcqType)
 				mcqsQuery = mcqsQuery.filter((q) => q.eq(q.field('mcq_type'), args.mcqType));
 		} else if (args.year) {
@@ -861,16 +880,15 @@ export const count = query({
 			mcqsQuery = ctx.db
 				.query('mcqs')
 				.withIndex('by_mcq_type', (q) => q.eq('mcq_type', args.mcqType!));
-			if (args.year) mcqsQuery = mcqsQuery.filter((q) => q.eq(q.field('year'), args.year));
 		} else {
 			mcqsQuery = ctx.db.query('mcqs');
-			if (args.year) mcqsQuery = mcqsQuery.filter((q) => q.eq(q.field('year'), args.year));
-			if (args.mcqType)
-				mcqsQuery = mcqsQuery.filter((q) => q.eq(q.field('mcq_type'), args.mcqType));
 		}
 
-		const results = await mcqsQuery.collect();
-		return results.length;
+		let count = 0;
+		for await (const _doc of mcqsQuery) {
+			count++;
+		}
+		return count;
 	}
 });
 
@@ -951,19 +969,24 @@ export const getUserStats = query({
 		const user = await authComponent.getAuthUser(ctx);
 		if (!user) return null;
 
-		const responses = await ctx.db
+		// Stream responses, collecting only what we need
+		const responseData: Array<{ mcqId: Id<'mcqs'>; isCorrect: boolean }> = [];
+		const uniqueMcqIds = new Set<Id<'mcqs'>>();
+
+		for await (const resp of ctx.db
 			.query('mcq_responses')
-			.withIndex('by_user', (q) => q.eq('userId', user._id))
-			.collect();
+			.withIndex('by_user', (q) => q.eq('userId', user._id))) {
+			responseData.push({ mcqId: resp.mcqId, isCorrect: resp.isCorrect });
+			uniqueMcqIds.add(resp.mcqId);
+		}
 
-		if (responses.length === 0) return null;
+		if (responseData.length === 0) return null;
 
-		const total = responses.length;
-		const correct = responses.filter((r) => r.isCorrect).length;
+		const total = responseData.length;
+		const correct = responseData.filter((r) => r.isCorrect).length;
 
-		// Optimize: Fetch all unique MCQs in parallel
-		const uniqueMcqIds = [...new Set(responses.map((r) => r.mcqId))];
-		const mcqs = await Promise.all(uniqueMcqIds.map((id) => ctx.db.get(id)));
+		// Fetch unique MCQs in parallel
+		const mcqs = await Promise.all([...uniqueMcqIds].map((id) => ctx.db.get(id)));
 		const mcqMap = new Map(
 			mcqs.map((m) => (m ? ([m._id, m] as [Id<'mcqs'>, Doc<'mcqs'>]) : null)).filter(Boolean) as [
 				Id<'mcqs'>,
@@ -975,7 +998,7 @@ export const getUserStats = query({
 		const examStats: Record<string, { total: number; correct: number }> = {};
 		const tagStats: Record<string, { total: number; correct: number }> = {};
 
-		for (const resp of responses) {
+		for (const resp of responseData) {
 			const mcq = mcqMap.get(resp.mcqId);
 			if (!mcq) continue;
 
@@ -1237,23 +1260,29 @@ export const clearSimilarityCacheForMcqIds = internalMutation({
 export const rebuildMcqStatsInternal = internalMutation({
 	args: {},
 	handler: async (ctx) => {
-		const vectorisedDocs = await ctx.db
+		let vectorised = 0;
+		for await (const _ of ctx.db
 			.query('mcqs')
-			.withIndex('by_is_vectorised', (q) => q.eq('is_vectorised', true))
-			.collect();
-		const pendingDocs = await ctx.db
+			.withIndex('by_is_vectorised', (q) => q.eq('is_vectorised', true))) {
+			vectorised++;
+		}
+		let pending = 0;
+		for await (const _ of ctx.db
 			.query('mcqs')
-			.withIndex('by_is_vectorised', (q) => q.eq('is_vectorised', false))
-			.collect();
-		const cachedDocs = await ctx.db
+			.withIndex('by_is_vectorised', (q) => q.eq('is_vectorised', false))) {
+			pending++;
+		}
+		let similarityCached = 0;
+		for await (const _ of ctx.db
 			.query('mcqs')
-			.withIndex('by_is_similarity_cached', (q) => q.eq('is_similarity_cached', true))
-			.collect();
+			.withIndex('by_is_similarity_cached', (q) => q.eq('is_similarity_cached', true))) {
+			similarityCached++;
+		}
 
 		const snapshot = normalizeStatsSnapshot({
-			total: vectorisedDocs.length + pendingDocs.length,
-			vectorised: vectorisedDocs.length,
-			similarityCached: cachedDocs.length,
+			total: vectorised + pending,
+			vectorised,
+			similarityCached,
 			updatedAt: Date.now()
 		});
 

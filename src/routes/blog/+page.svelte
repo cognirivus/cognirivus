@@ -1,14 +1,44 @@
 <script lang="ts">
 	import { useQuery } from 'convex-svelte';
 	import { api } from '../../convex/_generated/api';
-	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
-	import { Calendar, ArrowRight, ThumbsUp, MessageCircle, BookOpen } from '@lucide/svelte';
+	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
+	import {
+		ArrowRight,
+		ThumbsUp,
+		MessageCircle,
+		BookOpen,
+		ChevronLeft,
+		ChevronRight
+	} from '@lucide/svelte';
 	import { Skeleton } from '$lib/components/ui/skeleton/index.js';
 
-	const blogsQuery = useQuery(api.blogs.list, { onlyPublished: true });
+	const currentCursor = $derived(page.url.searchParams.get('cursor') || null);
+	const currentIndex = $derived(Number(page.url.searchParams.get('index') || 0));
+	const skeletonRows = [0, 1, 2];
+
+	const blogsQuery = useQuery((api as any).blogs.listPaginated, () => ({
+		onlyPublished: true,
+		paginationOpts: { numItems: 12, cursor: currentCursor }
+	}));
+	const blogs = $derived(blogsQuery.data?.page || []);
+	const hasNextPage = $derived(blogsQuery.data?.isDone === false);
+	const hasPrevPage = $derived(currentIndex > 0);
+
+	function goToPage(next: boolean) {
+		const params = new SvelteURLSearchParams(page.url.searchParams);
+		if (next && blogsQuery.data?.continueCursor) {
+			params.set('cursor', blogsQuery.data.continueCursor);
+			params.set('index', String(currentIndex + 1));
+		} else if (!next && currentIndex > 0) {
+			window.history.back();
+			return;
+		}
+		const queryString = params.toString();
+		window.location.assign(`${resolve('/blog')}${queryString ? `?${queryString}` : ''}`);
+	}
 
 	function formatDate(date: number) {
 		return new Intl.DateTimeFormat('en-US', {
@@ -37,7 +67,7 @@
 
 		{#if blogsQuery.isLoading}
 			<div class="space-y-8">
-				{#each Array(3) as _}
+				{#each skeletonRows as row (row)}
 					<article class="border-b border-border/40 pb-8 last:border-0">
 						<div class="space-y-3">
 							<Skeleton class="h-4 w-24" />
@@ -63,9 +93,9 @@
 			</div>
 		{:else if blogsQuery.data}
 			<div class="space-y-0">
-				{#each blogsQuery.data as blog, index}
+				{#each blogs as blog (blog._id)}
 					<article class="group border-b border-border/40 py-8 first:pt-0 last:border-0">
-						<a href="/blog/{blog._id}" class="block space-y-3">
+						<a href={resolve(`/blog/${blog._id}`)} class="block space-y-3">
 							<div class="flex items-center gap-3 text-sm text-muted-foreground">
 								<time datetime={new Date(blog.createdAt).toISOString()}>
 									{formatDate(blog.createdAt)}
@@ -111,6 +141,28 @@
 					</div>
 				{/each}
 			</div>
+			{#if hasPrevPage || hasNextPage}
+				<div class="mt-8 flex items-center justify-end gap-2 border-t border-border/40 pt-6">
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={() => goToPage(false)}
+						disabled={!hasPrevPage}
+					>
+						<ChevronLeft class="mr-1 h-4 w-4" />
+						Previous
+					</Button>
+					<Button
+						variant="outline"
+						size="sm"
+						onclick={() => goToPage(true)}
+						disabled={!hasNextPage}
+					>
+						Next
+						<ChevronRight class="ml-1 h-4 w-4" />
+					</Button>
+				</div>
+			{/if}
 		{/if}
 	</div>
 </div>

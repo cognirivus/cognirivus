@@ -4,11 +4,9 @@
 	import type { Id } from '../../../convex/_generated/dataModel';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Badge } from '$lib/components/ui/badge';
-	import { Separator } from '$lib/components/ui/separator';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import {
 		Plus,
@@ -26,7 +24,19 @@
 		Upload
 	} from '@lucide/svelte';
 
-	const blogsQuery = useQuery(api.blogs.list, { onlyPublished: false });
+	const PAGE_SIZE = 25;
+	let cursorStack = $state<(string | null)[]>([null]);
+	let currentCursorIndex = $state(0);
+
+	const blogsQuery = useQuery((api as any).blogs.listPaginated, () => ({
+		onlyPublished: false,
+		paginationOpts: { numItems: PAGE_SIZE, cursor: cursorStack[currentCursorIndex] }
+	}));
+	const blogsPage = $derived(blogsQuery.data?.page || []);
+	const hasNextPage = $derived(blogsQuery.data?.isDone === false);
+	const hasPrevPage = $derived(currentCursorIndex > 0);
+	const skeletonRows = [0, 1, 2];
+
 	const client = useConvexClient();
 
 	let isEditing = $state(false);
@@ -116,8 +126,8 @@
 	}
 
 	function toggleSelectAll() {
-		if (!blogsQuery.data) return;
-		const allIds = blogsQuery.data.map((blog) => blog._id);
+		if (blogsPage.length === 0) return;
+		const allIds = blogsPage.map((blog: { _id: Id<'blogs'> }) => blog._id);
 		if (selectedIds.size === allIds.length) {
 			selectedIds = new Set();
 		} else {
@@ -125,11 +135,32 @@
 		}
 	}
 
+	function nextPage() {
+		if (!hasNextPage || !blogsQuery.data?.continueCursor) return;
+		const nextCursor = blogsQuery.data.continueCursor;
+		if (currentCursorIndex === cursorStack.length - 1) {
+			cursorStack = [...cursorStack, nextCursor];
+		}
+		currentCursorIndex += 1;
+		selectedIds = new Set();
+	}
+
+	function prevPage() {
+		if (!hasPrevPage) return;
+		currentCursorIndex -= 1;
+		selectedIds = new Set();
+	}
+
 	async function handleBulkDelete() {
 		if (selectedIds.size === 0) return;
 		const count = selectedIds.size;
-		if (!confirm(`Are you sure you want to delete ${count} blog post(s)? This will also delete all reactions and comments.`)) return;
-		
+		if (
+			!confirm(
+				`Are you sure you want to delete ${count} blog post(s)? This will also delete all reactions and comments.`
+			)
+		)
+			return;
+
 		isDeleting = true;
 		try {
 			await client.mutation(api.blogs.removeBulk, { ids: Array.from(selectedIds) });
@@ -224,33 +255,33 @@
 						/>
 					</div>
 
-						<div class="space-y-2">
-							<div class="flex items-center justify-between">
-								<label for="body" class="text-sm font-medium">Content (Markdown)</label>
-								<div class="flex items-center gap-2">
-									{#if editingId && bodyUrl && body.length < 600}
-										<Button
-											type="button"
-											variant="outline"
-											size="sm"
-											onclick={loadFullBody}
-											disabled={isLoadingFullBody}
-											class="h-7 gap-1.5 text-xs font-medium"
-										>
-											{#if isLoadingFullBody}
-												<Loader2 class="h-3 w-3 animate-spin" />
-											{:else}
-												<Upload class="h-3 w-3" />
-											{/if}
-											Load Full Body
-										</Button>
-									{/if}
-									<Badge variant="outline" class="text-[10px] font-medium tracking-wider uppercase"
-										>Markdown Supported</Badge
+					<div class="space-y-2">
+						<div class="flex items-center justify-between">
+							<label for="body" class="text-sm font-medium">Content (Markdown)</label>
+							<div class="flex items-center gap-2">
+								{#if editingId && bodyUrl && body.length < 600}
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onclick={loadFullBody}
+										disabled={isLoadingFullBody}
+										class="h-7 gap-1.5 text-xs font-medium"
 									>
-								</div>
+										{#if isLoadingFullBody}
+											<Loader2 class="h-3 w-3 animate-spin" />
+										{:else}
+											<Upload class="h-3 w-3" />
+										{/if}
+										Load Full Body
+									</Button>
+								{/if}
+								<Badge variant="outline" class="text-[10px] font-medium tracking-wider uppercase"
+									>Markdown Supported</Badge
+								>
 							</div>
-							<Textarea
+						</div>
+						<Textarea
 							id="body"
 							bind:value={body}
 							required
@@ -315,7 +346,7 @@
 		</div>
 	{:else if blogsQuery.isLoading}
 		<div class="grid gap-4">
-			{#each Array(3) as _}
+			{#each skeletonRows as row (row)}
 				<div class="rounded-xl border bg-card p-6">
 					<div class="flex items-center justify-between">
 						<div class="space-y-2">
@@ -347,7 +378,7 @@
 									onclick={toggleSelectAll}
 									class="flex items-center justify-center"
 								>
-									{#if blogsQuery.data && selectedIds.size === blogsQuery.data.length}
+									{#if blogsPage.length > 0 && selectedIds.size === blogsPage.length}
 										<CheckSquare class="h-4 w-4 text-primary" />
 									{:else if selectedIds.size > 0}
 										<CheckSquare class="h-4 w-4 text-muted-foreground" />
@@ -365,7 +396,7 @@
 						</tr>
 					</thead>
 					<tbody class="divide-y">
-						{#each blogsQuery.data as blog}
+						{#each blogsPage as blog (blog._id)}
 							<tr class="transition-colors hover:bg-muted/20">
 								<td class="w-12 px-4 py-4">
 									<button
@@ -448,6 +479,22 @@
 						{/each}
 					</tbody>
 				</table>
+			</div>
+			<div class="flex items-center justify-between border-t bg-muted/20 px-6 py-4">
+				<p class="text-sm text-muted-foreground">
+					Page <span class="font-semibold text-foreground">{currentCursorIndex + 1}</span> · {blogsPage.length}
+					entries
+				</p>
+				<div class="flex items-center gap-2">
+					<Button variant="outline" size="sm" onclick={prevPage} disabled={!hasPrevPage}>
+						<ArrowLeft class="mr-1 h-4 w-4" />
+						Previous
+					</Button>
+					<Button variant="outline" size="sm" onclick={nextPage} disabled={!hasNextPage}>
+						Next
+						<ArrowLeft class="ml-1 h-4 w-4 rotate-180" />
+					</Button>
+				</div>
 			</div>
 		</div>
 	{/if}
