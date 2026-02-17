@@ -9,6 +9,7 @@
 		FileText,
 		Newspaper,
 		Brain,
+		CircleHelp,
 		Sparkles,
 		Bot,
 		Cpu,
@@ -31,6 +32,7 @@
 		| '/admin/news'
 		| '/admin/syllabus'
 		| '/admin/flashcards'
+		| '/admin/mcqs'
 		| '/admin/extraction'
 		| '/admin/article'
 		| '/admin/entities'
@@ -86,6 +88,11 @@
 			name: 'Flashcards',
 			href: '/admin/flashcards',
 			icon: Brain
+		},
+		{
+			name: 'MCQs',
+			href: '/admin/mcqs',
+			icon: CircleHelp
 		},
 		{
 			name: 'Extraction',

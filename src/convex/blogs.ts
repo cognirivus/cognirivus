@@ -14,7 +14,7 @@ import { authComponent } from './auth';
 import { TableAggregate } from '@convex-dev/aggregate';
 import { components, internal, api } from './_generated/api';
 import type { DataModel, Id } from './_generated/dataModel';
-import { rag, RAG_CONFIG } from './rag';
+import { getConfiguredRag, RAG_CONFIG } from './rag';
 import { r2 } from './lib/r2';
 import { rateLimiter } from './lib/rateLimits';
 
@@ -118,6 +118,7 @@ export const syncRag = internalAction({
 	args: { blogId: v.id('blogs'), title: v.string(), body: v.string() },
 	handler: async (ctx, args) => {
 		try {
+			const { rag } = await getConfiguredRag(ctx);
 			const { entryId, replacedEntry } = await rag.add(ctx, {
 				namespace: RAG_CONFIG.namespace,
 				key: args.blogId,
@@ -142,6 +143,7 @@ export const backfillRag = internalAction({
 	args: {},
 	handler: async (ctx) => {
 		const blogs = await ctx.runQuery(internal.blogs.listInternal);
+		const { rag } = await getConfiguredRag(ctx);
 		for (const blog of blogs) {
 			try {
 				let body = blog.snippet;
@@ -150,7 +152,7 @@ export const backfillRag = internalAction({
 					body = await (await fetch(url)).text();
 				}
 
-				const { entryId } = await rag.add(ctx, {
+				const { entryId, replacedEntry } = await rag.add(ctx, {
 					namespace: RAG_CONFIG.namespace,
 					key: blog._id,
 					text: `${blog.title}\n\n${body}`
@@ -160,6 +162,10 @@ export const backfillRag = internalAction({
 					blogId: blog._id,
 					ragEntryId: entryId
 				});
+
+				if (replacedEntry) {
+					await rag.delete(ctx, { entryId: replacedEntry.entryId });
+				}
 			} catch (e) {
 				console.error(`Failed to backfill RAG for blog ${blog._id}:`, e);
 			}
@@ -171,7 +177,8 @@ export const deleteRag = internalAction({
 	args: { ragEntryId: v.string() },
 	handler: async (ctx, args) => {
 		try {
-			await rag.delete(ctx, { entryId: args.ragEntryId as any });
+			const { rag } = await getConfiguredRag(ctx);
+			await rag.delete(ctx, { entryId: args.ragEntryId as never });
 		} catch (e) {
 			console.error(`Failed to delete RAG entry ${args.ragEntryId}:`, e);
 		}
@@ -182,7 +189,6 @@ export const cleanupRag = internalAction({
 	args: {},
 	handler: async (ctx) => {
 		const blogs = await ctx.runQuery(internal.blogs.listInternal);
-		let syncedCount = 0;
 
 		for (const blog of blogs) {
 			if (!blog.ragEntryId) {
@@ -197,7 +203,6 @@ export const cleanupRag = internalAction({
 					title: blog.title,
 					body
 				});
-				syncedCount++;
 			}
 		}
 	}

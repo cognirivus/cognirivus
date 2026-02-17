@@ -6,6 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
+	import { Skeleton } from '$lib/components/ui/skeleton';
 	import {
 		Search,
 		Filter,
@@ -22,17 +23,20 @@
 		Layers,
 		Calendar,
 		GraduationCap,
-		ChevronDown
+		ChevronDown,
+		ListTree
 	} from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { fade, slide } from 'svelte/transition';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
+	import { Markdown } from '$lib/components/prompt-kit/markdown/index.js';
 	import { onMount } from 'svelte';
 	import type { Id } from '$convex/_generated/dataModel';
 
 	// State from URL
 	const selectedMcqId = $derived(page.url.searchParams.get('id') || undefined);
+	const selectedView = $derived(page.url.searchParams.get('view') || undefined);
 	const searchQuery = $derived(page.url.searchParams.get('q') || undefined);
 	const selectedType = $derived.by(() => {
 		const value = page.url.searchParams.get('type');
@@ -60,6 +64,7 @@
 	const singleMcqQuery = useQuery(api.mcqs.getById, () =>
 		selectedMcqId ? { id: selectedMcqId as Id<'mcqs'> } : 'skip'
 	);
+	const isFocusMode = $derived(!!selectedMcqId && selectedView !== 'browse');
 
 	const mcqsQuery = useQuery(api.mcqs.list, () => ({
 		search: searchQuery,
@@ -85,17 +90,57 @@
 
 	const mcq = $derived(singleMcqQuery.data || mcqsQuery.data?.page?.[0]);
 	const totalCount = $derived(countQuery.data ?? 0);
-	const hasNextPage = $derived(selectedMcqId ? false : mcqsQuery.data?.isDone === false);
-	const hasPrevPage = $derived(selectedMcqId ? false : currentIndex > 0);
+	const hasNextPage = $derived(isFocusMode ? false : mcqsQuery.data?.isDone === false);
+	const hasPrevPage = $derived(isFocusMode ? false : currentIndex > 0);
 
 	// History query
 	const historyQuery = useQuery(api.mcqs.getMcqHistory, () => (mcq ? { mcqId: mcq._id } : 'skip'));
 	const mcqHistory = $derived(historyQuery.data || []);
 
+	const SIMILAR_MCQ_LIMIT = 5;
+	const cachedSimilarQuery = useQuery(api.mcqs.getCachedSimilarForMcq, () =>
+		mcq ? { mcqId: mcq._id, limit: SIMILAR_MCQ_LIMIT } : 'skip'
+	);
+
+	type SimilarMcqItem = {
+		_id: string;
+		question: string;
+		_score: number;
+		exam: string;
+		year: number;
+		mcq_type: string;
+	};
+
 	// Interaction state
 	let selectedOptions = $state<Record<string, string>>({});
 	let showExplanations = $state<Record<string, boolean>>({});
 	let selectedHistoryAttempt = $state<any>(null);
+	const similarMcqs = $derived(
+		(cachedSimilarQuery.data?.mcqs ?? [])
+			.map((item) => ({
+				_id: item._id,
+				question: item.question,
+				_score: item._score ?? 0,
+				exam: item.exam,
+				year: item.year,
+				mcq_type: item.mcq_type
+			}))
+			.sort((a, b) => b._score - a._score)
+			.slice(0, SIMILAR_MCQ_LIMIT) as Array<SimilarMcqItem>
+	);
+	const similarLoading = $derived(Boolean(mcq?._id) && cachedSimilarQuery.isLoading);
+	const similarError = $derived(
+		cachedSimilarQuery.error instanceof Error
+			? cachedSimilarQuery.error.message
+			: cachedSimilarQuery.error
+				? 'Failed to load cached similar questions'
+				: ''
+	);
+
+	function formatSimilarityPercent(score: number) {
+		const percent = Math.max(0, Math.min(100, score * 100));
+		return `${percent.toFixed(1)}%`;
+	}
 
 	// Reset state when MCQ changes
 	$effect(() => {
@@ -148,6 +193,8 @@
 				params.delete('year');
 			}
 		});
+		params.delete('id');
+		params.delete('view');
 		params.delete('cursor');
 		params.delete('index');
 		goto(`${page.url.pathname}?${params.toString()}`, { noScroll: true });
@@ -155,6 +202,8 @@
 
 	function goToPage(next: boolean) {
 		const params = new URLSearchParams(page.url.searchParams);
+		params.delete('id');
+		params.delete('view');
 		if (next && mcqsQuery.data?.continueCursor) {
 			params.set('cursor', mcqsQuery.data.continueCursor);
 			params.set('index', String(currentIndex + 1));
@@ -162,6 +211,13 @@
 			window.history.back();
 			return;
 		}
+		goto(`${page.url.pathname}?${params.toString()}`, { noScroll: true });
+	}
+
+	function openMcqById(id: string) {
+		const params = new URLSearchParams(page.url.searchParams);
+		params.set('id', id);
+		params.set('view', 'browse');
 		goto(`${page.url.pathname}?${params.toString()}`, { noScroll: true });
 	}
 
@@ -374,7 +430,7 @@
 								}}
 							>
 								<option value="all">All Types</option>
-								{#each hierarchyQuery.data?.types || [] as type}
+								{#each hierarchyQuery.data?.types || [] as type (type)}
 									<option value={type}>{type}</option>
 								{/each}
 							</select>
@@ -396,7 +452,7 @@
 								}}
 							>
 								<option value="all">All Exams</option>
-								{#each hierarchyQuery.data?.exams || [] as exam}
+								{#each hierarchyQuery.data?.exams || [] as exam (exam)}
 									<option value={exam}>{exam}</option>
 								{/each}
 							</select>
@@ -420,7 +476,7 @@
 								}}
 							>
 								<option value="all">All Years</option>
-								{#each hierarchyQuery.data?.years || [] as year}
+								{#each hierarchyQuery.data?.years || [] as year (year)}
 									<option value={String(year)}>{year}</option>
 								{/each}
 							</select>
@@ -432,7 +488,7 @@
 						<div class="shrink-0 text-xs font-bold text-muted-foreground uppercase">Tags</div>
 						<div class="flex-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
 							<div class="flex flex-wrap gap-1.5 p-1">
-								{#each hierarchyQuery.data?.tags || [] as tag}
+								{#each hierarchyQuery.data?.tags || [] as tag (tag)}
 									<Badge
 										variant="outline"
 										class="cursor-pointer text-[10px]"
@@ -507,7 +563,7 @@
 			</div>
 
 			<div class="hidden items-center gap-3 text-xs font-medium sm:flex">
-				{#if !selectedMcqId}
+				{#if !isFocusMode}
 					<div class="flex h-1.5 w-24 overflow-hidden rounded-full bg-muted lg:w-32">
 						{#if mounted}
 							<div
@@ -579,7 +635,7 @@
 
 								<!-- Attempt History Bubbles -->
 								<div class="flex items-center gap-1.5">
-									{#each mcqHistory as attempt}
+									{#each mcqHistory as attempt (attempt._id)}
 										<Tooltip.Provider delayDuration={0}>
 											<Tooltip.Root>
 												<Tooltip.Trigger>
@@ -623,15 +679,16 @@
 										</Badge>
 									{/each}
 								</div>
-								<h2 class="text-lg leading-relaxed font-semibold whitespace-pre-wrap sm:text-xl">
-									{mcq.question}
-								</h2>
+								<Markdown
+									content={mcq.question}
+									class="text-lg leading-relaxed sm:text-xl [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:pl-5 [&_p]:my-0 [&_p]:font-semibold [&_ul]:my-2 [&_ul]:pl-5"
+								/>
 							</div>
 						</div>
 
 						<!-- Options Grid -->
 						<div class="grid gap-4 sm:grid-cols-2">
-							{#each [['A', mcq.option_a], ['B', mcq.option_b], ['C', mcq.option_c], ['D', mcq.option_d]] as [label, text]}
+							{#each [['A', mcq.option_a], ['B', mcq.option_b], ['C', mcq.option_c], ['D', mcq.option_d]] as [label, text] (label)}
 								{@const isSelected = activeResponse.selectedOption === label}
 								{@const isCorrectOption = label === mcq.correct_option}
 
@@ -657,7 +714,10 @@
 									>
 										{label}
 									</div>
-									<span class="pt-0.5 text-base font-medium">{text}</span>
+									<Markdown
+										content={text}
+										class="pt-0.5 text-base font-medium [&_li]:my-0.5 [&_ol]:my-1 [&_ol]:pl-5 [&_p]:m-0 [&_ul]:my-1 [&_ul]:pl-5"
+									/>
 									{#if isAnswered && isCorrectOption}
 										<CheckCircle2 class="ml-auto h-6 w-6 text-emerald-500" />
 									{:else if isAnswered && isSelected && !isCorrectOption}
@@ -786,7 +846,7 @@
 		</div>
 
 		<!-- Bottom Navigation Bar -->
-		{#if !selectedMcqId}
+		{#if !isFocusMode}
 			<footer
 				class="fixed right-0 bottom-0 left-0 border-t bg-background/80 px-6 py-2 backdrop-blur-md lg:relative lg:px-12 lg:backdrop-blur-none"
 			>
@@ -837,6 +897,74 @@
 			</footer>
 		{/if}
 	</main>
+
+	<!-- Similar Questions Sidebar (Desktop) -->
+	<aside class="hidden border-l bg-background xl:block xl:w-80">
+		<div class="flex h-full flex-col">
+			<div class="border-b px-4 py-3">
+				<div class="flex items-center gap-2">
+					<ListTree class="h-4 w-4 text-primary" />
+					<h3 class="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+						Similar Questions
+					</h3>
+				</div>
+				<p class="mt-1 text-[11px] text-muted-foreground">Click any question to open it</p>
+			</div>
+
+			<div class="flex-1 space-y-2 overflow-y-auto p-3 [scrollbar-width:thin]">
+				{#if !mcq}
+					<div class="rounded-lg border border-dashed px-3 py-4 text-xs text-muted-foreground">
+						No active question selected.
+					</div>
+				{:else if similarLoading}
+					{#each Array(SIMILAR_MCQ_LIMIT) as _, i (i)}
+						<div class="rounded-lg border p-3">
+							<Skeleton class="h-3 w-full" />
+							<Skeleton class="mt-2 h-3 w-[92%]" />
+						</div>
+					{/each}
+				{:else if similarError}
+					<div
+						class="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+					>
+						{similarError}
+					</div>
+				{:else if similarMcqs.length === 0}
+					<div class="rounded-lg border border-dashed px-3 py-4 text-xs text-muted-foreground">
+						No similar questions found.
+					</div>
+				{:else}
+					{#each similarMcqs as candidate, idx (candidate._id)}
+						<button
+							class="w-full rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary/30 hover:bg-primary/5"
+							onclick={() => openMcqById(candidate._id)}
+						>
+							<div class="mb-1 flex items-center justify-between gap-2">
+								<div class="flex items-center gap-1.5 text-[10px] font-semibold">
+									<span class="tracking-wide text-muted-foreground">#{idx + 1}</span>
+									<Badge variant="secondary" class="h-5 px-1.5 text-[10px] uppercase">
+										{candidate.exam}
+									</Badge>
+									<Badge variant="outline" class="h-5 px-1.5 text-[10px]">
+										{candidate.year}
+									</Badge>
+									<Badge variant="outline" class="h-5 px-1.5 text-[10px]">
+										{candidate.mcq_type}
+									</Badge>
+								</div>
+								<Badge variant="outline" class="h-5 px-1.5 text-[10px] tabular-nums">
+									{formatSimilarityPercent(candidate._score)}
+								</Badge>
+							</div>
+							<p class="line-clamp-3 text-xs leading-relaxed text-foreground/90">
+								{candidate.question}
+							</p>
+						</button>
+					{/each}
+				{/if}
+			</div>
+		</div>
+	</aside>
 </div>
 
 <style>

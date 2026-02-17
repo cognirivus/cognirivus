@@ -544,15 +544,41 @@ const schema = defineSchema({
 		question_no: v.number(),
 		tags: v.array(v.string()),
 		search_text: v.string(),
-		is_vectorised: v.boolean()
+		is_vectorised: v.boolean(),
+		ragEntryId: v.optional(v.string()),
+		is_similarity_cached: v.optional(v.boolean()),
+		similarity_cache_count: v.optional(v.number()),
+		similarity_cache_updated_at: v.optional(v.number()),
+		similarity_cache_model_id: v.optional(v.string()),
+		similarity_cache_dimension: v.optional(v.number()),
+		similarity_cache_namespace_version: v.optional(v.number())
 	})
 		.index('by_exam', ['exam'])
 		.index('by_year', ['year'])
 		.index('by_mcq_type', ['mcq_type'])
+		.index('by_is_vectorised', ['is_vectorised'])
+		.index('by_is_similarity_cached', ['is_similarity_cached'])
 		.searchIndex('search_question', {
 			searchField: 'question',
 			filterFields: ['exam', 'mcq_type']
 		}),
+	mcq_similarities: defineTable({
+		mcqId: v.id('mcqs'),
+		relatedMcqId: v.id('mcqs'),
+		score: v.number(),
+		rank: v.number(),
+		source: v.union(v.literal('auto'), v.literal('manual')),
+		modelId: v.string(),
+		dimension: v.number(),
+		namespace: v.string(),
+		namespaceVersion: v.number(),
+		generatedAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_mcq_and_rank', ['mcqId', 'rank'])
+		.index('by_mcq_and_related', ['mcqId', 'relatedMcqId'])
+		.index('by_related_mcq', ['relatedMcqId'])
+		.index('by_generated_at', ['generatedAt']),
 	mcq_responses: defineTable({
 		userId: v.string(),
 		mcqId: v.id('mcqs'),
@@ -569,6 +595,15 @@ const schema = defineSchema({
 		years: v.array(v.number()),
 		tags: v.array(v.string()),
 		types: v.array(v.string()),
+		updatedAt: v.number()
+	}).index('by_type', ['type']),
+	mcq_stats: defineTable({
+		type: v.literal('aggregate'),
+		total: v.number(),
+		vectorised: v.number(),
+		pending: v.number(),
+		similarityCached: v.number(),
+		similarityPending: v.number(),
 		updatedAt: v.number()
 	}).index('by_type', ['type'])
 });
