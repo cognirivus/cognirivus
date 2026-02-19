@@ -2,17 +2,11 @@
 	import { useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
 	import { Badge } from '$lib/components/ui/badge';
 	import GroupPresenceWidget from '$lib/components/GroupPresenceWidget.svelte';
 	import {
 		Search,
-		ChevronRight,
-		ChevronDown,
-		Check,
 		X,
-		Filter,
-		RotateCcw,
 		Users,
 		FileText,
 		BookOpen,
@@ -23,20 +17,18 @@
 		LayoutDashboard,
 		MessageSquare,
 		Share2,
-		ArrowLeft,
+		Tag,
 		Settings,
-		Copy,
 		Clock,
 		ShieldCheck
 	} from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
+	import { resolve } from '$app/paths';
 	import { Separator } from '$lib/components/ui/separator';
 	import { Loader } from '$lib/components/prompt-kit/loader/index.js';
 	import { browser } from '$app/environment';
 	import type { Id } from '$convex/_generated/dataModel';
-	import { toast } from 'svelte-sonner';
 
 	let { children } = $props();
 
@@ -81,9 +73,16 @@
 	);
 
 	// Filter state from URL
+	const selectedView = $derived(page.url.searchParams.get('view') || 'shared');
 	const selectedType = $derived(page.url.searchParams.get('type') || 'all');
 	const sharedBy = $derived(page.url.searchParams.get('sharedBy') || 'all');
+	const selectedTag = $derived(page.url.searchParams.get('tag') || 'all');
 	const search = $derived(page.url.searchParams.get('q') || '');
+
+	const postTagsQuery = useQuery((api as any).group_posts.listTags, () =>
+		page.url.pathname === `/groups/${groupId}` ? { groupId } : 'skip'
+	);
+	const postTags = $derived(postTagsQuery.data ?? []);
 
 	let searchInput = $state('');
 	$effect(() => {
@@ -96,7 +95,7 @@
 			if (value === null || value === 'all') params.delete(key);
 			else params.set(key, value);
 		});
-		goto(`/groups/${groupId}?${params.toString()}`, { noScroll: true, keepFocus: true });
+		goto(resolve(`/groups/${groupId}?${params.toString()}`), { noScroll: true, keepFocus: true });
 		if (isMobile) {
 			isSidebarOpen = false;
 			isRightSidebarOpen = false;
@@ -107,17 +106,10 @@
 		updateParams({ q: searchInput || null });
 	}
 
-	function copyInviteCode() {
-		if (group?.inviteCode) {
-			navigator.clipboard.writeText(group.inviteCode);
-			toast.success('Invite code copied to clipboard!');
-		}
-	}
-
 	const isPending = $derived(group?.membershipStatus === 'pending');
 
 	function navigate(path: string) {
-		goto(`/groups/${groupId}${path}`, { noScroll: true });
+		goto(resolve(`/groups/${groupId}${path}`), { noScroll: true });
 		if (isMobile) {
 			isSidebarOpen = false;
 			isRightSidebarOpen = false;
@@ -188,12 +180,22 @@
 				<button
 					onclick={() => navigate('/chat')}
 					class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-bold transition-all hover:bg-accent
-                    {page.url.pathname.includes('/chat')
+	                    {page.url.pathname.includes('/chat')
 						? 'bg-accent text-primary'
 						: 'text-muted-foreground'}"
 				>
 					<MessageSquare class="h-4 w-4" />
 					Chat
+				</button>
+				<button
+					onclick={() => navigate('/posts/mine')}
+					class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-bold transition-all hover:bg-accent
+	                    {page.url.pathname.includes('/posts/mine')
+						? 'bg-accent text-primary'
+						: 'text-muted-foreground'}"
+				>
+					<FileText class="h-4 w-4" />
+					My Posts
 				</button>
 				{#if group?.membershipRole === 'admin' || group?.ownerId === currentUserId}
 					<button
@@ -224,37 +226,71 @@
 				{/if}
 			</div>
 
-			{#if !isPending}
+			{#if !isPending && page.url.pathname === `/groups/${groupId}`}
 				<Separator class="opacity-50" />
 
-				<!-- Type Filters -->
-				<div class="space-y-3">
-					<h3 class="px-2 text-[10px] font-black tracking-widest text-muted-foreground uppercase">
-						Content Type
-					</h3>
-					<div class="space-y-1">
-						{#each [{ id: 'all', name: 'All Shared', icon: Share2 }, { id: 'content', name: 'Knowledge Base', icon: BookOpen }, { id: 'blog', name: 'Blogs', icon: FileText }, { id: 'news', name: 'News Updates', icon: Zap }] as type}
-							<button
-								onclick={() => updateParams({ type: type.id })}
-								class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-bold transition-all hover:bg-accent
-								{selectedType === type.id ? 'bg-accent text-primary' : 'text-muted-foreground'}"
-							>
-								<type.icon class="h-4 w-4" />
-								{type.name}
-								{#if selectedType === type.id}
-									<div class="ml-auto h-1.5 w-1.5 rounded-full bg-primary"></div>
-								{/if}
-							</button>
-						{/each}
+				{#if selectedView === 'shared'}
+					<!-- Type Filters -->
+					<div class="space-y-3">
+						<h3 class="px-2 text-[10px] font-black tracking-widest text-muted-foreground uppercase">
+							Content Type
+						</h3>
+						<div class="space-y-1">
+							{#each [{ id: 'all', name: 'All Shared', icon: Share2 }, { id: 'content', name: 'Knowledge Base', icon: BookOpen }, { id: 'blog', name: 'Blogs', icon: FileText }, { id: 'news', name: 'News Updates', icon: Zap }] as type (type.id)}
+								<button
+									onclick={() => updateParams({ type: type.id })}
+									class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-bold transition-all hover:bg-accent
+									{selectedType === type.id ? 'bg-accent text-primary' : 'text-muted-foreground'}"
+								>
+									<type.icon class="h-4 w-4" />
+									{type.name}
+									{#if selectedType === type.id}
+										<div class="ml-auto h-1.5 w-1.5 rounded-full bg-primary"></div>
+									{/if}
+								</button>
+							{/each}
+						</div>
 					</div>
-				</div>
+				{:else}
+					<!-- Tag Filters -->
+					<div class="space-y-3">
+						<h3 class="px-2 text-[10px] font-black tracking-widest text-muted-foreground uppercase">
+							Post Tags
+						</h3>
+						<div class="space-y-1">
+							<button
+								onclick={() => updateParams({ tag: 'all' })}
+								class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-bold transition-all hover:bg-accent
+								{selectedTag === 'all' ? 'bg-accent text-primary' : 'text-muted-foreground'}"
+							>
+								<Tag class="h-4 w-4" />
+								All tags
+							</button>
+							{#if postTagsQuery.isLoading}
+								<p class="px-3 py-2 text-xs text-muted-foreground">Loading tags...</p>
+							{:else}
+								{#each postTags as item (item.tag)}
+									<button
+										onclick={() => updateParams({ tag: item.tag })}
+										class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-bold transition-all hover:bg-accent
+										{selectedTag === item.tag ? 'bg-accent text-primary' : 'text-muted-foreground'}"
+									>
+										<Tag class="h-4 w-4" />
+										<span class="truncate">#{item.tag}</span>
+										<span class="ml-auto text-[10px] opacity-70">{item.count}</span>
+									</button>
+								{/each}
+							{/if}
+						</div>
+					</div>
+				{/if}
 
 				<Separator class="opacity-50" />
 
 				<!-- Shared By Filters -->
 				<div class="space-y-3">
 					<h3 class="px-2 text-[10px] font-black tracking-widest text-muted-foreground uppercase">
-						Shared By
+						{selectedView === 'posts' ? 'Authors' : 'Shared By'}
 					</h3>
 					<div class="space-y-1">
 						<button
@@ -266,7 +302,7 @@
 							Everyone
 						</button>
 						{#if analytics}
-							{#each analytics.memberStats as member}
+							{#each analytics.memberStats as member (member.userId)}
 								<button
 									onclick={() => updateParams({ sharedBy: member.userId })}
 									class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-bold transition-all hover:bg-accent
@@ -344,7 +380,9 @@
 							/>
 							<input
 								type="text"
-								placeholder="Search in group..."
+								placeholder={selectedView === 'posts'
+									? 'Search posts...'
+									: 'Search shared content...'}
 								bind:value={searchInput}
 								onkeydown={(e) => e.key === 'Enter' && handleSearch()}
 								class="h-7 w-full border-none bg-muted/30 pr-8 pl-9 text-xs focus-visible:ring-primary/20"
@@ -378,7 +416,9 @@
 				</header>
 			{/if}
 
-			<div class="flex-1 {page.url.pathname.includes('/chat') ? 'overflow-hidden' : 'overflow-y-auto'}">
+			<div
+				class="flex-1 {page.url.pathname.includes('/chat') ? 'overflow-hidden' : 'overflow-y-auto'}"
+			>
 				{@render children()}
 			</div>
 		{/if}

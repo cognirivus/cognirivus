@@ -32,7 +32,9 @@ export async function detectIntent(
 	const availableAgents = await ctx.runQuery(internal.agents.queries.internalListEnabledForRole, {
 		userRole
 	});
-	const agentDescriptions = availableAgents.map((a) => `- ${a.name}: ${a.description}`).join('\n');
+	const agentDescriptions = availableAgents
+		.map((a: { name: string; description: string }) => `- ${a.name}: ${a.description}`)
+		.join('\n');
 
 	// Build classification prompt
 	const systemPrompt = `You are an intent classification system for Cognirivus, an AI learning platform.
@@ -117,7 +119,7 @@ ${history
 
 		// Validate agent exists and user has access
 		const agentName = result.agent || 'chat';
-		const validAgent = availableAgents.find((a) => a.name === agentName);
+		const validAgent = availableAgents.find((a: { name: string }) => a.name === agentName);
 
 		if (!validAgent) {
 			return {
@@ -155,7 +157,7 @@ async function fallbackToRuleMatch(ctx: ActionCtx, query: string): Promise<Inten
 		for (const rule of dbRules) {
 			// Check if any pattern keyword matches
 			const patterns = rule.pattern.toLowerCase().split('|');
-			if (patterns.some((pattern) => lowerQuery.includes(pattern.trim()))) {
+			if (patterns.some((pattern: string) => lowerQuery.includes(pattern.trim()))) {
 				return {
 					primaryAgent: rule.agentName,
 					confidence: rule.confidence,
@@ -220,7 +222,7 @@ export async function orchestrateMultiAgent(
 		threadId: threadId as Id<'threads'>,
 		limit: 100
 	});
-	const messages = allMessages.filter((m) => (m as any)._id !== messageId);
+	const messages = allMessages.filter((m: MessageDoc) => m._id !== messageId);
 
 	// Check permission
 	const permission = await checkAgentPermission(ctx, intent.primaryAgent, userRole);

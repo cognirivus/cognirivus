@@ -3,6 +3,7 @@ import { v } from 'convex/values';
 import { authComponent } from './auth';
 import type { Id } from './_generated/dataModel';
 import { rateLimiter } from './lib/rateLimits';
+import { r2 } from './lib/r2';
 
 export const create = mutation({
 	args: {
@@ -628,14 +629,48 @@ export const remove = mutation({
 			.collect();
 		for (const message of chatMessages) await ctx.db.delete(message._id);
 
-		// 5. Delete memberships
+		// 5. Delete group posts and interactions
+		const groupPostCommentReactions = await ctx.db
+			.query('group_post_comment_reactions')
+			.withIndex('by_group', (q) => q.eq('groupId', groupId))
+			.collect();
+		for (const reaction of groupPostCommentReactions) await ctx.db.delete(reaction._id);
+
+		const groupPostComments = await ctx.db
+			.query('group_post_comments')
+			.withIndex('by_group', (q) => q.eq('groupId', groupId))
+			.collect();
+		for (const comment of groupPostComments) await ctx.db.delete(comment._id);
+
+		const groupPostReactions = await ctx.db
+			.query('group_post_reactions')
+			.withIndex('by_group', (q) => q.eq('groupId', groupId))
+			.collect();
+		for (const reaction of groupPostReactions) await ctx.db.delete(reaction._id);
+
+		const groupPostTags = await ctx.db
+			.query('group_post_tags')
+			.withIndex('by_group_tag', (q) => q.eq('groupId', groupId))
+			.collect();
+		for (const tag of groupPostTags) await ctx.db.delete(tag._id);
+
+		const groupPosts = await ctx.db
+			.query('group_posts')
+			.withIndex('by_group_created_at', (q) => q.eq('groupId', groupId))
+			.collect();
+		for (const post of groupPosts) {
+			await r2.deleteObject(ctx, post.r2Key);
+			await ctx.db.delete(post._id);
+		}
+
+		// 6. Delete memberships
 		const memberships = await ctx.db
 			.query('group_memberships')
 			.withIndex('by_group', (q) => q.eq('groupId', groupId))
 			.collect();
 		for (const m of memberships) await ctx.db.delete(m._id);
 
-		// 6. Finally, delete the group itself
+		// 7. Finally, delete the group itself
 		await ctx.db.delete(groupId);
 	}
 });

@@ -32,6 +32,7 @@ import type * as currentAffairs from "../currentAffairs.js";
 import type * as extraction from "../extraction.js";
 import type * as flashcards from "../flashcards.js";
 import type * as group_chat from "../group_chat.js";
+import type * as group_posts from "../group_posts.js";
 import type * as groups from "../groups.js";
 import type * as highlights from "../highlights.js";
 import type * as http from "../http.js";
@@ -106,6 +107,7 @@ declare const fullApi: ApiFromModules<{
   extraction: typeof extraction;
   flashcards: typeof flashcards;
   group_chat: typeof group_chat;
+  group_posts: typeof group_posts;
   groups: typeof groups;
   highlights: typeof highlights;
   http: typeof http;
