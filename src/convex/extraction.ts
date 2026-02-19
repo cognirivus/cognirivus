@@ -177,21 +177,35 @@ export const getStats = query({
 	handler: async (ctx) => {
 		await checkAdmin(ctx);
 
-		const allJobs = await ctx.db.query('extraction_jobs').collect();
-
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
 		const todayStart = today.getTime();
 
-		const todayJobs = allJobs.filter((j) => j.createdAt >= todayStart);
+		let total = 0;
+		let todayTotal = 0;
+		let pending = 0;
+		let running = 0;
+		let todayCompleted = 0;
+		let todayFailed = 0;
+
+		for await (const job of ctx.db.query('extraction_jobs')) {
+			total++;
+			if (job.status === 'pending') pending++;
+			if (job.status === 'running') running++;
+			if (job.createdAt >= todayStart) {
+				todayTotal++;
+				if (job.status === 'completed') todayCompleted++;
+				else if (job.status === 'failed') todayFailed++;
+			}
+		}
 
 		return {
-			total: allJobs.length,
-			todayTotal: todayJobs.length,
-			pending: allJobs.filter((j) => j.status === 'pending').length,
-			running: allJobs.filter((j) => j.status === 'running').length,
-			completed: todayJobs.filter((j) => j.status === 'completed').length,
-			failed: todayJobs.filter((j) => j.status === 'failed').length
+			total,
+			todayTotal,
+			pending,
+			running,
+			completed: todayCompleted,
+			failed: todayFailed
 		};
 	}
 });

@@ -17,6 +17,22 @@ import {
 } from './lib/openrouter';
 import { authComponent } from './auth';
 
+const MEMORY_SEARCH_DEFAULT_LIMIT = 5;
+const MEMORY_SEARCH_DEFAULT_SIMILARITY_THRESHOLD = 0.6;
+const MEMORY_EXTRACT_DUPLICATE_THRESHOLD = 0.98;
+const MEMORY_EXTRACT_NEW_THRESHOLD = 0.6;
+
+function normalizeLimit(limit?: number) {
+	if (typeof limit !== 'number' || !Number.isFinite(limit)) return MEMORY_SEARCH_DEFAULT_LIMIT;
+	return Math.max(1, Math.min(20, Math.trunc(limit)));
+}
+
+function normalizeSimilarityThreshold(threshold?: number) {
+	if (typeof threshold !== 'number' || !Number.isFinite(threshold))
+		return MEMORY_SEARCH_DEFAULT_SIMILARITY_THRESHOLD;
+	return Math.max(0, Math.min(1, threshold));
+}
+
 /**
  * Internal mutation to store a single user memory.
  *
@@ -73,9 +89,12 @@ export const addMemory = internalAction({
 	args: {
 		userId: v.string(),
 		messageId: v.id('messages'),
-		messageText: v.string()
+		messageText: v.string(),
+		similarityThreshold: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
+		const similarityThreshold = normalizeSimilarityThreshold(args.similarityThreshold);
+
 		// 1. Extract potential memories
 		const modelConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'memory_extraction' });
 		const { memories: extracted, generationId } = await extractMemories(
@@ -144,9 +163,11 @@ export const addMemory = internalAction({
 					let existingIdToReplace = null;
 
 					if (topMatch) {
-						if (topMatch._score >= 0.98) {
+						if (
+							topMatch._score >= Math.max(similarityThreshold, MEMORY_EXTRACT_DUPLICATE_THRESHOLD)
+						) {
 							decision = 'duplicate';
-						} else if (topMatch._score < 0.6) {
+						} else if (topMatch._score < MEMORY_EXTRACT_NEW_THRESHOLD) {
 							decision = 'new';
 						} else {
 							// Stage 2: AI Judge
@@ -223,17 +244,21 @@ export const internalSearch = action({
 	args: {
 		userId: v.string(),
 		queryEmbedding: v.array(v.number()),
-		limit: v.optional(v.number())
+		limit: v.optional(v.number()),
+		similarityThreshold: v.optional(v.number())
 	},
 	handler: async (ctx, args) => {
+		const limit = normalizeLimit(args.limit);
+		const similarityThreshold = normalizeSimilarityThreshold(args.similarityThreshold);
+
 		// Vector search
 		const results = await ctx.vectorSearch('user_memories', 'by_embedding', {
 			vector: args.queryEmbedding,
-			limit: args.limit || 5,
+			limit,
 			filter: (q) => q.eq('userId', args.userId)
 		});
 
-		return results;
+		return results.filter((r) => r._score >= similarityThreshold);
 	}
 });
 
@@ -252,9 +277,12 @@ export const searchMemories = internalAction({
 	args: {
 		userId: v.string(),
 		queryText: v.string(),
-		limit: v.optional(v.number())
+		limit: v.optional(v.number()),
+		similarityThreshold: v.optional(v.number())
 	},
 	handler: async (ctx, args): Promise<any[]> => {
+		const limit = normalizeLimit(args.limit);
+		const similarityThreshold = normalizeSimilarityThreshold(args.similarityThreshold);
 		const embedConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'embeddings' });
 		const { embedding, generationId } = await createEmbedding(args.queryText, embedConfig?.modelId);
 
@@ -275,21 +303,22 @@ export const searchMemories = internalAction({
 
 		const results = await ctx.vectorSearch('user_memories', 'by_embedding', {
 			vector: embedding,
-			limit: args.limit || 5,
+			limit,
 			filter: (q) => q.eq('userId', args.userId)
 		});
+		const filteredResults = results.filter((r) => r._score >= similarityThreshold);
 
-		if (results.length === 0) return [];
+		if (filteredResults.length === 0) return [];
 
 		// Fetch the actual memory text
-		const memoryIds = results.map((r) => r._id);
+		const memoryIds = filteredResults.map((r) => r._id);
 		const memories = await ctx.runQuery(internal.memories.internalGetGetMemories, {
 			ids: memoryIds
 		});
 
 		// Merge scores with memories
 		return memories.map((mem: any) => {
-			const result = results.find((r) => r._id === mem._id);
+			const result = filteredResults.find((r) => r._id === mem._id);
 			return {
 				...mem,
 				_score: result?._score ?? 0
@@ -333,17 +362,15 @@ export const list = query({
 		const memories = await ctx.db
 			.query('user_memories')
 			.withIndex('by_user', (q) => q.eq('userId', user._id))
-			.collect();
+			.order('desc')
+			.take(100);
 
-		// Sort by createdAt descending and omit embedding for frontend
-		return memories
-			.sort((a, b) => b.createdAt - a.createdAt)
-			.map((m) => ({
-				_id: m._id,
-				text: m.text,
-				category: m.category,
-				createdAt: m.createdAt
-			}));
+		return memories.map((m) => ({
+			_id: m._id,
+			text: m.text,
+			category: m.category,
+			createdAt: m.createdAt
+		}));
 	}
 });
 
@@ -433,11 +460,12 @@ export const getEnrichedContext = internalAction({
 				content: v.string()
 			})
 		),
-		limit: v.optional(v.number())
+		limit: v.optional(v.number()),
+		similarityThreshold: v.optional(v.number())
 	},
 	handler: async (
 		ctx,
-		{ userId, history, limit }
+		{ userId, history, limit, similarityThreshold }
 	): Promise<{
 		formulatedQuery: string;
 		relevantMemories: any[];
@@ -478,7 +506,8 @@ Return ONLY the rephrased query text. If the message is already standalone, retu
 		const relevantMemories = await ctx.runAction(internal.memories.searchMemories, {
 			userId,
 			queryText: formulatedQuery,
-			limit: limit || 5
+			limit: limit || MEMORY_SEARCH_DEFAULT_LIMIT,
+			similarityThreshold
 		});
 
 		return {

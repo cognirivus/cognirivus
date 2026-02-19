@@ -17,6 +17,11 @@ export const searchMemoriesTool: ToolDefinition = {
 				type: 'number',
 				description: 'Maximum number of memories to return (default: 5)',
 				default: 5
+			},
+			similarityThreshold: {
+				type: 'number',
+				description: 'Minimum similarity score between 0 and 1 to include a memory (default: 0.6).',
+				default: 0.6
 			}
 		},
 		required: ['query']
@@ -25,7 +30,8 @@ export const searchMemoriesTool: ToolDefinition = {
 		const results = await ctx.runAction(internal.memories.searchMemories, {
 			userId: session.userId,
 			queryText: args.query,
-			limit: args.limit || 5
+			limit: args.limit || 5,
+			similarityThreshold: args.similarityThreshold
 		});
 
 		return {

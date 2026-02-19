@@ -1,7 +1,7 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import { authComponent } from './auth';
-import type { Id } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import { rateLimiter } from './lib/rateLimits';
 import { r2 } from './lib/r2';
 
@@ -145,18 +145,32 @@ export const get = query({
 export const searchPublicGroups = query({
 	args: { query: v.string() },
 	handler: async (ctx, args) => {
-		const searchTerm = args.query.toLowerCase();
+		const rawQuery = args.query.trim();
+		if (!rawQuery) return [];
+
+		const searchTerm = rawQuery.startsWith('@') ? rawQuery.slice(1).trim() : rawQuery;
 		if (!searchTerm) return [];
 
-		const publicGroups = await ctx.db
-			.query('groups')
-			.withIndex('by_public', (q) => q.eq('isPublic', true))
-			.collect();
+		const normalized = searchTerm.toLowerCase();
+		const matchedById = new Map<Id<'groups'>, Doc<'groups'>>();
 
-		return publicGroups.filter(
-			(g) =>
-				g.name.toLowerCase().includes(searchTerm) || g.groupname.toLowerCase().includes(searchTerm)
-		);
+		const nameMatches = await ctx.db
+			.query('groups')
+			.withSearchIndex('search_name', (q) => q.search('name', searchTerm).eq('isPublic', true))
+			.take(20);
+		for (const group of nameMatches) {
+			matchedById.set(group._id, group);
+		}
+
+		for await (const group of ctx.db
+			.query('groups')
+			.withIndex('by_public', (q) => q.eq('isPublic', true))) {
+			if (matchedById.size >= 20) break;
+			if (!group.groupname.toLowerCase().includes(normalized)) continue;
+			matchedById.set(group._id, group);
+		}
+
+		return Array.from(matchedById.values()).slice(0, 20);
 	}
 });
 
@@ -341,26 +355,26 @@ export const shareContent = mutation({
 		if (args.contentId) {
 			existing = await ctx.db
 				.query('group_shared_content')
-				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
-				.filter((q) => q.eq(q.field('contentId'), args.contentId))
+				.withIndex('by_group_content', (q) =>
+					q.eq('groupId', args.groupId).eq('contentId', args.contentId!)
+				)
 				.unique();
 		} else if (args.blogId) {
 			existing = await ctx.db
 				.query('group_shared_content')
-				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
-				.filter((q) => q.eq(q.field('blogId'), args.blogId))
+				.withIndex('by_group_blog', (q) => q.eq('groupId', args.groupId).eq('blogId', args.blogId!))
 				.unique();
 		} else if (args.newsId) {
 			existing = await ctx.db
 				.query('group_shared_content')
-				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
-				.filter((q) => q.eq(q.field('newsId'), args.newsId))
+				.withIndex('by_group_news', (q) => q.eq('groupId', args.groupId).eq('newsId', args.newsId!))
 				.unique();
 		} else if (args.entityId) {
 			existing = await ctx.db
 				.query('group_shared_content')
-				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
-				.filter((q) => q.eq(q.field('entityId'), args.entityId))
+				.withIndex('by_group_entity', (q) =>
+					q.eq('groupId', args.groupId).eq('entityId', args.entityId!)
+				)
 				.unique();
 		}
 

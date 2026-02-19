@@ -88,12 +88,9 @@ export const remove = mutation({
 		}
 
 		// Delete all messages in the thread
-		const messages = await ctx.db
+		for await (const message of ctx.db
 			.query('messages')
-			.withIndex('by_thread', (q) => q.eq('threadId', id))
-			.collect();
-
-		for (const message of messages) {
+			.withIndex('by_thread', (q) => q.eq('threadId', id))) {
 			await ctx.db.delete(message._id);
 		}
 
@@ -180,22 +177,16 @@ export const deleteAll = mutation({
 		await rateLimiter.limit(ctx, 'deleteAllThreads', { key: user._id, throws: true });
 
 		// 1. Delete all messages for this user (using by_user index for speed)
-		const messages = await ctx.db
+		for await (const message of ctx.db
 			.query('messages')
-			.withIndex('by_user', (q) => q.eq('userId', user._id))
-			.collect();
-
-		for (const message of messages) {
+			.withIndex('by_user', (q) => q.eq('userId', user._id))) {
 			await ctx.db.delete(message._id);
 		}
 
 		// 2. Delete all threads for this user
-		const threads = await ctx.db
+		for await (const thread of ctx.db
 			.query('threads')
-			.withIndex('by_user', (q) => q.eq('userId', user._id))
-			.collect();
-
-		for (const thread of threads) {
+			.withIndex('by_user', (q) => q.eq('userId', user._id))) {
 			await ctx.db.delete(thread._id);
 		}
 	}

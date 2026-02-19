@@ -10,11 +10,12 @@ import {
 	type MutationCtx
 } from './_generated/server';
 import { authComponent } from './auth';
+import { paginationOptsValidator } from 'convex/server';
 
 import { TableAggregate } from '@convex-dev/aggregate';
 import { components, internal, api } from './_generated/api';
 import type { DataModel, Id } from './_generated/dataModel';
-import { rag, RAG_CONFIG } from './rag';
+import { getConfiguredRag, RAG_CONFIG } from './rag';
 import { r2 } from './lib/r2';
 import { rateLimiter } from './lib/rateLimits';
 
@@ -118,6 +119,7 @@ export const syncRag = internalAction({
 	args: { blogId: v.id('blogs'), title: v.string(), body: v.string() },
 	handler: async (ctx, args) => {
 		try {
+			const { rag } = await getConfiguredRag(ctx);
 			const { entryId, replacedEntry } = await rag.add(ctx, {
 				namespace: RAG_CONFIG.namespace,
 				key: args.blogId,
@@ -142,6 +144,7 @@ export const backfillRag = internalAction({
 	args: {},
 	handler: async (ctx) => {
 		const blogs = await ctx.runQuery(internal.blogs.listInternal);
+		const { rag } = await getConfiguredRag(ctx);
 		for (const blog of blogs) {
 			try {
 				let body = blog.snippet;
@@ -150,7 +153,7 @@ export const backfillRag = internalAction({
 					body = await (await fetch(url)).text();
 				}
 
-				const { entryId } = await rag.add(ctx, {
+				const { entryId, replacedEntry } = await rag.add(ctx, {
 					namespace: RAG_CONFIG.namespace,
 					key: blog._id,
 					text: `${blog.title}\n\n${body}`
@@ -160,6 +163,10 @@ export const backfillRag = internalAction({
 					blogId: blog._id,
 					ragEntryId: entryId
 				});
+
+				if (replacedEntry) {
+					await rag.delete(ctx, { entryId: replacedEntry.entryId });
+				}
 			} catch (e) {
 				console.error(`Failed to backfill RAG for blog ${blog._id}:`, e);
 			}
@@ -171,7 +178,8 @@ export const deleteRag = internalAction({
 	args: { ragEntryId: v.string() },
 	handler: async (ctx, args) => {
 		try {
-			await rag.delete(ctx, { entryId: args.ragEntryId as any });
+			const { rag } = await getConfiguredRag(ctx);
+			await rag.delete(ctx, { entryId: args.ragEntryId as never });
 		} catch (e) {
 			console.error(`Failed to delete RAG entry ${args.ragEntryId}:`, e);
 		}
@@ -182,7 +190,6 @@ export const cleanupRag = internalAction({
 	args: {},
 	handler: async (ctx) => {
 		const blogs = await ctx.runQuery(internal.blogs.listInternal);
-		let syncedCount = 0;
 
 		for (const blog of blogs) {
 			if (!blog.ragEntryId) {
@@ -197,7 +204,6 @@ export const cleanupRag = internalAction({
 					title: blog.title,
 					body
 				});
-				syncedCount++;
 			}
 		}
 	}
@@ -223,17 +229,22 @@ export const searchInternal = internalQuery({
 });
 
 export const list = query({
-	args: { onlyPublished: v.boolean() },
+	args: { onlyPublished: v.boolean(), limit: v.optional(v.number()) },
 	handler: async (ctx, args) => {
+		const limit =
+			typeof args.limit === 'number' && Number.isFinite(args.limit)
+				? Math.max(1, Math.min(200, Math.trunc(args.limit)))
+				: 100;
+
 		let blogs;
 		if (args.onlyPublished) {
 			blogs = await ctx.db
 				.query('blogs')
 				.withIndex('by_published', (q) => q.eq('published', true))
 				.order('desc')
-				.collect();
+				.take(limit);
 		} else {
-			blogs = await ctx.db.query('blogs').order('desc').collect();
+			blogs = await ctx.db.query('blogs').order('desc').take(limit);
 		}
 
 		const enrichedBlogs = await Promise.all(
@@ -275,6 +286,64 @@ export const list = query({
 		);
 
 		return enrichedBlogs;
+	}
+});
+
+export const listPaginated = query({
+	args: {
+		onlyPublished: v.boolean(),
+		paginationOpts: paginationOptsValidator
+	},
+	handler: async (ctx, args) => {
+		const result = args.onlyPublished
+			? await ctx.db
+					.query('blogs')
+					.withIndex('by_published', (q) => q.eq('published', true))
+					.order('desc')
+					.paginate(args.paginationOpts)
+			: await ctx.db.query('blogs').order('desc').paginate(args.paginationOpts);
+
+		const enrichedPage = await Promise.all(
+			result.page.map(async (blog) => {
+				const [likes, dislikes, commentCount] = await Promise.all([
+					likesAggregate.count(ctx, {
+						bounds: {
+							lower: { key: blog._id, inclusive: true },
+							upper: { key: blog._id, inclusive: true }
+						}
+					}),
+					dislikesAggregate.count(ctx, {
+						bounds: {
+							lower: { key: blog._id, inclusive: true },
+							upper: { key: blog._id, inclusive: true }
+						}
+					}),
+					commentsAggregate.count(ctx, {
+						bounds: {
+							lower: { key: blog._id, inclusive: true },
+							upper: { key: blog._id, inclusive: true }
+						}
+					})
+				]);
+				let bodyUrl = null;
+				if (blog.r2Key) {
+					bodyUrl = await r2.getUrl(blog.r2Key);
+				}
+				return {
+					...blog,
+					body: blog.snippet,
+					bodyUrl,
+					likes,
+					dislikes,
+					commentCount
+				};
+			})
+		);
+
+		return {
+			...result,
+			page: enrichedPage
+		};
 	}
 });
 
@@ -417,10 +486,8 @@ export const update = action({
 		const blog = await ctx.runQuery(api.blogs.get, { id: args.id });
 		if (!blog) throw new Error('Blog not found');
 
-		let r2Key = blog.r2Key;
-		if (!r2Key) {
-			r2Key = `blogs/${args.id}-${Date.now()}.txt`;
-		}
+		const previousR2Key = blog.r2Key;
+		const r2Key = `blogs/${args.id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}.txt`;
 
 		await r2.store(ctx, new Blob([args.body], { type: 'text/plain' }), {
 			key: r2Key,
@@ -434,6 +501,14 @@ export const update = action({
 			published: args.published,
 			r2Key
 		});
+
+		if (previousR2Key && previousR2Key !== r2Key) {
+			try {
+				await r2.deleteObject(ctx, previousR2Key);
+			} catch (e) {
+				console.error(`Failed to delete previous blog body ${previousR2Key}:`, e);
+			}
+		}
 
 		await ctx.scheduler.runAfter(0, internal.blogs.syncRag, {
 			blogId: args.id,

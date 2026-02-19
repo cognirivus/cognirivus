@@ -3,6 +3,14 @@ import type { ToolDefinition } from './types';
 import { internal, api } from '../_generated/api';
 import { extractMemories, createEmbedding, getGenerationStats } from '../lib/openrouter';
 
+const DEFAULT_MEMORY_DUPLICATE_THRESHOLD = 0.95;
+
+function normalizeSimilarityThreshold(value?: number) {
+	if (typeof value !== 'number' || !Number.isFinite(value))
+		return DEFAULT_MEMORY_DUPLICATE_THRESHOLD;
+	return Math.max(0, Math.min(1, value));
+}
+
 export const extractMemoriesTool: ToolDefinition = {
 	name: 'extractMemories',
 	description:
@@ -13,12 +21,19 @@ export const extractMemoriesTool: ToolDefinition = {
 			text: {
 				type: 'string',
 				description: 'The text content to extract memories from'
+			},
+			similarityThreshold: {
+				type: 'number',
+				description:
+					'Minimum similarity score between 0 and 1 to treat extracted memory as duplicate (default: 0.95).',
+				default: 0.95
 			}
 		},
 		required: ['text']
 	},
 	handler: async (ctx, args, session) => {
 		const userId = session.userId;
+		const similarityThreshold = normalizeSimilarityThreshold(args.similarityThreshold);
 
 		// 1. Extract memories using AI
 		const modelConfig = await ctx.runQuery(api.tasks.getConfig, { task: 'memory_extraction' });
@@ -90,7 +105,7 @@ export const extractMemoriesTool: ToolDefinition = {
 				const topMatch = matches[0];
 				let shouldSave = true;
 
-				if (topMatch && topMatch._score >= 0.95) {
+				if (topMatch && topMatch._score >= similarityThreshold) {
 					// Too similar - skip as duplicate
 					shouldSave = false;
 				}

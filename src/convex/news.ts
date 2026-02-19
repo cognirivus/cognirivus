@@ -151,10 +151,12 @@ export const listWithContentCount = query({
 
 		return await Promise.all(
 			news.map(async (item) => {
-				const contentItems = await ctx.db
+				let contentCount = 0;
+				for await (const _ of ctx.db
 					.query('content')
-					.withIndex('by_newsId', (q) => q.eq('newsId', item._id))
-					.collect();
+					.withIndex('by_newsId', (q) => q.eq('newsId', item._id))) {
+					contentCount++;
+				}
 
 				let bodyUrl = null;
 				if (item.r2Key) {
@@ -165,7 +167,7 @@ export const listWithContentCount = query({
 					...item,
 					body: item.snippet,
 					bodyUrl,
-					contentCount: contentItems.length
+					contentCount
 				};
 			})
 		);
@@ -179,10 +181,12 @@ export const listPaginated = query({
 
 		const enrichedPage = await Promise.all(
 			result.page.map(async (item) => {
-				const contentItems = await ctx.db
+				let contentCount = 0;
+				for await (const _ of ctx.db
 					.query('content')
-					.withIndex('by_newsId', (q) => q.eq('newsId', item._id))
-					.collect();
+					.withIndex('by_newsId', (q) => q.eq('newsId', item._id))) {
+					contentCount++;
+				}
 
 				let bodyUrl = null;
 				if (item.r2Key) {
@@ -193,7 +197,7 @@ export const listPaginated = query({
 					...item,
 					body: item.snippet,
 					bodyUrl,
-					contentCount: contentItems.length
+					contentCount
 				};
 			})
 		);

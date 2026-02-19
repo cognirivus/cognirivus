@@ -287,7 +287,8 @@ const schema = defineSchema({
 	})
 		.index('by_content', ['contentId'])
 		.index('by_content_user', ['contentId', 'userId'])
-		.index('by_group', ['groupId']),
+		.index('by_group', ['groupId'])
+		.index('by_group_content', ['groupId', 'contentId']),
 	content_comments: defineTable({
 		contentId: v.id('content'),
 		userId: v.string(),
@@ -300,7 +301,8 @@ const schema = defineSchema({
 		.index('by_content', ['contentId'])
 		.index('by_content_created_at', ['contentId', 'createdAt'])
 		.index('by_parent', ['parentId'])
-		.index('by_group', ['groupId']),
+		.index('by_group', ['groupId'])
+		.index('by_group_content', ['groupId', 'contentId']),
 	content_comment_reactions: defineTable({
 		commentId: v.id('content_comments'),
 		userId: v.string(),
@@ -309,7 +311,8 @@ const schema = defineSchema({
 	})
 		.index('by_comment', ['commentId'])
 		.index('by_comment_user', ['commentId', 'userId'])
-		.index('by_group', ['groupId']),
+		.index('by_group', ['groupId'])
+		.index('by_group_comment', ['groupId', 'commentId']),
 	extraction_jobs: defineTable({
 		sourceType: v.string(),
 		sourceIds: v.array(v.string()),
@@ -351,7 +354,11 @@ const schema = defineSchema({
 	})
 		.index('by_invite_code', ['inviteCode'])
 		.index('by_groupname', ['groupname'])
-		.index('by_public', ['isPublic']),
+		.index('by_public', ['isPublic'])
+		.searchIndex('search_name', {
+			searchField: 'name',
+			filterFields: ['isPublic']
+		}),
 	group_memberships: defineTable({
 		userId: v.string(),
 		groupId: v.id('groups'),
@@ -612,10 +619,30 @@ const schema = defineSchema({
 		.index('by_exam', ['exam'])
 		.index('by_year', ['year'])
 		.index('by_mcq_type', ['mcq_type'])
+		.index('by_is_vectorised', ['is_vectorised'])
+		.index('by_is_similarity_cached', ['is_similarity_cached'])
+		.index('by_exam_year', ['exam', 'year'])
 		.searchIndex('search_question', {
 			searchField: 'question',
-			filterFields: ['exam', 'mcq_type']
+			filterFields: ['exam', 'mcq_type', 'year']
 		}),
+	mcq_similarities: defineTable({
+		mcqId: v.id('mcqs'),
+		relatedMcqId: v.id('mcqs'),
+		score: v.number(),
+		rank: v.number(),
+		source: v.union(v.literal('auto'), v.literal('manual')),
+		modelId: v.string(),
+		dimension: v.number(),
+		namespace: v.string(),
+		namespaceVersion: v.number(),
+		generatedAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_mcq_and_rank', ['mcqId', 'rank'])
+		.index('by_mcq_and_related', ['mcqId', 'relatedMcqId'])
+		.index('by_related_mcq', ['relatedMcqId'])
+		.index('by_generated_at', ['generatedAt']),
 	mcq_responses: defineTable({
 		userId: v.string(),
 		mcqId: v.id('mcqs'),
@@ -632,6 +659,15 @@ const schema = defineSchema({
 		years: v.array(v.number()),
 		tags: v.array(v.string()),
 		types: v.array(v.string()),
+		updatedAt: v.number()
+	}).index('by_type', ['type']),
+	mcq_stats: defineTable({
+		type: v.literal('aggregate'),
+		total: v.number(),
+		vectorised: v.number(),
+		pending: v.number(),
+		similarityCached: v.number(),
+		similarityPending: v.number(),
 		updatedAt: v.number()
 	}).index('by_type', ['type'])
 });

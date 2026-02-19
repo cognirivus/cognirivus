@@ -232,12 +232,16 @@ export const getMessages = query({
 		const orderedMessages = messages.reverse();
 		const messageIds = orderedMessages.map((m) => m._id);
 
-		// Bulk fetch all reactions for the returned messages
-		const allReactions = await ctx.db
-			.query('group_chat_reactions')
-			.withIndex('by_group_message', (q) => q.eq('groupId', args.groupId))
-			.filter((q) => q.or(...messageIds.map((id) => q.eq(q.field('messageId'), id))))
-			.collect();
+		// Fetch reactions per message using compound index (avoids large OR filter)
+		const reactionsPerMessage = await Promise.all(
+			messageIds.map((id) =>
+				ctx.db
+					.query('group_chat_reactions')
+					.withIndex('by_group_message', (q) => q.eq('groupId', args.groupId).eq('messageId', id))
+					.collect()
+			)
+		);
+		const allReactions = reactionsPerMessage.flat();
 
 		// Fetch user details for all unique reactors in one go
 		const uniqueUserIds = [...new Set(allReactions.map((r) => r.userId))];
