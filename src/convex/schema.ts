@@ -374,7 +374,11 @@ const schema = defineSchema({
 	})
 		.index('by_group', ['groupId'])
 		.index('by_shared_by', ['sharedById'])
-		.index('by_entity', ['entityId']),
+		.index('by_entity', ['entityId'])
+		.index('by_group_content', ['groupId', 'contentId'])
+		.index('by_group_blog', ['groupId', 'blogId'])
+		.index('by_group_news', ['groupId', 'newsId'])
+		.index('by_group_entity', ['groupId', 'entityId']),
 	group_posts: defineTable({
 		groupId: v.id('groups'),
 		authorId: v.string(),
