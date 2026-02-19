@@ -197,7 +197,7 @@ export const generate = action({
 		const controller = new AbortController();
 
 		// 4. Prepare OpenRouter payload
-		const openRouterMessages: OpenRouterMessage[] = messages.map((m) => ({
+		const openRouterMessages: OpenRouterMessage[] = messages.map((m: (typeof messages)[number]) => ({
 			role: m.role,
 			content:
 				m.isCancelled || (m.metadata as Record<string, unknown>)?.cancelled

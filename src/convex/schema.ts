@@ -386,6 +386,57 @@ const schema = defineSchema({
 		.index('by_group_blog', ['groupId', 'blogId'])
 		.index('by_group_news', ['groupId', 'newsId'])
 		.index('by_group_entity', ['groupId', 'entityId']),
+	group_posts: defineTable({
+		groupId: v.id('groups'),
+		authorId: v.string(),
+		title: v.string(),
+		snippet: v.string(),
+		r2Key: v.string(),
+		tags: v.array(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_group_created_at', ['groupId', 'createdAt'])
+		.index('by_group_author', ['groupId', 'authorId']),
+	group_post_tags: defineTable({
+		groupId: v.id('groups'),
+		postId: v.id('group_posts'),
+		tag: v.string()
+	})
+		.index('by_group_tag', ['groupId', 'tag'])
+		.index('by_post', ['postId']),
+	group_post_reactions: defineTable({
+		groupId: v.id('groups'),
+		postId: v.id('group_posts'),
+		userId: v.string(),
+		like_dislike: v.union(v.literal(1), v.literal(-1))
+	})
+		.index('by_post', ['postId'])
+		.index('by_post_user', ['postId', 'userId'])
+		.index('by_group', ['groupId']),
+	group_post_comments: defineTable({
+		groupId: v.id('groups'),
+		postId: v.id('group_posts'),
+		userId: v.string(),
+		userName: v.optional(v.string()),
+		body: v.string(),
+		parentId: v.optional(v.id('group_post_comments')),
+		createdAt: v.number()
+	})
+		.index('by_post_created_at', ['postId', 'createdAt'])
+		.index('by_parent', ['parentId'])
+		.index('by_group', ['groupId']),
+	group_post_comment_reactions: defineTable({
+		groupId: v.id('groups'),
+		postId: v.id('group_posts'),
+		commentId: v.id('group_post_comments'),
+		userId: v.string(),
+		like_dislike: v.union(v.literal(1), v.literal(-1))
+	})
+		.index('by_comment', ['commentId'])
+		.index('by_post', ['postId'])
+		.index('by_comment_user', ['commentId', 'userId'])
+		.index('by_group', ['groupId']),
 
 	highlights: defineTable({
 		userId: v.string(),
@@ -556,13 +607,14 @@ const schema = defineSchema({
 		tags: v.array(v.string()),
 		search_text: v.string(),
 		is_vectorised: v.boolean(),
-		ragEntryId: v.optional(v.string()),
+		// Optional legacy/cache metadata for compatibility with older imported rows
 		is_similarity_cached: v.optional(v.boolean()),
+		ragEntryId: v.optional(v.string()),
 		similarity_cache_count: v.optional(v.number()),
-		similarity_cache_updated_at: v.optional(v.number()),
-		similarity_cache_model_id: v.optional(v.string()),
 		similarity_cache_dimension: v.optional(v.number()),
-		similarity_cache_namespace_version: v.optional(v.number())
+		similarity_cache_model_id: v.optional(v.string()),
+		similarity_cache_namespace_version: v.optional(v.number()),
+		similarity_cache_updated_at: v.optional(v.number())
 	})
 		.index('by_exam', ['exam'])
 		.index('by_year', ['year'])

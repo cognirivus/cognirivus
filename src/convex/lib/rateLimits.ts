@@ -31,6 +31,9 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
 	groupChatMessage: { kind: 'token bucket', rate: 20, period: MINUTE, capacity: 5 },
 	groupChatReaction: { kind: 'token bucket', rate: 30, period: MINUTE, capacity: 5 },
 	shareContent: { kind: 'token bucket', rate: 20, period: MINUTE, capacity: 5 },
+	groupPostCreate: { kind: 'token bucket', rate: 10, period: MINUTE, capacity: 3 },
+	groupPostReaction: { kind: 'token bucket', rate: 30, period: MINUTE, capacity: 5 },
+	groupPostComment: { kind: 'token bucket', rate: 10, period: MINUTE, capacity: 3 },
 
 	// ── Highlights ──
 	createHighlight: { kind: 'token bucket', rate: 20, period: MINUTE, capacity: 5 },

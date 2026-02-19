@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { resolve } from '$app/paths';
 	import { useQuery, useConvexClient } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import { page } from '$app/state';
@@ -252,14 +253,14 @@
 					<Button
 						variant="ghost"
 						size="sm"
-						href="/groups/{groupId}"
+						href={resolve(`/groups/${groupId}`)}
 						class="-ml-2 h-7 gap-1.5 px-2 text-muted-foreground hover:text-foreground"
 					>
 						<ArrowLeft class="h-3.5 w-3.5" />
 						{group?.name || 'Group'}
 					</Button>
 					<ChevronRight class="h-3 w-3" />
-					<a href="/blog" class="hover:text-foreground hover:underline">Blog</a>
+					<a href={resolve('/blog')} class="hover:text-foreground hover:underline">Blog</a>
 					<ChevronRight class="h-3 w-3" />
 					<span class="line-clamp-1 max-w-[200px] font-medium text-foreground">{blog.title}</span>
 				</div>
@@ -308,7 +309,7 @@
 									variant="ghost"
 									size="sm"
 									class="h-9 gap-2 px-3 text-xs font-semibold text-muted-foreground hover:text-foreground"
-									href="/blog/{blog._id}"
+									href={resolve(`/blog/${blog._id}`)}
 								>
 									<Globe class="h-4 w-4" />
 									View Public
