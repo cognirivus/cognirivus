@@ -398,7 +398,7 @@ const schema = defineSchema({
 		groupId: v.id('groups'),
 		postId: v.id('group_posts'),
 		userId: v.string(),
-		like_dislike: v.number()
+		like_dislike: v.union(v.literal(1), v.literal(-1))
 	})
 		.index('by_post', ['postId'])
 		.index('by_post_user', ['postId', 'userId'])
@@ -420,9 +420,10 @@ const schema = defineSchema({
 		postId: v.id('group_posts'),
 		commentId: v.id('group_post_comments'),
 		userId: v.string(),
-		like_dislike: v.number()
+		like_dislike: v.union(v.literal(1), v.literal(-1))
 	})
 		.index('by_comment', ['commentId'])
+		.index('by_post', ['postId'])
 		.index('by_comment_user', ['commentId', 'userId'])
 		.index('by_group', ['groupId']),
 

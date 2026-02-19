@@ -16,6 +16,7 @@ import { r2 } from './lib/r2';
 
 const MAX_TITLE_LENGTH = 120;
 const MAX_BODY_LENGTH = 32_768;
+const MAX_COMMENT_LENGTH = 4096;
 const MAX_TAGS = 10;
 const MAX_TAG_LENGTH = 30;
 const SNIPPET_LENGTH = 500;
@@ -326,22 +327,38 @@ export const create = action({
 		const snippet = createSnippet(body);
 		const r2Key = `group-posts/${args.groupId}/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.md`;
 
-		await r2.store(ctx, new Blob([body], { type: 'text/markdown' }), {
-			key: r2Key,
-			type: 'text/markdown'
-		});
+		let uploaded = false;
+		try {
+			await r2.store(ctx, new Blob([body], { type: 'text/markdown' }), {
+				key: r2Key,
+				type: 'text/markdown'
+			});
+			uploaded = true;
 
-		const postId: Id<'group_posts'> = await ctx.runMutation(
-			(internal as any).group_posts.insertMetadata,
-			{
-				groupId: args.groupId,
-				title,
-				snippet,
-				r2Key,
-				tags
+			const postId: Id<'group_posts'> = await ctx.runMutation(
+				internal.group_posts.insertMetadata,
+				{
+					groupId: args.groupId,
+					title,
+					snippet,
+					r2Key,
+					tags
+				}
+			);
+			return postId;
+		} catch (error) {
+			if (uploaded) {
+				try {
+					await r2.deleteObject(ctx, r2Key);
+				} catch (cleanupError) {
+					console.error('Failed to clean up orphaned group post R2 object', {
+						r2Key,
+						cleanupError
+					});
+				}
 			}
-		);
-		return postId;
+			throw error;
+		}
 	}
 });
 
@@ -439,7 +456,7 @@ export const update = action({
 		const snippet = createSnippet(body);
 
 		const { r2Key }: { r2Key: string } = await ctx.runQuery(
-			(internal as any).group_posts.getEditTarget,
+			internal.group_posts.getEditTarget,
 			{
 				groupId: args.groupId,
 				postId: args.postId
@@ -459,7 +476,7 @@ export const update = action({
 		}
 		await r2.syncMetadata(ctx, r2Key);
 
-		await ctx.runMutation((internal as any).group_posts.updateMetadata, {
+		await ctx.runMutation(internal.group_posts.updateMetadata, {
 			groupId: args.groupId,
 			postId: args.postId,
 			title,
@@ -517,33 +534,76 @@ export const list = query({
 			});
 		}
 
-		return await Promise.all(
-			posts.map(async (post) => {
-				const [{ likes, dislikes, userReaction }, commentCount, authorName] = await Promise.all([
-					getReactionSummary(ctx, post._id, user._id),
-					getCommentCount(ctx, post._id),
-					getAuthorName(ctx, post.authorId)
-				]);
+		if (posts.length === 0) return [];
 
-				return {
-					_id: post._id,
-					_creationTime: post._creationTime,
-					groupId: post.groupId,
-					authorId: post.authorId,
-					title: post.title,
-					snippet: post.snippet,
-					tags: post.tags,
-					createdAt: post.createdAt,
-					updatedAt: post.updatedAt,
-					authorName,
-					likes,
-					dislikes,
-					commentCount,
-					userReaction,
-					canDelete: post.authorId === user._id || canModerate
-				};
-			})
-		);
+		const postIds = new Set(posts.map((post) => post._id));
+		const authorIds = Array.from(new Set(posts.map((post) => post.authorId)));
+
+		const [reactions, comments, authorEntries] = await Promise.all([
+			ctx.db
+				.query('group_post_reactions')
+				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
+				.collect(),
+			ctx.db
+				.query('group_post_comments')
+				.withIndex('by_group', (q) => q.eq('groupId', args.groupId))
+				.collect(),
+			Promise.all(
+				authorIds.map(async (authorId) => [authorId, await getAuthorName(ctx, authorId)] as const)
+			)
+		]);
+
+		const reactionSummaryByPost = new Map<
+			Id<'group_posts'>,
+			{ likes: number; dislikes: number; userReaction: UserReaction }
+		>();
+		for (const reaction of reactions) {
+			if (!postIds.has(reaction.postId)) continue;
+			const current = reactionSummaryByPost.get(reaction.postId) ?? {
+				likes: 0,
+				dislikes: 0,
+				userReaction: null as UserReaction
+			};
+			if (reaction.like_dislike === 1) current.likes++;
+			if (reaction.like_dislike === -1) current.dislikes++;
+			if (reaction.userId === user._id) {
+				current.userReaction = reaction.like_dislike === 1 ? 'like' : 'dislike';
+			}
+			reactionSummaryByPost.set(reaction.postId, current);
+		}
+
+		const commentCountByPost = new Map<Id<'group_posts'>, number>();
+		for (const comment of comments) {
+			if (!postIds.has(comment.postId)) continue;
+			commentCountByPost.set(comment.postId, (commentCountByPost.get(comment.postId) ?? 0) + 1);
+		}
+
+		const authorNameById = new Map(authorEntries);
+
+		return posts.map((post) => {
+			const reactionSummary = reactionSummaryByPost.get(post._id) ?? {
+				likes: 0,
+				dislikes: 0,
+				userReaction: null as UserReaction
+			};
+			return {
+				_id: post._id,
+				_creationTime: post._creationTime,
+				groupId: post.groupId,
+				authorId: post.authorId,
+				title: post.title,
+				snippet: post.snippet,
+				tags: post.tags,
+				createdAt: post.createdAt,
+				updatedAt: post.updatedAt,
+				authorName: authorNameById.get(post.authorId) ?? 'Unknown',
+				likes: reactionSummary.likes,
+				dislikes: reactionSummary.dislikes,
+				commentCount: commentCountByPost.get(post._id) ?? 0,
+				userReaction: reactionSummary.userReaction,
+				canDelete: post.authorId === user._id || canModerate
+			};
+		});
 	}
 });
 
@@ -730,8 +790,12 @@ export const toggleLike = mutation({
 			.unique();
 
 		if (existing) {
-			await ctx.db.delete(existing._id);
-			if (existing.like_dislike === 1) return null;
+			if (existing.like_dislike === 1) {
+				await ctx.db.delete(existing._id);
+				return null;
+			}
+			await ctx.db.patch(existing._id, { like_dislike: 1 });
+			return null;
 		}
 
 		await ctx.db.insert('group_post_reactions', {
@@ -768,8 +832,12 @@ export const toggleDislike = mutation({
 			.unique();
 
 		if (existing) {
-			await ctx.db.delete(existing._id);
-			if (existing.like_dislike === -1) return null;
+			if (existing.like_dislike === -1) {
+				await ctx.db.delete(existing._id);
+				return null;
+			}
+			await ctx.db.patch(existing._id, { like_dislike: -1 });
+			return null;
 		}
 
 		await ctx.db.insert('group_post_reactions', {
@@ -804,6 +872,17 @@ export const addComment = mutation({
 
 		const body = args.body.trim();
 		if (!body) throw new Error('Comment cannot be empty');
+		if (body.length > MAX_COMMENT_LENGTH) {
+			throw new Error(`Comment must be ${MAX_COMMENT_LENGTH} characters or fewer`);
+		}
+
+		const parentId = args.parentId;
+		if (parentId) {
+			const parent = await ctx.db.get(parentId);
+			if (!parent || parent.groupId !== args.groupId || parent.postId !== args.postId) {
+				throw new Error('Invalid parent comment');
+			}
+		}
 
 		return await ctx.db.insert('group_post_comments', {
 			groupId: args.groupId,
@@ -811,7 +890,7 @@ export const addComment = mutation({
 			userId: user._id,
 			userName: user.name,
 			body,
-			parentId: args.parentId,
+			parentId,
 			createdAt: Date.now()
 		});
 	}
@@ -876,8 +955,12 @@ export const toggleCommentLike = mutation({
 			.unique();
 
 		if (existing) {
-			await ctx.db.delete(existing._id);
-			if (existing.like_dislike === 1) return null;
+			if (existing.like_dislike === 1) {
+				await ctx.db.delete(existing._id);
+				return null;
+			}
+			await ctx.db.patch(existing._id, { like_dislike: 1 });
+			return null;
 		}
 
 		await ctx.db.insert('group_post_comment_reactions', {
@@ -911,8 +994,12 @@ export const toggleCommentDislike = mutation({
 			.unique();
 
 		if (existing) {
-			await ctx.db.delete(existing._id);
-			if (existing.like_dislike === -1) return null;
+			if (existing.like_dislike === -1) {
+				await ctx.db.delete(existing._id);
+				return null;
+			}
+			await ctx.db.patch(existing._id, { like_dislike: -1 });
+			return null;
 		}
 
 		await ctx.db.insert('group_post_comment_reactions', {
@@ -948,33 +1035,55 @@ export const getComments = query({
 			.order('asc')
 			.collect();
 
-		return await Promise.all(
-			comments.map(async (comment) => {
-				const [reactions, userDoc] = await Promise.all([
-					ctx.db
-						.query('group_post_comment_reactions')
-						.withIndex('by_comment', (q) => q.eq('commentId', comment._id))
-						.collect(),
-					authComponent.getAnyUserById(ctx, comment.userId)
-				]);
+		if (comments.length === 0) return [];
 
-				const likes = reactions.filter((reaction) => reaction.like_dislike === 1).length;
-				const dislikes = reactions.filter((reaction) => reaction.like_dislike === -1).length;
-				const mine = reactions.find((reaction) => reaction.userId === user._id);
-				const userReaction: UserReaction = mine
-					? mine.like_dislike === 1
-						? 'like'
-						: 'dislike'
-					: null;
+		const commentIds = new Set(comments.map((comment) => comment._id));
+		const uniqueUserIds = Array.from(new Set(comments.map((comment) => comment.userId)));
 
-				return {
-					...comment,
-					userName: userDoc?.name || comment.userName || 'Anonymous',
-					likes,
-					dislikes,
-					userReaction
-				};
-			})
-		);
+		const [reactions, users] = await Promise.all([
+			ctx.db
+				.query('group_post_comment_reactions')
+				.withIndex('by_post', (q) => q.eq('postId', args.postId))
+				.collect(),
+			Promise.all(
+				uniqueUserIds.map(async (userId) => [userId, await authComponent.getAnyUserById(ctx, userId)] as const)
+			)
+		]);
+
+		const reactionSummaryByComment = new Map<
+			Id<'group_post_comments'>,
+			{ likes: number; dislikes: number; userReaction: UserReaction }
+		>();
+		for (const reaction of reactions) {
+			if (!commentIds.has(reaction.commentId)) continue;
+			const current = reactionSummaryByComment.get(reaction.commentId) ?? {
+				likes: 0,
+				dislikes: 0,
+				userReaction: null as UserReaction
+			};
+			if (reaction.like_dislike === 1) current.likes++;
+			if (reaction.like_dislike === -1) current.dislikes++;
+			if (reaction.userId === user._id) {
+				current.userReaction = reaction.like_dislike === 1 ? 'like' : 'dislike';
+			}
+			reactionSummaryByComment.set(reaction.commentId, current);
+		}
+
+		const userById = new Map(users);
+
+		return comments.map((comment) => {
+			const reactionSummary = reactionSummaryByComment.get(comment._id) ?? {
+				likes: 0,
+				dislikes: 0,
+				userReaction: null as UserReaction
+			};
+			return {
+				...comment,
+				userName: userById.get(comment.userId)?.name || comment.userName || 'Anonymous',
+				likes: reactionSummary.likes,
+				dislikes: reactionSummary.dislikes,
+				userReaction: reactionSummary.userReaction
+			};
+		});
 	}
 });
