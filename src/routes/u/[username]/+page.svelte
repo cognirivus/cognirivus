@@ -73,14 +73,20 @@
 					<FileText class="size-3.5" />
 					{profileQuery.data.postCount} posts
 				</span>
-				<span class="inline-flex items-center gap-1">
+				<a
+					class="inline-flex items-center gap-1 hover:text-foreground hover:underline"
+					href="/u/{username}/followers"
+				>
 					<Users class="size-3.5" />
 					{profileQuery.data.followerCount} followers
-				</span>
-				<span class="inline-flex items-center gap-1">
+				</a>
+				<a
+					class="inline-flex items-center gap-1 hover:text-foreground hover:underline"
+					href="/u/{username}/following"
+				>
 					<UserRoundCheck class="size-3.5" />
 					{profileQuery.data.followingCount} following
-				</span>
+				</a>
 			</div>
 			<div class="mt-4">
 				<Button

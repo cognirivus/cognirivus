@@ -29,6 +29,28 @@ const ensureUsername = async (ctx: any, authUserId: string) => {
 	}
 };
 
+const followUserListItemValidator = v.object({
+	authId: v.string(),
+	name: v.string(),
+	username: v.union(v.null(), v.string()),
+	image: v.optional(v.union(v.null(), v.string())),
+	followedAt: v.number()
+});
+
+const toFollowUserListItem = async (ctx: any, authId: string, followedAt: number) => {
+	const profile = await ctx.db
+		.query('users_profile')
+		.withIndex('by_authId', (q: any) => q.eq('authId', authId))
+		.unique();
+	return {
+		authId,
+		name: profile?.name ?? 'Unknown',
+		username: profile?.username ?? null,
+		image: profile?.image,
+		followedAt
+	};
+};
+
 export const followUser = mutation({
 	args: {
 		targetAuthId: v.string()
@@ -143,5 +165,47 @@ export const listFollowing = query({
 			userIds: userFollows.map((row) => row.targetAuthId),
 			communityIds: communityFollows.map((row) => row.communityId)
 		};
+	}
+});
+
+export const listFollowers = query({
+	args: {
+		targetAuthId: v.string(),
+		limit: v.optional(v.number())
+	},
+	returns: v.array(followUserListItemValidator),
+	handler: async (ctx, args) => {
+		const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
+		const followerRows = await ctx.db
+			.query('follows_users')
+			.withIndex('by_targetAuthId_and_createdAt', (q) => q.eq('targetAuthId', args.targetAuthId))
+			.order('desc')
+			.take(limit);
+
+		return await Promise.all(
+			followerRows.map((row) => toFollowUserListItem(ctx, row.followerAuthId, row.createdAt))
+		);
+	}
+});
+
+export const listFollowingUsers = query({
+	args: {
+		followerAuthId: v.string(),
+		limit: v.optional(v.number())
+	},
+	returns: v.array(followUserListItemValidator),
+	handler: async (ctx, args) => {
+		const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
+		const followingRows = await ctx.db
+			.query('follows_users')
+			.withIndex('by_followerAuthId_and_createdAt', (q) =>
+				q.eq('followerAuthId', args.followerAuthId)
+			)
+			.order('desc')
+			.take(limit);
+
+		return await Promise.all(
+			followingRows.map((row) => toFollowUserListItem(ctx, row.targetAuthId, row.createdAt))
+		);
 	}
 });
