@@ -8,6 +8,10 @@ declare global {
 				id: string;
 				email: string;
 				name: string;
+				image?: string | null;
+				role?: unknown;
+				username: string | null;
+				hasUsername: boolean;
 			} | null;
 			authState?: import('@mmailaender/convex-better-auth-svelte/sveltekit').AuthState;
 		}
