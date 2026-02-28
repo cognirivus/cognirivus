@@ -161,6 +161,14 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
 	return betterAuth(createAuthOptions(ctx));
 };
 
+const getOptionalAuthUser = async (ctx: GenericCtx<DataModel>) => {
+	try {
+		return await authComponent.getAuthUser(ctx);
+	} catch {
+		return null;
+	}
+};
+
 export const getCurrentUser = query({
 	args: {},
 	returns: v.union(
@@ -176,7 +184,7 @@ export const getCurrentUser = query({
 		})
 	),
 	handler: async (ctx) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getOptionalAuthUser(ctx);
 		if (!authUser) {
 			return null;
 		}

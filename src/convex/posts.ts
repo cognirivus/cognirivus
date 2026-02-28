@@ -54,8 +54,16 @@ const commentValidator = v.object({
 	userVote: userVoteValidator
 });
 
+const getOptionalAuthUser = async (ctx: any) => {
+	try {
+		return await authComponent.getAuthUser(ctx);
+	} catch {
+		return null;
+	}
+};
+
 const requireAuthenticatedUser = async (ctx: any) => {
-	const authUser = await authComponent.getAuthUser(ctx);
+	const authUser = await getOptionalAuthUser(ctx);
 	if (!authUser) {
 		throw new Error('Authentication required');
 	}
@@ -319,7 +327,7 @@ export const get = query({
 			return null;
 		}
 
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getOptionalAuthUser(ctx);
 		const canRead = await canAccessCommunityPost(ctx, post, authUser?._id ?? null);
 		if (!canRead) {
 			throw new Error('This post belongs to a private community.');
@@ -396,7 +404,7 @@ export const listComments = query({
 			return [];
 		}
 
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getOptionalAuthUser(ctx);
 		const canRead = await canAccessCommunityPost(ctx, post, authUser?._id ?? null);
 		if (!canRead) {
 			throw new Error('This post belongs to a private community.');

@@ -36,8 +36,16 @@ const profileSummaryValidator = v.object({
 	followingCount: v.number()
 });
 
+const getOptionalAuthUser = async (ctx: QueryCtx | MutationCtx) => {
+	try {
+		return await authComponent.getAuthUser(ctx);
+	} catch {
+		return null;
+	}
+};
+
 const requireAuthenticatedUser = async (ctx: QueryCtx | MutationCtx) => {
-	const authUser = await authComponent.getAuthUser(ctx);
+	const authUser = await getOptionalAuthUser(ctx);
 	if (!authUser) {
 		throw new Error('Authentication required');
 	}
@@ -145,10 +153,10 @@ export const setUsername = mutation({
 		const profileId: Id<'users_profile'> = await ctx.runMutation(
 			internal.profiles.ensureProfileForAuth,
 			{
-			authId: authUser._id,
-			email: authUser.email,
-			name: authUser.name,
-			image: authUser.image
+				authId: authUser._id,
+				email: authUser.email,
+				name: authUser.name,
+				image: authUser.image
 			}
 		);
 		const profile = await ctx.db.get(profileId);
@@ -186,7 +194,7 @@ export const getMyProfile = query({
 	args: {},
 	returns: v.union(v.null(), profileSummaryValidator),
 	handler: async (ctx) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getOptionalAuthUser(ctx);
 		if (!authUser) {
 			return null;
 		}

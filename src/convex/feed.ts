@@ -7,6 +7,14 @@ import { applyFeedRanking, paginateByCursor, windowStartFromBucket } from './lib
 const tabValidator = v.union(v.literal('new'), v.literal('top'), v.literal('discussed'));
 const windowValidator = v.union(v.literal('24h'), v.literal('7d'), v.literal('30d'));
 
+const getOptionalAuthUser = async (ctx: any) => {
+	try {
+		return await authComponent.getAuthUser(ctx);
+	} catch {
+		return null;
+	}
+};
+
 const feedPostValidator = v.object({
 	_id: v.id('posts'),
 	title: v.string(),
@@ -176,7 +184,7 @@ export const listGlobal = query({
 	},
 	returns: pagedFeedValidator,
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getOptionalAuthUser(ctx);
 		const windowStart = windowStartFromBucket(args.window ?? '24h');
 		const batchSize = Math.max(args.paginationOpts.numItems * 8, 200);
 
@@ -207,7 +215,7 @@ export const listCommunity = query({
 	},
 	returns: pagedFeedValidator,
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getOptionalAuthUser(ctx);
 		const community = await ctx.db
 			.query('communities')
 			.withIndex('by_slug', (q) => q.eq('slug', args.slug.trim().toLowerCase()))
@@ -264,7 +272,7 @@ export const listUser = query({
 	},
 	returns: pagedFeedValidator,
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getOptionalAuthUser(ctx);
 		const profile = await ctx.db
 			.query('users_profile')
 			.withIndex('by_username', (q) => q.eq('username', args.username.trim().toLowerCase()))

@@ -56,8 +56,16 @@ type AuthenticatedUser = {
 	image?: string | null;
 };
 
+const getOptionalAuthUser = async (ctx: any) => {
+	try {
+		return await authComponent.getAuthUser(ctx);
+	} catch {
+		return null;
+	}
+};
+
 const requireAuthenticatedUser = async (ctx: any): Promise<AuthenticatedUser> => {
-	const authUser = await authComponent.getAuthUser(ctx);
+	const authUser = await getOptionalAuthUser(ctx);
 	if (!authUser) {
 		throw new Error('Authentication required');
 	}
@@ -341,7 +349,7 @@ export const listMine = query({
 	args: {},
 	returns: v.array(myCommunityValidator),
 	handler: async (ctx) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getOptionalAuthUser(ctx);
 		if (!authUser) {
 			return [];
 		}
@@ -444,7 +452,7 @@ export const getBySlug = query({
 			return null;
 		}
 
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getOptionalAuthUser(ctx);
 		const membership = authUser ? await getMembership(ctx, community._id, authUser._id) : null;
 		const membershipStatus = (membership?.status ?? 'none') as
 			| 'none'

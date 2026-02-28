@@ -3,8 +3,16 @@ import { v } from 'convex/values';
 import { authComponent } from './auth';
 import { rateLimiter } from './lib/rateLimits';
 
+const getOptionalAuthUser = async (ctx: any) => {
+	try {
+		return await authComponent.getAuthUser(ctx);
+	} catch {
+		return null;
+	}
+};
+
 const requireAuthenticatedUser = async (ctx: any) => {
-	const authUser = await authComponent.getAuthUser(ctx);
+	const authUser = await getOptionalAuthUser(ctx);
 	if (!authUser) {
 		throw new Error('Authentication required');
 	}
@@ -103,7 +111,7 @@ export const listFollowing = query({
 		communityIds: v.array(v.id('communities'))
 	}),
 	handler: async (ctx) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getOptionalAuthUser(ctx);
 		if (!authUser) {
 			return { userIds: [], communityIds: [] };
 		}
