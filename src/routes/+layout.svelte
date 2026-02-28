@@ -37,6 +37,10 @@
 		following: 'Following'
 	};
 
+	const isAuthPage = $derived(
+		page.url.pathname === '/signin' || page.url.pathname === '/signup'
+	);
+
 	let breadcrumbs = $derived.by(() => {
 		const segments = page.url.pathname.split('/').filter((s) => s !== '');
 		const crumbs: { label: string; href: string }[] = [{ label: 'Home', href: '/' }];
@@ -83,8 +87,16 @@
 			</div>
 			<ThemeToggle />
 		</header>
-		<div class="flex-1">
-			{@render children()}
+		<div class="flex min-h-0 flex-1">
+			<div class="flex min-h-0 flex-1 flex-col">
+				{@render children()}
+			</div>
+			{#if !isAuthPage}
+				<aside
+					class="hidden w-64 shrink-0 border-l border-border/50 bg-background lg:block"
+				>
+				</aside>
+			{/if}
 		</div>
 	</Sidebar.Inset>
 </Sidebar.Provider>

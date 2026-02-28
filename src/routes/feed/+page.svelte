@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
@@ -211,19 +211,21 @@
 			{/each}
 		</div>
 
-		<div class="mt-5 flex items-center justify-between">
-			<Button variant="outline" size="sm" disabled={!cursor} onclick={() => updateParams({ cursor: null })}>
-				First Page
-			</Button>
-			<Button
-				variant="outline"
-				size="sm"
-				disabled={feedQuery.data?.isDone ?? true}
-				onclick={() => updateParams({ cursor: feedQuery.data?.continueCursor ?? null })}
-			>
-				Next Page
-			</Button>
-		</div>
+		{#if cursor || !(feedQuery.data?.isDone ?? true)}
+			<div class="mt-5 flex items-center justify-between">
+				<Button variant="outline" size="sm" disabled={!cursor} onclick={() => updateParams({ cursor: null })}>
+					First Page
+				</Button>
+				<Button
+					variant="outline"
+					size="sm"
+					disabled={feedQuery.data?.isDone ?? true}
+					onclick={() => updateParams({ cursor: feedQuery.data?.continueCursor ?? null })}
+				>
+					Next Page
+				</Button>
+			</div>
+		{/if}
 	{/if}
 </main>
 
