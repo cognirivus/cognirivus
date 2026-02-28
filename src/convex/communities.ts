@@ -111,6 +111,28 @@ const getMemberCount = async (ctx: any, communityId: Id<'communities'>) => {
 	return members.length;
 };
 
+const ensureCommunityFollow = async (
+	ctx: any,
+	userAuthId: string,
+	communityId: Id<'communities'>,
+	now: number
+) => {
+	const existingFollow = await ctx.db
+		.query('follows_communities')
+		.withIndex('by_followerAuthId_and_communityId', (q: any) =>
+			q.eq('followerAuthId', userAuthId).eq('communityId', communityId)
+		)
+		.unique();
+	if (existingFollow) {
+		return;
+	}
+	await ctx.db.insert('follows_communities', {
+		followerAuthId: userAuthId,
+		communityId,
+		createdAt: now
+	});
+};
+
 const toCommunitySummary = async (ctx: any, community: any) => {
 	return {
 		_id: community._id,
@@ -183,19 +205,7 @@ export const create = mutation({
 			createdAt: now
 		});
 
-		const existingFollow = await ctx.db
-			.query('follows_communities')
-			.withIndex('by_followerAuthId_and_communityId', (q) =>
-				q.eq('followerAuthId', authUser._id).eq('communityId', communityId)
-			)
-			.unique();
-		if (!existingFollow) {
-			await ctx.db.insert('follows_communities', {
-				followerAuthId: authUser._id,
-				communityId,
-				createdAt: now
-			});
-		}
+		await ensureCommunityFollow(ctx, authUser._id, communityId, now);
 
 		return communityId;
 	}
@@ -223,6 +233,7 @@ export const requestJoin = mutation({
 
 		if (community.visibility === 'public') {
 			if (existing?.status === 'active') {
+				await ensureCommunityFollow(ctx, authUser._id, args.communityId, now);
 				return { status: 'active' as const };
 			}
 			if (existing) {
@@ -242,10 +253,12 @@ export const requestJoin = mutation({
 					createdAt: now
 				});
 			}
+			await ensureCommunityFollow(ctx, authUser._id, args.communityId, now);
 			return { status: 'active' as const };
 		}
 
 		if (existing?.status === 'active') {
+			await ensureCommunityFollow(ctx, authUser._id, args.communityId, now);
 			return { status: 'active' as const };
 		}
 		if (existing?.status === 'pending') {
@@ -296,6 +309,7 @@ export const approveJoin = mutation({
 			role: 'member',
 			respondedAt: Date.now()
 		});
+		await ensureCommunityFollow(ctx, membership.userAuthId, membership.communityId, Date.now());
 		return null;
 	}
 });

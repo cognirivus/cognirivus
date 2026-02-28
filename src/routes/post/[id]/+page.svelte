@@ -122,7 +122,13 @@
 		<article class="rounded-lg border border-border bg-card p-5">
 			<div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
 				<div class="flex flex-wrap items-center gap-2">
-					<span>u/{postQuery.data.authorUsername ?? postQuery.data.authorName}</span>
+					{#if postQuery.data.authorUsername}
+						<a class="hover:underline" href="/u/{postQuery.data.authorUsername}">
+							u/{postQuery.data.authorUsername}
+						</a>
+					{:else}
+						<span>{postQuery.data.authorName}</span>
+					{/if}
 					{#if postQuery.data.communitySlug}
 						<span>•</span>
 						<a class="hover:underline" href="/c/{postQuery.data.communitySlug}">

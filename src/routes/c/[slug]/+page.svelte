@@ -19,12 +19,28 @@
 	);
 
 	const communityQuery = useQuery((api as any).communities.getBySlug, () => ({ slug }));
+	const followingQuery = useQuery((api as any).social_graph.listFollowing, {});
 	const feedQuery = useQuery((api as any).feed.listCommunity, () => ({
 		slug,
 		tab,
 		window: '24h',
 		paginationOpts: { numItems: 20, cursor: null }
 	}));
+	let followOverride = $state<boolean | null>(null);
+	let followOverrideCommunityId = $state<string | null>(null);
+	const currentCommunityId = $derived(communityQuery.data?.community._id ?? null);
+	const isFollowing = $derived.by(() => {
+		if (!auth.isAuthenticated || !currentCommunityId) {
+			return false;
+		}
+		if (followOverrideCommunityId === currentCommunityId && followOverride !== null) {
+			return followOverride;
+		}
+		if (communityQuery.data?.membershipStatus === 'active') {
+			return true;
+		}
+		return (followingQuery.data?.communityIds ?? []).includes(currentCommunityId);
+	});
 
 	async function requestJoin() {
 		if (!auth.isAuthenticated) {
@@ -50,6 +66,8 @@
 			const result = await client.mutation((api as any).social_graph.followCommunity, {
 				communityId: communityQuery.data.community._id
 			});
+			followOverrideCommunityId = communityQuery.data.community._id;
+			followOverride = result.following;
 			toast.success(result.following ? 'Following community' : 'Unfollowed community');
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Follow failed');
@@ -87,8 +105,12 @@
 						Join / Request
 					</Button>
 				{/if}
-				<Button variant="outline" disabled={!auth.isAuthenticated} onclick={followCommunity}>
-					Follow
+				<Button
+					variant={isFollowing ? 'secondary' : 'outline'}
+					disabled={!auth.isAuthenticated}
+					onclick={followCommunity}
+				>
+					{isFollowing ? 'Following' : 'Follow'}
 				</Button>
 				{#if communityQuery.data.canPost}
 					<Button href="/submit">Submit in Community</Button>
@@ -129,7 +151,13 @@
 							<p class="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
 								<span>score {post.score}</span>
 								<span>{post.commentCount} comments</span>
-								<span>u/{post.authorUsername ?? post.authorName}</span>
+								{#if post.authorUsername}
+									<a class="hover:underline" href="/u/{post.authorUsername}">
+										u/{post.authorUsername}
+									</a>
+								{:else}
+									<span>{post.authorName}</span>
+								{/if}
 								<span class="inline-flex items-center gap-1">
 									<Calendar class="size-3.5" />
 									{new Date(post.createdAt).toLocaleDateString()}

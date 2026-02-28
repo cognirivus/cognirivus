@@ -114,9 +114,13 @@
 						<div class="flex flex-wrap items-start justify-between gap-3">
 							<div>
 								<p class="text-sm font-medium">
-									{request.requesterUsername
-										? `u/${request.requesterUsername}`
-										: request.requesterName}
+									{#if request.requesterUsername}
+										<a class="hover:underline" href="/u/{request.requesterUsername}">
+											u/{request.requesterUsername}
+										</a>
+									{:else}
+										{request.requesterName}
+									{/if}
 								</p>
 								<p class="text-xs text-muted-foreground">{request.requesterEmail}</p>
 								<p class="mt-1 text-xs text-muted-foreground">

@@ -82,6 +82,13 @@ export const followCommunity = mutation({
 		if (!community) {
 			throw new Error('Community not found.');
 		}
+		const membership = await ctx.db
+			.query('community_memberships')
+			.withIndex('by_communityId_and_userAuthId', (q) =>
+				q.eq('communityId', args.communityId).eq('userAuthId', authUser._id)
+			)
+			.unique();
+		const isImplicitlyFollowing = membership?.status === 'active';
 
 		const existing = await ctx.db
 			.query('follows_communities')
@@ -92,6 +99,9 @@ export const followCommunity = mutation({
 
 		if (existing) {
 			await ctx.db.delete(existing._id);
+			return { following: false };
+		}
+		if (isImplicitlyFollowing) {
 			return { following: false };
 		}
 

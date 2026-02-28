@@ -115,7 +115,13 @@
 							<div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
 								<span class="inline-flex items-center gap-1">
 									<User class="size-3.5" />
-									u/{post.authorUsername ?? post.authorName}
+									{#if post.authorUsername}
+										<a href="/u/{post.authorUsername}" class="hover:text-foreground hover:underline">
+											u/{post.authorUsername}
+										</a>
+									{:else}
+										<span>{post.authorName}</span>
+									{/if}
 								</span>
 								{#if post.communitySlug}
 									<a

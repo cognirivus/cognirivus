@@ -14,12 +14,29 @@
 	const username = $derived(page.params.username);
 
 	const profileQuery = useQuery((api as any).profiles.getByUsername, () => ({ username }));
+	const currentUserQuery = useQuery((api as any).auth.getCurrentUser, {});
+	const followingQuery = useQuery((api as any).social_graph.listFollowing, {});
 	const feedQuery = useQuery((api as any).feed.listUser, () => ({
 		username,
 		tab: 'new',
 		window: '30d',
 		paginationOpts: { numItems: 20, cursor: null }
 	}));
+	let followOverride = $state<boolean | null>(null);
+	let followOverrideAuthId = $state<string | null>(null);
+	const targetAuthId = $derived(profileQuery.data?.authId ?? null);
+	const isFollowing = $derived.by(() => {
+		if (!targetAuthId || !auth.isAuthenticated) {
+			return false;
+		}
+		if (followOverrideAuthId === targetAuthId && followOverride !== null) {
+			return followOverride;
+		}
+		return (followingQuery.data?.userIds ?? []).includes(targetAuthId);
+	});
+	const isOwnProfile = $derived(
+		!!targetAuthId && auth.isAuthenticated && currentUserQuery.data?.id === targetAuthId
+	);
 
 	async function follow() {
 		if (!auth.isAuthenticated) {
@@ -31,6 +48,8 @@
 			const result = await client.mutation((api as any).social_graph.followUser, {
 				targetAuthId: profileQuery.data.authId
 			});
+			followOverrideAuthId = profileQuery.data.authId;
+			followOverride = result.following;
 			toast.success(result.following ? 'Following user' : 'Unfollowed user');
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Follow failed');
@@ -64,7 +83,13 @@
 				</span>
 			</div>
 			<div class="mt-4">
-				<Button variant="outline" onclick={follow}>Follow / Unfollow</Button>
+				<Button
+					variant={isFollowing ? 'secondary' : 'outline'}
+					disabled={isOwnProfile}
+					onclick={follow}
+				>
+					{isOwnProfile ? 'Your profile' : isFollowing ? 'Unfollow' : 'Follow'}
+				</Button>
 			</div>
 			</CardContent>
 		</Card>

@@ -140,7 +140,7 @@
 						<Button variant="outline" size="sm" class="inline-flex items-center gap-2">
 							<User class="size-4" />
 							<span class="hidden sm:inline">
-								{currentUser.username ? `u/${currentUser.username}` : currentUser.name}
+								{currentUser.username ?? currentUser.name}
 							</span>
 						</Button>
 					</DropdownMenuTrigger>

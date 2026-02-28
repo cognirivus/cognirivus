@@ -45,6 +45,9 @@
 
 	const hasChildren = $derived(comment.children.length > 0);
 	const displayName = $derived(comment.authorUsername ?? comment.authorName ?? 'anonymous');
+	const authorProfileHref = $derived(
+		comment.authorUsername ? `/u/${comment.authorUsername}` : null
+	);
 
 	function countAllReplies(node: CommentNode): number {
 		if (node.children.length === 0) return 0;
@@ -110,7 +113,13 @@
 				{displayName.substring(0, 2).toUpperCase()}
 			</Avatar.Fallback>
 		</Avatar.Root>
-		<span class="font-bold text-foreground">u/{displayName}</span>
+		{#if authorProfileHref}
+			<a href={authorProfileHref} class="font-bold text-foreground hover:underline">
+				u/{displayName}
+			</a>
+		{:else}
+			<span class="font-bold text-foreground">{displayName}</span>
+		{/if}
 		<span class="text-muted-foreground/60">|</span>
 		<span class="text-muted-foreground">{formatDate(comment.createdAt)}</span>
 
