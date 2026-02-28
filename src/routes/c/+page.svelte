@@ -83,9 +83,6 @@
 								status {item.membershipStatus} | role {item.membershipRole}
 							</p>
 							<div class="mt-3 flex flex-wrap gap-2">
-								<Button size="sm" variant="outline" href={`/c/${item.community.slug}`}>
-									Open
-								</Button>
 								{#if item.membershipRole === 'owner' || item.membershipRole === 'admin'}
 									<Button size="sm" variant="outline" href={`/c/${item.community.slug}/manage`}>
 										Manage
@@ -131,7 +128,6 @@
 							</span>
 						</div>
 						<div class="mt-3 flex flex-wrap gap-2">
-							<Button size="sm" variant="outline" href={`/c/${community.slug}`}>Open</Button>
 							{#if !auth.isAuthenticated}
 								<Button size="sm" disabled>Join</Button>
 							{:else if membership?.membershipStatus === 'active'}

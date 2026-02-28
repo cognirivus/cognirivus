@@ -2,8 +2,9 @@
 	import { page } from '$app/state';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
-	import { Calendar, Users } from '@lucide/svelte';
+	import { Calendar, MessageSquare, ThumbsDown, ThumbsUp, User, Users } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
+	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { toast } from 'svelte-sonner';
@@ -71,6 +72,17 @@
 			toast.success(result.following ? 'Following community' : 'Unfollowed community');
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Follow failed');
+		}
+	}
+
+	async function vote(postId: string, value: 1 | -1) {
+		if (!auth.isAuthenticated) {
+			return;
+		}
+		try {
+			await client.mutation((api as any).posts.vote, { postId, value });
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to vote');
 		}
 	}
 </script>
@@ -146,23 +158,80 @@
 					{#each feedQuery.data?.page ?? [] as post (post._id)}
 						<Card class="gap-0 py-4">
 							<CardContent>
-							<a href="/post/{post._id}" class="font-medium hover:underline">{post.title}</a>
-							<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
-							<p class="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-								<span>score {post.score}</span>
-								<span>{post.commentCount} comments</span>
-								{#if post.authorUsername}
-									<a class="hover:underline" href="/u/{post.authorUsername}">
-										u/{post.authorUsername}
-									</a>
-								{:else}
-									<span>{post.authorName}</span>
-								{/if}
-								<span class="inline-flex items-center gap-1">
-									<Calendar class="size-3.5" />
-									{new Date(post.createdAt).toLocaleDateString()}
-								</span>
-							</p>
+								<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+									<div class="min-w-0 flex-1">
+										<div class="flex items-start justify-between gap-3">
+											<a href="/post/{post._id}" class="line-clamp-2 text-base font-medium hover:underline">
+												{post.title}
+											</a>
+											<span class="hidden shrink-0 items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:inline-flex">
+												<Calendar class="size-3.5" />
+												{new Date(post.createdAt).toLocaleString()}
+											</span>
+										</div>
+										<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
+										<span class="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:hidden">
+											<Calendar class="size-3.5" />
+											{new Date(post.createdAt).toLocaleString()}
+										</span>
+										<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+											{#if post.authorUsername}
+												<Badge href="/u/{post.authorUsername}" variant="outline" class="gap-1">
+													<User class="size-3.5" />
+													<span class="font-semibold">u/{post.authorUsername}</span>
+												</Badge>
+											{:else}
+												<Badge variant="outline" class="gap-1">
+													<User class="size-3.5" />
+													<span class="font-semibold">{post.authorName}</span>
+												</Badge>
+											{/if}
+										</div>
+									</div>
+								</div>
+								<div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+									<div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+										<span class="inline-flex items-center gap-1">
+											<MessageSquare class="size-3.5" />
+											{post.commentCount} comments
+										</span>
+										<span class="inline-flex items-center gap-1">
+											<ThumbsUp class="size-3.5" />
+											{post.likes}
+										</span>
+										<span class="inline-flex items-center gap-1">
+											<ThumbsDown class="size-3.5" />
+											{post.dislikes}
+										</span>
+										<span>score {post.score}</span>
+									</div>
+									<div class="flex shrink-0 items-center gap-2 self-end sm:self-auto">
+										<Button
+											size="icon-sm"
+											variant={post.userVote === 1 ? 'secondary' : 'outline'}
+											class={post.userVote === 1
+												? 'border-primary/40 text-primary [&_svg_path]:!fill-current'
+												: ''}
+											disabled={!auth.isAuthenticated}
+											onclick={() => vote(post._id, 1)}
+											aria-label="Like post"
+										>
+											<ThumbsUp class="size-4" />
+										</Button>
+										<Button
+											size="icon-sm"
+											variant={post.userVote === -1 ? 'secondary' : 'outline'}
+											class={post.userVote === -1
+												? 'border-destructive/40 text-destructive [&_svg_path]:!fill-current'
+												: ''}
+											disabled={!auth.isAuthenticated}
+											onclick={() => vote(post._id, -1)}
+											aria-label="Dislike post"
+										>
+											<ThumbsDown class="size-4" />
+										</Button>
+									</div>
+								</div>
 							</CardContent>
 						</Card>
 					{/each}
