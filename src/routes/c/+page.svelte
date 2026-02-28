@@ -3,8 +3,10 @@
 	import { page } from '$app/state';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
+	import { Globe, ShieldCheck, Users } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Button } from '$lib/components/ui/button';
+	import { Card, CardContent } from '$lib/components/ui/card';
 	import { toast } from 'svelte-sonner';
 
 	const auth = useAuth();
@@ -46,7 +48,7 @@
 	}
 </script>
 
-<main class="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
 		<div>
 			<h1 class="text-2xl font-semibold tracking-tight">Communities</h1>
@@ -69,7 +71,8 @@
 			{:else}
 				<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 					{#each myCommunitiesQuery.data ?? [] as item (item.community._id)}
-						<article class="rounded-lg border border-border bg-card p-4">
+						<Card class="gap-0 py-4">
+							<CardContent>
 							<a href={`/c/${item.community.slug}`} class="font-medium hover:underline">
 								c/{item.community.slug}
 							</a>
@@ -89,7 +92,8 @@
 									</Button>
 								{/if}
 							</div>
-						</article>
+							</CardContent>
+						</Card>
 					{/each}
 				</div>
 			{/if}
@@ -106,14 +110,26 @@
 			<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 				{#each publicCommunitiesQuery.data ?? [] as community (community._id)}
 					{@const membership = myMembershipByCommunityId.get(community._id)}
-					<article class="rounded-lg border border-border bg-card p-4">
+					<Card class="gap-0 py-4">
+						<CardContent>
 						<a href={`/c/${community.slug}`} class="font-medium hover:underline">
 							c/{community.slug}
 						</a>
 						<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{community.description}</p>
-						<p class="mt-2 text-xs text-muted-foreground">
-							{community.memberCount} members | {community.visibility}
-						</p>
+						<div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+							<span class="inline-flex items-center gap-1">
+								<Users class="size-3.5" />
+								{community.memberCount} members
+							</span>
+							<span class="inline-flex items-center gap-1">
+								{#if community.visibility === 'public'}
+									<Globe class="size-3.5" />
+								{:else}
+									<ShieldCheck class="size-3.5" />
+								{/if}
+								{community.visibility}
+							</span>
+						</div>
 						<div class="mt-3 flex flex-wrap gap-2">
 							<Button size="sm" variant="outline" href={`/c/${community.slug}`}>Open</Button>
 							{#if !auth.isAuthenticated}
@@ -131,7 +147,8 @@
 								</Button>
 							{/if}
 						</div>
-					</article>
+						</CardContent>
+					</Card>
 				{/each}
 			</div>
 			{#if !auth.isAuthenticated}

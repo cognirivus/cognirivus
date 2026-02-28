@@ -3,8 +3,10 @@
 	import { goto } from '$app/navigation';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
+	import { Calendar, MessageSquare, ThumbsDown, ThumbsUp, User } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Button } from '$lib/components/ui/button';
+	import { Card, CardContent } from '$lib/components/ui/card';
 	import { toast } from 'svelte-sonner';
 
 	type FeedTab = 'new' | 'top' | 'discussed';
@@ -50,7 +52,7 @@
 	}
 </script>
 
-<main class="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
 		<div>
 			<h1 class="text-2xl font-semibold tracking-tight">Global Feed</h1>
@@ -66,12 +68,17 @@
 	</div>
 
 	{#if !auth.isAuthenticated}
-		<div class="mb-4 rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
-			Sign in to vote and comment.
-			<a class="ml-2 underline" href={`/signin?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`}>
-				Sign in
-			</a>
-		</div>
+		<Card class="mb-4 gap-0 py-3">
+			<CardContent class="text-xs text-muted-foreground">
+				Sign in to vote and comment.
+				<a
+					class="ml-2 font-medium underline"
+					href={`/signin?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`}
+				>
+					Sign in
+				</a>
+			</CardContent>
+		</Card>
 	{/if}
 
 	<div class="mb-4 flex flex-wrap items-center gap-2">
@@ -97,49 +104,78 @@
 	{:else}
 		<div class="space-y-3">
 			{#each feedQuery.data?.page ?? [] as post (post._id)}
-				<article class="rounded-lg border border-border bg-card p-4">
-					<div class="flex items-start justify-between gap-4">
+				<Card class="gap-0 py-4">
+					<CardContent>
+						<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 						<div class="min-w-0 flex-1">
 							<a href="/post/{post._id}" class="line-clamp-2 text-base font-medium hover:underline">
 								{post.title}
 							</a>
 							<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
-							<div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-								<span>u/{post.authorUsername ?? post.authorName}</span>
+							<div class="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+								<span class="inline-flex items-center gap-1">
+									<User class="size-3.5" />
+									u/{post.authorUsername ?? post.authorName}
+								</span>
 								{#if post.communitySlug}
-									<span>•</span>
-									<a href="/c/{post.communitySlug}" class="hover:text-foreground hover:underline">
+									<a
+										href="/c/{post.communitySlug}"
+										class="inline-flex items-center gap-1 hover:text-foreground hover:underline"
+									>
 										c/{post.communitySlug}
 									</a>
 								{/if}
-								<span>•</span>
-								<span>{new Date(post.createdAt).toLocaleString()}</span>
+								<span class="inline-flex items-center gap-1">
+									<Calendar class="size-3.5" />
+									{new Date(post.createdAt).toLocaleString()}
+								</span>
 							</div>
 						</div>
 
-						<div class="flex shrink-0 items-center gap-2">
+						<div class="flex shrink-0 items-center gap-2 self-start sm:self-auto">
 							<Button
-								size="sm"
-								variant="outline"
+								size="icon-sm"
+								variant={post.userVote === 1 ? 'secondary' : 'outline'}
+								class={post.userVote === 1
+									? 'border-primary/40 text-primary [&_svg_path]:!fill-current'
+									: ''}
 								disabled={!auth.isAuthenticated}
 								onclick={() => vote(post._id, 1)}
+								aria-label="Like post"
 							>
-								+1
+								<ThumbsUp class="size-4" />
 							</Button>
 							<Button
-								size="sm"
-								variant="outline"
+								size="icon-sm"
+								variant={post.userVote === -1 ? 'secondary' : 'outline'}
+								class={post.userVote === -1
+									? 'border-destructive/40 text-destructive [&_svg_path]:!fill-current'
+									: ''}
 								disabled={!auth.isAuthenticated}
 								onclick={() => vote(post._id, -1)}
+								aria-label="Dislike post"
 							>
-								-1
+								<ThumbsDown class="size-4" />
 							</Button>
 						</div>
 					</div>
-					<div class="mt-3 text-xs text-muted-foreground">
-						score {post.score} • {post.commentCount} comments • likes {post.likes} • dislikes {post.dislikes}
+					<div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+						<span class="inline-flex items-center gap-1">
+							<MessageSquare class="size-3.5" />
+							{post.commentCount} comments
+						</span>
+						<span class="inline-flex items-center gap-1">
+							<ThumbsUp class="size-3.5" />
+							{post.likes}
+						</span>
+						<span class="inline-flex items-center gap-1">
+							<ThumbsDown class="size-3.5" />
+							{post.dislikes}
+						</span>
+						<span>score {post.score}</span>
 					</div>
-				</article>
+					</CardContent>
+				</Card>
 			{/each}
 		</div>
 

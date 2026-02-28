@@ -53,11 +53,11 @@
 	}
 </script>
 
-<main class="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	<h1 class="text-2xl font-semibold tracking-tight">Submit Post</h1>
 	<p class="mt-1 text-sm text-muted-foreground">Share a knowledge post to the global feed or a community.</p>
 
-	<form class="mt-6 space-y-4" onsubmit={submitPost}>
+	<form class="mx-auto mt-6 max-w-3xl space-y-4 rounded-xl border border-border bg-card p-5" onsubmit={submitPost}>
 		<div class="space-y-2">
 			<Label>Post Type</Label>
 			<div class="flex gap-2">

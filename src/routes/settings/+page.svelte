@@ -7,7 +7,7 @@
 	const profileQuery = useQuery((api as any).profiles.getMyProfile, {});
 </script>
 
-<main class="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	<h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
 	<p class="mt-1 text-sm text-muted-foreground">Manage your account settings for the social pivot.</p>
 
@@ -16,7 +16,7 @@
 	{:else if !meQuery.data}
 		<p class="mt-4 text-sm text-destructive">You must sign in.</p>
 	{:else}
-		<div class="mt-5 rounded-lg border border-border bg-card p-4">
+		<div class="mx-auto mt-5 max-w-3xl rounded-lg border border-border bg-card p-4">
 			<p class="text-sm"><span class="text-muted-foreground">Name:</span> {meQuery.data.name}</p>
 			<p class="text-sm"><span class="text-muted-foreground">Email:</span> {meQuery.data.email}</p>
 			<p class="text-sm"><span class="text-muted-foreground">Username:</span> {meQuery.data.username ?? 'not set'}</p>
@@ -28,7 +28,7 @@
 	{/if}
 
 	{#if profileQuery.data?.bio}
-		<div class="mt-4 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+		<div class="mx-auto mt-4 max-w-3xl rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
 			{profileQuery.data.bio}
 		</div>
 	{/if}

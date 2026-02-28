@@ -2,8 +2,10 @@
 	import { page } from '$app/state';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
+	import { Calendar, Users } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Button } from '$lib/components/ui/button';
+	import { Card, CardContent } from '$lib/components/ui/card';
 	import { toast } from 'svelte-sonner';
 
 	type FeedTab = 'new' | 'top' | 'discussed';
@@ -55,17 +57,21 @@
 	}
 </script>
 
-<main class="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	{#if communityQuery.isLoading}
 		<p class="text-sm text-muted-foreground">Loading community...</p>
 	{:else if !communityQuery.data}
 		<p class="text-sm text-destructive">Community not found.</p>
 	{:else}
-		<section class="rounded-lg border border-border bg-card p-5">
+		<Card class="gap-0 py-5">
+			<CardContent>
 			<h1 class="text-2xl font-semibold tracking-tight">c/{communityQuery.data.community.slug}</h1>
 			<p class="mt-1 text-sm text-muted-foreground">{communityQuery.data.community.description}</p>
-			<div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-				<span>{communityQuery.data.community.memberCount} members</span>
+			<div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+				<span class="inline-flex items-center gap-1">
+					<Users class="size-3.5" />
+					{communityQuery.data.community.memberCount} members
+				</span>
 				<span>•</span>
 				<span>{communityQuery.data.community.visibility}</span>
 				<span>•</span>
@@ -99,7 +105,8 @@
 					<a class="ml-1 underline" href={signInHref}>Sign in</a>
 				</p>
 			{/if}
-		</section>
+			</CardContent>
+		</Card>
 
 		<section class="mt-5">
 			<div class="mb-3 flex items-center gap-2">
@@ -115,13 +122,21 @@
 			{:else}
 				<div class="space-y-3">
 					{#each feedQuery.data?.page ?? [] as post (post._id)}
-						<article class="rounded-lg border border-border bg-card p-4">
+						<Card class="gap-0 py-4">
+							<CardContent>
 							<a href="/post/{post._id}" class="font-medium hover:underline">{post.title}</a>
 							<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
-							<p class="mt-2 text-xs text-muted-foreground">
-								score {post.score} • {post.commentCount} comments • u/{post.authorUsername ?? post.authorName}
+							<p class="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+								<span>score {post.score}</span>
+								<span>{post.commentCount} comments</span>
+								<span>u/{post.authorUsername ?? post.authorName}</span>
+								<span class="inline-flex items-center gap-1">
+									<Calendar class="size-3.5" />
+									{new Date(post.createdAt).toLocaleDateString()}
+								</span>
 							</p>
-						</article>
+							</CardContent>
+						</Card>
 					{/each}
 				</div>
 			{/if}

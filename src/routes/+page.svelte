@@ -5,7 +5,7 @@
 	const auth = useAuth();
 </script>
 
-<main class="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-24">
+<main class="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
 	<div class="rounded-2xl border border-border bg-card p-8 sm:p-12">
 		<p class="text-sm font-medium tracking-wide text-muted-foreground uppercase">
 			Cognirivus Pivot

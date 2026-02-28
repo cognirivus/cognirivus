@@ -34,7 +34,7 @@
 	}
 </script>
 
-<main class="mx-auto max-w-2xl px-4 py-6 sm:px-6">
+<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	<h1 class="text-2xl font-semibold tracking-tight">Username Setup</h1>
 	<p class="mt-1 text-sm text-muted-foreground">
 		Username is immutable once set. Allowed format: <code>[a-z0-9_]&#123;3,20&#125;</code>
@@ -43,7 +43,7 @@
 	{#if profileQuery.isLoading}
 		<p class="mt-4 text-sm text-muted-foreground">Loading profile...</p>
 	{:else}
-		<form class="mt-5 space-y-3" onsubmit={save}>
+		<form class="mx-auto mt-5 max-w-3xl space-y-3 rounded-xl border border-border bg-card p-5" onsubmit={save}>
 			<div class="space-y-2">
 				<Label for="username">Username</Label>
 				<Input id="username" bind:value={username} required minlength={3} maxlength={20} disabled={!!profileQuery.data?.username} />

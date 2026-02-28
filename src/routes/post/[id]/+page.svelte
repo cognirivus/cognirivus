@@ -3,9 +3,10 @@
 	import { goto } from '$app/navigation';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
+	import { ThumbsDown, ThumbsUp } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Button } from '$lib/components/ui/button';
-	import { Textarea } from '$lib/components/ui/textarea';
+	import CommentsSection from '$lib/components/comments/CommentsSection.svelte';
 	import { toast } from 'svelte-sonner';
 
 	const auth = useAuth();
@@ -14,14 +15,24 @@
 
 	const postQuery = useQuery((api as any).posts.get, () => ({ postId }));
 	const commentsQuery = useQuery((api as any).posts.listComments, () => ({ postId }));
+	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
 
 	let fullBody = $state('');
-	let commentText = $state('');
-	let replyParentId = $state<string | null>(null);
 	let loadingBody = $state(false);
 	const signInHref = $derived(
 		`/signin?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
 	);
+	const currentUserInitial = $derived.by(() => {
+		const username = currentUserQuery.data?.username;
+		if (username && username.length > 0) {
+			return username.charAt(0).toUpperCase();
+		}
+		const name = currentUserQuery.data?.name;
+		if (name && name.length > 0) {
+			return name.charAt(0).toUpperCase();
+		}
+		return 'U';
+	});
 
 	$effect(() => {
 		const post = postQuery.data;
@@ -73,19 +84,16 @@
 		}
 	}
 
-	async function addComment(event: Event) {
-		event.preventDefault();
+	async function addComment(body: string, parentId?: string) {
 		if (!auth.isAuthenticated) {
 			return;
 		}
 		try {
 			await client.mutation((api as any).posts.addComment, {
 				postId,
-				parentId: replyParentId || undefined,
-				body: commentText
+				parentId,
+				body
 			});
-			commentText = '';
-			replyParentId = null;
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Failed to add comment');
 		}
@@ -102,25 +110,10 @@
 		}
 	}
 
-	function commentDepth(commentId: string): number {
-		type CommentNode = {
-			_id: string;
-			parentId?: string;
-		};
-
-		const comments = (commentsQuery.data ?? []) as Array<CommentNode>;
-		const byId = new Map<string, CommentNode>(comments.map((c) => [c._id, c]));
-		let depth = 0;
-		let current: CommentNode | undefined = byId.get(commentId);
-		while (current?.parentId && depth < 8) {
-			depth += 1;
-			current = byId.get(current.parentId);
-		}
-		return depth;
-	}
 </script>
 
-<main class="mx-auto max-w-4xl px-4 py-6 sm:px-6">
+<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+	<div class="mx-auto w-full max-w-4xl">
 	{#if postQuery.isLoading}
 		<p class="text-sm text-muted-foreground">Loading post...</p>
 	{:else if postQuery.error || !postQuery.data}
@@ -161,11 +154,29 @@
 			</div>
 
 			<div class="mt-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-				<Button size="sm" variant="outline" disabled={!auth.isAuthenticated} onclick={() => vote(1)}>
-					Like
+				<Button
+					size="icon-sm"
+					variant={postQuery.data.userVote === 1 ? 'secondary' : 'outline'}
+					class={postQuery.data.userVote === 1
+						? 'border-primary/40 text-primary [&_svg_path]:!fill-current'
+						: ''}
+					disabled={!auth.isAuthenticated}
+					onclick={() => vote(1)}
+					aria-label="Like post"
+				>
+					<ThumbsUp class="size-4" />
 				</Button>
-				<Button size="sm" variant="outline" disabled={!auth.isAuthenticated} onclick={() => vote(-1)}>
-					Dislike
+				<Button
+					size="icon-sm"
+					variant={postQuery.data.userVote === -1 ? 'secondary' : 'outline'}
+					class={postQuery.data.userVote === -1
+						? 'border-destructive/40 text-destructive [&_svg_path]:!fill-current'
+						: ''}
+					disabled={!auth.isAuthenticated}
+					onclick={() => vote(-1)}
+					aria-label="Dislike post"
+				>
+					<ThumbsDown class="size-4" />
 				</Button>
 				<span>score {postQuery.data.score}</span>
 				<span>•</span>
@@ -179,79 +190,18 @@
 			{/if}
 		</article>
 
-		<section class="mt-6">
-			<h2 class="text-lg font-semibold">Comments</h2>
-			<form class="mt-3 space-y-2" onsubmit={addComment}>
-				{#if replyParentId}
-					<div class="text-xs text-muted-foreground">Replying to comment {replyParentId}</div>
-				{/if}
-				<Textarea
-					bind:value={commentText}
-					rows={4}
-					required
-					disabled={!auth.isAuthenticated}
-					placeholder={auth.isAuthenticated ? 'Write a comment' : 'Sign in to comment'}
-				/>
-				<div class="flex items-center gap-2">
-					<Button type="submit" disabled={!auth.isAuthenticated}>Post Comment</Button>
-					{#if replyParentId}
-						<Button type="button" variant="outline" onclick={() => (replyParentId = null)}>
-							Cancel Reply
-						</Button>
-					{/if}
-				</div>
-			</form>
-			{#if !auth.isAuthenticated}
-				<p class="mt-2 text-xs text-muted-foreground">
-					Commenting is available after sign-in.
-					<a class="ml-1 underline" href={signInHref}>Sign in</a>
-				</p>
-			{/if}
-
-			<div class="mt-4 space-y-3">
-				{#each commentsQuery.data ?? [] as comment (comment._id)}
-					<div
-						class="rounded-lg border border-border bg-card p-3"
-						style="margin-left: {commentDepth(comment._id) * 18}px;"
-					>
-						<div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-							<span>u/{comment.authorUsername ?? comment.authorName}</span>
-							<span>•</span>
-							<span>{new Date(comment.createdAt).toLocaleString()}</span>
-						</div>
-						<p class="whitespace-pre-wrap text-sm">{comment.body}</p>
-						<div class="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-							<Button
-								size="sm"
-								variant="ghost"
-								disabled={!auth.isAuthenticated}
-								onclick={() => voteComment(comment._id, 1)}
-							>
-								+1
-							</Button>
-							<Button
-								size="sm"
-								variant="ghost"
-								disabled={!auth.isAuthenticated}
-								onclick={() => voteComment(comment._id, -1)}
-							>
-								-1
-							</Button>
-							<Button
-								size="sm"
-								variant="ghost"
-								disabled={!auth.isAuthenticated}
-								onclick={() => (replyParentId = comment._id)}
-							>
-								Reply
-							</Button>
-							<span>score {comment.score}</span>
-						</div>
-					</div>
-				{/each}
-			</div>
-		</section>
+		<CommentsSection
+			comments={commentsQuery.data ?? []}
+			isLoading={commentsQuery.isLoading}
+			isAuthenticated={auth.isAuthenticated}
+			{signInHref}
+			{currentUserInitial}
+			onAddComment={addComment}
+			onCommentLike={(commentId) => voteComment(commentId, 1)}
+			onCommentDislike={(commentId) => voteComment(commentId, -1)}
+		/>
 	{/if}
+	</div>
 </main>
 
 

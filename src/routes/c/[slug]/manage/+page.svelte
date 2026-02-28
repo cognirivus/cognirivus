@@ -77,7 +77,7 @@
 	}
 </script>
 
-<main class="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	{#if communityQuery.isLoading}
 		<p class="text-sm text-muted-foreground">Loading community...</p>
 	{:else if !communityQuery.data}
