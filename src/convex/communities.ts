@@ -1,4 +1,5 @@
 import { v } from 'convex/values';
+import { paginationOptsValidator } from 'convex/server';
 import { mutation, query } from './_generated/server';
 import { authComponent } from './auth';
 import { internal } from './_generated/api';
@@ -440,6 +441,60 @@ export const listPendingRequests = query({
 				};
 			})
 		);
+	}
+});
+
+export const listMembers = query({
+	args: {
+		communityId: v.id('communities'),
+		paginationOpts: paginationOptsValidator
+	},
+	handler: async (ctx, args) => {
+		const community = await ctx.db.get(args.communityId);
+		if (!community) {
+			throw new Error('Community not found.');
+		}
+
+		if (community.visibility === 'private') {
+			const authUser = await getOptionalAuthUser(ctx);
+			if (!authUser) {
+				throw new Error('Authentication required to view members of a private community.');
+			}
+			const membership = await getMembership(ctx, args.communityId, authUser._id);
+			if (!membership || membership.status !== 'active') {
+				throw new Error('You must be a member to view members of a private community.');
+			}
+		}
+
+		const result = await ctx.db
+			.query('community_memberships')
+			.withIndex('by_communityId_and_status', (q: any) =>
+				q.eq('communityId', args.communityId).eq('status', 'active')
+			)
+			.paginate(args.paginationOpts);
+
+		const pageWithProfiles = await Promise.all(
+			result.page.map(async (membership) => {
+				const profile = await ctx.db
+					.query('users_profile')
+					.withIndex('by_authId', (q: any) => q.eq('authId', membership.userAuthId))
+					.unique();
+
+				return {
+					userAuthId: membership.userAuthId,
+					role: membership.role,
+					joinedAt: membership.respondedAt ?? membership.createdAt,
+					name: profile?.name ?? 'Unknown',
+					username: profile?.username ?? null,
+					image: profile?.image
+				};
+			})
+		);
+
+		return {
+			...result,
+			page: pageWithProfiles
+		};
 	}
 });
 

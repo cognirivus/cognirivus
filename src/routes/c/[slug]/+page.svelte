@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import { page } from '$app/state';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
@@ -98,10 +98,10 @@
 			<h1 class="text-2xl font-semibold tracking-tight">c/{communityQuery.data.community.slug}</h1>
 			<p class="mt-1 text-sm text-muted-foreground">{communityQuery.data.community.description}</p>
 			<div class="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-				<span class="inline-flex items-center gap-1">
+				<a href="/c/{slug}/members" class="inline-flex items-center gap-1 hover:underline">
 					<Users class="size-3.5" />
 					{communityQuery.data.community.memberCount} members
-				</span>
+				</a>
 				<span>•</span>
 				<span>{communityQuery.data.community.visibility}</span>
 				<span>•</span>
