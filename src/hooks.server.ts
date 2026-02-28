@@ -3,25 +3,12 @@ import { redirect, type Handle } from '@sveltejs/kit';
 import { createAuth } from '$convex/auth.js';
 import { getToken } from '@mmailaender/convex-better-auth-svelte/sveltekit';
 
-const isPublicRoute = (pathname: string) => {
-	const publicRoutes = [
-		'/',
-		'/signin',
-		'/api/auth',
-		'/blog',
-		'/news',
-		'/subjects',
-		'/content',
-		'/entities'
-	];
-	return (
-		publicRoutes.some((route) => pathname === route || pathname.startsWith('/api/auth')) ||
-		pathname.startsWith('/blog/') ||
-		pathname.startsWith('/news/') ||
-		pathname.startsWith('/subjects/') ||
-		pathname.startsWith('/content/') ||
-		pathname.startsWith('/entities/')
-	);
+const isProtectedRoute = (pathname: string) => {
+	if (pathname === '/submit') return true;
+	if (pathname === '/settings' || pathname.startsWith('/settings/')) return true;
+	if (pathname === '/c/new') return true;
+	if (/^\/c\/[^/]+\/manage$/.test(pathname)) return true;
+	return false;
 };
 
 const handleAuth: Handle = async ({ event, resolve }) => {
@@ -30,17 +17,13 @@ const handleAuth: Handle = async ({ event, resolve }) => {
 };
 
 const requireAuth: Handle = async ({ event, resolve }) => {
-	if (isPublicRoute(event.url.pathname)) {
-		return resolve(event);
-	}
-
-	if (!event.locals.token) {
+	const pathname = event.url.pathname;
+	if (isProtectedRoute(pathname) && !event.locals.token) {
 		throw redirect(
 			302,
 			`/signin?redirectTo=${encodeURIComponent(event.url.pathname + event.url.search)}`
 		);
 	}
-
 	return resolve(event);
 };
 
