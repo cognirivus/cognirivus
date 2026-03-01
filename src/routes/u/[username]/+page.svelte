@@ -1,9 +1,9 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
-	import { FileText, UserRoundCheck, Users } from '@lucide/svelte';
+	import { FileText, MessageSquare, UserRoundCheck, Users } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
@@ -59,68 +59,73 @@
 
 <main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	<div class="mx-auto w-full max-w-4xl">
-	{#if profileQuery.isLoading}
-		<p class="text-sm text-muted-foreground">Loading profile...</p>
-	{:else if !profileQuery.data}
-		<p class="text-sm text-destructive">Profile not found.</p>
-	{:else}
-		<Card class="gap-0 py-5">
-			<CardContent>
-			<h1 class="text-2xl font-semibold tracking-tight">u/{profileQuery.data.username}</h1>
-			<p class="mt-1 text-sm text-muted-foreground">{profileQuery.data.name}</p>
-			<div class="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-				<span class="inline-flex items-center gap-1">
-					<FileText class="size-3.5" />
-					{profileQuery.data.postCount} posts
-				</span>
-				<a
-					class="inline-flex items-center gap-1 hover:text-foreground hover:underline"
-					href="/u/{username}/followers"
-				>
-					<Users class="size-3.5" />
-					{profileQuery.data.followerCount} followers
-				</a>
-				<a
-					class="inline-flex items-center gap-1 hover:text-foreground hover:underline"
-					href="/u/{username}/following"
-				>
-					<UserRoundCheck class="size-3.5" />
-					{profileQuery.data.followingCount} following
-				</a>
-			</div>
-			<div class="mt-4">
-				<Button
-					variant={isFollowing ? 'secondary' : 'outline'}
-					disabled={isOwnProfile}
-					onclick={follow}
-				>
-					{isOwnProfile ? 'Your profile' : isFollowing ? 'Unfollow' : 'Follow'}
-				</Button>
-			</div>
-			</CardContent>
-		</Card>
+		{#if profileQuery.isLoading}
+			<p class="text-sm text-muted-foreground">Loading profile...</p>
+		{:else if !profileQuery.data}
+			<p class="text-sm text-destructive">Profile not found.</p>
+		{:else}
+			<Card class="gap-0 py-5">
+				<CardContent>
+					<h1 class="text-2xl font-semibold tracking-tight">u/{profileQuery.data.username}</h1>
+					<p class="mt-1 text-sm text-muted-foreground">{profileQuery.data.name}</p>
+					<div class="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+						<span class="inline-flex items-center gap-1">
+							<FileText class="size-3.5" />
+							{profileQuery.data.postCount} posts
+						</span>
+						<a
+							class="inline-flex items-center gap-1 hover:text-foreground hover:underline"
+							href="/u/{username}/followers"
+						>
+							<Users class="size-3.5" />
+							{profileQuery.data.followerCount} followers
+						</a>
+						<a
+							class="inline-flex items-center gap-1 hover:text-foreground hover:underline"
+							href="/u/{username}/following"
+						>
+							<UserRoundCheck class="size-3.5" />
+							{profileQuery.data.followingCount} following
+						</a>
+					</div>
+					<div class="mt-4 flex items-center gap-2">
+						<Button
+							variant={isFollowing ? 'secondary' : 'outline'}
+							disabled={isOwnProfile}
+							onclick={follow}
+						>
+							{isOwnProfile ? 'Your profile' : isFollowing ? 'Unfollow' : 'Follow'}
+						</Button>
+						{#if !isOwnProfile && auth.isAuthenticated}
+							<Button variant="outline" onclick={() => goto(`/chat/${username}`)}>
+								<MessageSquare class="mr-2 size-4" />
+								Message
+							</Button>
+						{/if}
+					</div>
+				</CardContent>
+			</Card>
 
-		<section class="mt-5">
-			<h2 class="mb-3 text-lg font-semibold">Recent Posts</h2>
-			{#if (feedQuery.data?.page?.length ?? 0) === 0}
-				<p class="text-sm text-muted-foreground">No posts yet.</p>
-			{:else}
-				<div class="space-y-3">
-					{#each feedQuery.data?.page ?? [] as post (post._id)}
-						<Card class="gap-0 py-4">
-							<CardContent>
-							<a href="/post/{post._id}" class="font-medium hover:underline">{post.title}</a>
-							<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
-							<p class="mt-2 text-xs text-muted-foreground">
-								score {post.score} • {post.commentCount} comments
-							</p>
-							</CardContent>
-						</Card>
-					{/each}
-				</div>
-			{/if}
-		</section>
-	{/if}
+			<section class="mt-5">
+				<h2 class="mb-3 text-lg font-semibold">Recent Posts</h2>
+				{#if (feedQuery.data?.page?.length ?? 0) === 0}
+					<p class="text-sm text-muted-foreground">No posts yet.</p>
+				{:else}
+					<div class="space-y-3">
+						{#each feedQuery.data?.page ?? [] as post (post._id)}
+							<Card class="gap-0 py-4">
+								<CardContent>
+									<a href="/post/{post._id}" class="font-medium hover:underline">{post.title}</a>
+									<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
+									<p class="mt-2 text-xs text-muted-foreground">
+										score {post.score} • {post.commentCount} comments
+									</p>
+								</CardContent>
+							</Card>
+						{/each}
+					</div>
+				{/if}
+			</section>
+		{/if}
 	</div>
 </main>
-

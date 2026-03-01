@@ -12,6 +12,7 @@ import type * as ai_tools from "../ai_tools.js";
 import type * as auth from "../auth.js";
 import type * as communities from "../communities.js";
 import type * as community_chat from "../community_chat.js";
+import type * as dm from "../dm.js";
 import type * as feed from "../feed.js";
 import type * as http from "../http.js";
 import type * as lib_feedRanking from "../lib/feedRanking.js";
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   communities: typeof communities;
   community_chat: typeof community_chat;
+  dm: typeof dm;
   feed: typeof feed;
   http: typeof http;
   "lib/feedRanking": typeof lib_feedRanking;

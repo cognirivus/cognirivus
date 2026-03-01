@@ -134,13 +134,52 @@ const schema = defineSchema({
 		embedding: v.optional(v.array(v.number())),
 		createdAt: v.number()
 	}).index('by_postId', ['postId']),
+	user_presence: defineTable({
+		userAuthId: v.string(),
+		expiresAt: v.number()
+	}).index('by_userAuthId', ['userAuthId']),
 	ai_summary_cache: defineTable({
 		entityType: v.union(v.literal('post'), v.literal('thread')),
 		entityId: v.string(),
 		summary: v.string(),
 		model: v.string(),
 		createdAt: v.number()
-	}).index('by_entityType_and_entityId', ['entityType', 'entityId'])
+	}).index('by_entityType_and_entityId', ['entityType', 'entityId']),
+	dm_conversations: defineTable({
+		participant1: v.string(),
+		participant2: v.string(),
+		lastMessageAt: v.number(),
+		createdAt: v.number()
+	})
+		.index('by_participant1', ['participant1'])
+		.index('by_participant2', ['participant2'])
+		.index('by_pair', ['participant1', 'participant2']),
+	dm_messages: defineTable({
+		conversationId: v.id('dm_conversations'),
+		senderAuthId: v.string(),
+		senderName: v.string(),
+		senderImage: v.optional(v.string()),
+		body: v.string(),
+		replyTo: v.optional(v.id('dm_messages')),
+		editedAt: v.optional(v.number()),
+		isDeleted: v.boolean(),
+		createdAt: v.number()
+	}).index('by_conversationId_and_createdAt', ['conversationId', 'createdAt']),
+	dm_reactions: defineTable({
+		messageId: v.id('dm_messages'),
+		userAuthId: v.string(),
+		emoji: v.string(),
+		createdAt: v.number()
+	})
+		.index('by_messageId', ['messageId'])
+		.index('by_messageId_and_userAuthId', ['messageId', 'userAuthId']),
+	dm_read_cursors: defineTable({
+		conversationId: v.id('dm_conversations'),
+		userAuthId: v.string(),
+		lastReadAt: v.number()
+	})
+		.index('by_conversationId_and_userAuthId', ['conversationId', 'userAuthId'])
+		.index('by_userAuthId', ['userAuthId'])
 });
 
 export default schema;

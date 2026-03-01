@@ -103,8 +103,8 @@
 			<div class="flex shrink-0 items-center gap-2">
 				{#if isChatPage && communityId}
 					<Sheet.Root>
-						<Sheet.Trigger asChild>
-							{#snippet children({ props })}
+						<Sheet.Trigger>
+							{#snippet child({ props })}
 								<Button {...props} variant="ghost" size="icon" class="relative h-9 w-9 lg:hidden">
 									<PanelRight class="h-4.5 w-4.5" />
 									<span class="sr-only">Toggle members</span>

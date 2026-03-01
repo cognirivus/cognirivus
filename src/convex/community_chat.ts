@@ -118,6 +118,26 @@ async function requireMessageAuthor(
 	return message;
 }
 
+async function validateReplyTarget(
+	ctx: MutationCtx,
+	communityId: Id<'communities'>,
+	replyTo?: Id<'community_chat_messages'>
+) {
+	if (!replyTo) {
+		return undefined;
+	}
+
+	const parentMessage = await ctx.db.get(replyTo);
+	if (!parentMessage) {
+		throw new Error('Reply target not found');
+	}
+	if (parentMessage.communityId !== communityId) {
+		throw new Error('Reply target must be in the same community');
+	}
+
+	return replyTo;
+}
+
 export const sendMessage = mutation({
 	args: {
 		communityId: v.id('communities'),
@@ -131,6 +151,7 @@ export const sendMessage = mutation({
 
 		await rateLimiter.limit(ctx, 'communityChatMessage', { key: user._id, throws: true });
 		await requireActiveMembership(ctx, user._id, args.communityId);
+		const replyTo = await validateReplyTarget(ctx, args.communityId, args.replyTo);
 		const body = normalizeMessageBody(args.body);
 
 		return await ctx.db.insert('community_chat_messages', {
@@ -139,7 +160,7 @@ export const sendMessage = mutation({
 			userName: user.name ?? 'Anonymous',
 			userImage: user.image || undefined,
 			body,
-			replyTo: args.replyTo,
+			replyTo,
 			isDeleted: false,
 			createdAt: Date.now()
 		});
@@ -227,9 +248,7 @@ export const getMessages = query({
 
 		const messages = await ctx.db
 			.query('community_chat_messages')
-			.withIndex('by_communityId_and_createdAt', (q) =>
-				q.eq('communityId', args.communityId)
-			)
+			.withIndex('by_communityId_and_createdAt', (q) => q.eq('communityId', args.communityId))
 			.order('desc')
 			.take(limit);
 
@@ -270,7 +289,15 @@ export const getMessages = query({
 		const replyToIds = orderedMessages
 			.map((m) => m.replyTo)
 			.filter((id): id is Id<'community_chat_messages'> => id !== undefined);
-		const parentMessages = await Promise.all(replyToIds.map((id) => ctx.db.get(id)));
+		const parentMessages = await Promise.all(
+			replyToIds.map(async (id) => {
+				const parent = await ctx.db.get(id);
+				if (!parent || parent.communityId !== args.communityId) {
+					return null;
+				}
+				return parent;
+			})
+		);
 		const parentMessageMap = Object.fromEntries(replyToIds.map((id, i) => [id, parentMessages[i]]));
 
 		return orderedMessages.map((message) => {
@@ -299,8 +326,12 @@ export const getMessages = query({
 				replyToContext = {
 					messageId: message.replyTo,
 					userName: parent?.userName ?? 'Unknown User',
-					body: parent?.isDeleted ? 'message deleted' : parent?.body ?? 'Original message not found',
-					isDeleted: !!parent?.isDeleted
+					body: !parent
+						? 'Original message unavailable'
+						: parent.isDeleted
+							? 'message deleted'
+							: parent.body,
+					isDeleted: !parent || !!parent.isDeleted
 				};
 			}
 
@@ -408,4 +439,3 @@ export const toggleReaction = mutation({
 		return null;
 	}
 });
-

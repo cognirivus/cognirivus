@@ -6,7 +6,6 @@
 	import { api } from '$convex/_generated/api';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Tooltip from '$lib/components/ui/tooltip';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Circle, Users } from '@lucide/svelte';
@@ -14,8 +13,6 @@
 	let { communityId } = $props<{ communityId: Id<'communities'> }>();
 
 	const client = useConvexClient();
-
-	const sessionId = Math.random().toString(36).substring(2, 15);
 
 	const membersQuery = useQuery((api as any).communities.listMembers, () =>
 		communityId
@@ -31,24 +28,13 @@
 	const currentUserQuery = useQuery((api as any).auth.getCurrentUser, {});
 	const currentUserId = $derived(currentUserQuery.data?.id ?? null);
 
-	const roomId = $derived(communityId?.toString() ?? '');
-	let roomToken = $state<string | null>(null);
-
 	$effect(() => {
-		if (!browser || !roomId || !currentUserId) return;
+		if (!browser || !currentUserId) return;
 
-		const interval = 10000;
+		const interval = 20_000;
 		const sendHeartbeat = async () => {
 			try {
-				const result = await client.mutation((api as any).presence.heartbeat, {
-					roomId,
-					userId: currentUserId,
-					sessionId,
-					interval: interval * 2
-				});
-				if (result?.roomToken && !roomToken) {
-					roomToken = result.roomToken;
-				}
+				await client.mutation((api as any).presence.heartbeat, {});
 			} catch (error) {
 				console.error('Community presence heartbeat failed:', error);
 			}
@@ -59,12 +45,16 @@
 		return () => clearInterval(timer);
 	});
 
-	const presenceQuery = useQuery((api as any).presence.list, () =>
-		browser && roomToken ? { roomToken } : 'skip'
+	const memberAuthIds = $derived([
+		...new Set(members.map((member: any) => member.userAuthId).filter(Boolean))
+	]);
+	const presenceQuery = useQuery((api as any).presence.getOnlineUsers, () =>
+		browser && memberAuthIds.length > 0 ? { userAuthIds: memberAuthIds } : 'skip'
 	);
-	const onlineUsers = $derived((presenceQuery.data ?? []).filter((u: any) => u.online));
-
-	const onlineUserIds = $derived(new Set(onlineUsers.map((u: any) => u.userId)));
+	const onlineUserIds = $derived(new Set((presenceQuery.data ?? []) as Array<string>));
+	const onlineUsers = $derived(
+		members.filter((member: any) => onlineUserIds.has(member.userAuthId))
+	);
 
 	const memberList = $derived(
 		members.map((member: any) => ({

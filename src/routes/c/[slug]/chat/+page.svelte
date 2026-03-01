@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import type { Id } from '$convex/_generated/dataModel';
@@ -57,8 +58,10 @@
 
 	const slug = $derived(page.params.slug as string);
 	const client = useConvexClient();
+	const meQuery = useQuery(api.auth.getCurrentUser, {});
+	const redirectTo = $derived(encodeURIComponent(page.url.pathname + page.url.search));
 	const session = authClient.useSession();
-	const currentUserId = $derived($session.data?.user?.id);
+	const currentUserId = $derived(meQuery.data?.id ?? null);
 	const isAuthenticated = $derived(!!currentUserId);
 
 	const communityQuery = useQuery((api as any).communities.getBySlug, () => ({ slug }));
@@ -80,6 +83,12 @@
 	const messages = $derived((messagesQuery.data ?? []) as unknown as Array<CommunityChatMessage>);
 
 	let status = $state<ChatStatus>('loading');
+
+	$effect(() => {
+		if (!meQuery.isLoading && !meQuery.data) {
+			goto(`/signin?redirectTo=${redirectTo}`);
+		}
+	});
 
 	$effect(() => {
 		if (communityQuery.isLoading) {
@@ -280,7 +289,8 @@
 	async function sendMessage() {
 		if (!newMessage.trim() || !communityId || !isMember) return;
 		const body = newMessage.trim();
-		const replyTo = replyingToMessage?._id;
+		const replyContext = replyingToMessage;
+		const replyTo = replyContext?._id;
 
 		newMessage = '';
 		cancelReplying();
@@ -295,6 +305,15 @@
 		} catch (error: any) {
 			console.error('Failed to send message:', error);
 			toast.error(error?.message ?? 'Failed to send message. Please try again.');
+			newMessage = body;
+			replyingToMessage = replyContext;
+			tick().then(() => {
+				inputEl?.focus();
+				if (inputEl) {
+					inputEl.style.height = 'auto';
+					inputEl.style.height = Math.min(inputEl.scrollHeight, 128) + 'px';
+				}
+			});
 		}
 	}
 
@@ -617,7 +636,7 @@
 															rows={1}
 															oninput={autoResizeTextarea}
 															class="mt-1 mb-2 w-full resize-none rounded-md border border-primary/40 bg-background/90 px-3 py-2 text-[14px] leading-relaxed shadow-sm outline-none focus:ring-1 focus:ring-primary/50"
-														/>
+														></textarea>
 														<div
 															class={`flex items-center gap-2 text-xs ${isMine ? 'justify-end' : ''}`}
 														>
@@ -752,7 +771,7 @@
 							</div>
 						{/each}
 
-						<div class="h-[60px]" />
+						<div class="h-[60px]"></div>
 					{/if}
 				</div>
 
@@ -820,7 +839,7 @@
 										placeholder="Write a message..."
 										rows={1}
 										class="max-h-32 w-full resize-none bg-transparent px-3 py-2 text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground/50 focus:outline-none sm:px-4 sm:py-2.5 sm:text-[13.5px]"
-									/>
+									></textarea>
 								</div>
 								<Button
 									type="button"

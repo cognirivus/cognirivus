@@ -15,5 +15,8 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
 	followCommunity: { kind: 'token bucket', rate: 120, period: HOUR, capacity: 30 },
 	feedRefresh: { kind: 'token bucket', rate: 240, period: MINUTE, capacity: 80 },
 	communityChatMessage: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
-	communityChatReaction: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 }
+	communityChatReaction: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 },
+	dmMessage: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
+	dmReaction: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 },
+	presenceHeartbeat: { kind: 'token bucket', rate: 120, period: MINUTE, capacity: 20 }
 });

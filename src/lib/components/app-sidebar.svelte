@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { goto, invalidateAll } from '$app/navigation'
-	import { page } from '$app/state'
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte'
-	import { useQuery } from 'convex-svelte'
-	import { api } from '$convex/_generated/api'
-	import { authClient } from '$lib/auth-client'
+	import { goto, invalidateAll } from '$app/navigation';
+	import { page } from '$app/state';
+	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useQuery } from 'convex-svelte';
+	import { api } from '$convex/_generated/api';
+	import { authClient } from '$lib/auth-client';
 	import {
 		Compass,
 		Users,
@@ -15,53 +15,62 @@
 		LogOut,
 		LogIn,
 		UserPlus,
-		ChevronsUpDown
-	} from '@lucide/svelte'
-	import * as Sidebar from '$lib/components/ui/sidebar/index.js'
-	import { useSidebar } from '$lib/components/ui/sidebar/index.js'
-	import * as Avatar from '$lib/components/ui/avatar/index.js'
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js'
-	import Logo from './Logo.svelte'
-	import { Button } from '$lib/components/ui/button/index.js'
-	import type { ComponentProps } from 'svelte'
+		ChevronsUpDown,
+		MessageSquare
+	} from '@lucide/svelte';
+	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import { useSidebar } from '$lib/components/ui/sidebar/index.js';
+	import * as Avatar from '$lib/components/ui/avatar/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import Logo from './Logo.svelte';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import type { ComponentProps } from 'svelte';
 
 	let {
 		ref = $bindable(null),
 		collapsible = 'icon',
 		...restProps
-	}: ComponentProps<typeof Sidebar.Root> = $props()
+	}: ComponentProps<typeof Sidebar.Root> = $props();
 
-	const auth = useAuth()
-	const sidebar = useSidebar()
+	const auth = useAuth();
+	const sidebar = useSidebar();
 
-	const currentUserQuery = useQuery(api.auth.getCurrentUser, {})
-	const currentUser = $derived(currentUserQuery.data)
+	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
+	const currentUser = $derived(currentUserQuery.data);
 	const profileHref = $derived(
 		currentUser?.username ? `/u/${currentUser.username}` : '/settings/username'
-	)
+	);
 
-	const myCommunitiesQuery = useQuery((api as any).communities.listMine, {})
-	const myCommunities = $derived(myCommunitiesQuery.data ?? [])
+	const myCommunitiesQuery = useQuery((api as any).communities.listMine, {});
+	const myCommunities = $derived(myCommunitiesQuery.data ?? []);
 
-	const redirectTo = $derived(encodeURIComponent(page.url.pathname + page.url.search))
+	const redirectTo = $derived(encodeURIComponent(page.url.pathname + page.url.search));
+
+	const unreadQuery = useQuery((api as any).dm.getUnreadCount, () =>
+		auth.isAuthenticated ? {} : 'skip'
+	);
+	const unreadCount = $derived(unreadQuery.data ?? 0);
 
 	const navItems = [
 		{ title: 'Feed', url: '/feed', icon: Compass, authOnly: false },
 		{ title: 'Communities', url: '/c', icon: Users, authOnly: false },
 		{ title: 'Submit Post', url: '/submit', icon: Send, authOnly: true },
-		{ title: 'Create Community', url: '/c/new', icon: CirclePlus, authOnly: true }
-	]
+		{ title: 'Chat', url: '/chat', icon: MessageSquare, authOnly: true }
+	];
 
 	function isActive(href: string) {
-		if (href === '/c') {
-			return page.url.pathname === '/c' || page.url.pathname.startsWith('/c/')
+		if (href === '/chat') {
+			return page.url.pathname === '/chat' || page.url.pathname.startsWith('/chat/');
 		}
-		return page.url.pathname === href
+		if (href === '/c') {
+			return page.url.pathname === '/c' || page.url.pathname.startsWith('/c/');
+		}
+		return page.url.pathname === href;
 	}
 
 	async function signOut() {
-		await authClient.signOut()
-		await invalidateAll()
+		await authClient.signOut();
+		await invalidateAll();
 	}
 </script>
 
@@ -88,14 +97,18 @@
 					{#each navItems as item (item.url)}
 						{#if !item.authOnly || auth.isAuthenticated}
 							<Sidebar.MenuItem>
-								<Sidebar.MenuButton
-									tooltipContent={item.title}
-									isActive={isActive(item.url)}
-								>
+								<Sidebar.MenuButton tooltipContent={item.title} isActive={isActive(item.url)}>
 									{#snippet child({ props })}
 										<a href={item.url} {...props}>
 											<item.icon />
 											<span>{item.title}</span>
+											{#if item.title === 'Chat' && unreadCount > 0}
+												<span
+													class="text-destructive-foreground ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white"
+												>
+													{unreadCount > 99 ? '99+' : unreadCount}
+												</span>
+											{/if}
 										</a>
 									{/snippet}
 								</Sidebar.MenuButton>
@@ -149,9 +162,7 @@
 											<Avatar.Image src={currentUser.image} alt={currentUser.name} />
 										{/if}
 										<Avatar.Fallback class="rounded-lg">
-											{(currentUser.name ?? currentUser.email ?? '?')
-												.slice(0, 2)
-												.toUpperCase()}
+											{(currentUser.name ?? currentUser.email ?? '?').slice(0, 2).toUpperCase()}
 										</Avatar.Fallback>
 									</Avatar.Root>
 									<div class="grid flex-1 text-start text-sm leading-tight">
@@ -177,9 +188,7 @@
 											<Avatar.Image src={currentUser.image} alt={currentUser.name} />
 										{/if}
 										<Avatar.Fallback class="rounded-lg">
-											{(currentUser.name ?? currentUser.email ?? '?')
-												.slice(0, 2)
-												.toUpperCase()}
+											{(currentUser.name ?? currentUser.email ?? '?').slice(0, 2).toUpperCase()}
 										</Avatar.Fallback>
 									</Avatar.Root>
 									<div class="grid flex-1 text-start text-sm leading-tight">
