@@ -124,6 +124,12 @@
 				>
 					{isFollowing ? 'Following' : 'Follow'}
 				</Button>
+				{#if communityQuery.data.canRead}
+					<Button href={`/c/${communityQuery.data.community.slug}/chat`} variant="outline">
+						<MessageSquare class="mr-1.5 h-4 w-4" />
+						Chat
+					</Button>
+				{/if}
 				{#if communityQuery.data.canPost}
 					<Button href="/submit">Submit in Community</Button>
 				{/if}

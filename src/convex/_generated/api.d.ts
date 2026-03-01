@@ -11,6 +11,7 @@
 import type * as ai_tools from "../ai_tools.js";
 import type * as auth from "../auth.js";
 import type * as communities from "../communities.js";
+import type * as community_chat from "../community_chat.js";
 import type * as feed from "../feed.js";
 import type * as http from "../http.js";
 import type * as lib_feedRanking from "../lib/feedRanking.js";
@@ -18,6 +19,7 @@ import type * as lib_r2 from "../lib/r2.js";
 import type * as lib_rateLimits from "../lib/rateLimits.js";
 import type * as personalization from "../personalization.js";
 import type * as posts from "../posts.js";
+import type * as presence from "../presence.js";
 import type * as profiles from "../profiles.js";
 import type * as social_graph from "../social_graph.js";
 
@@ -31,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   ai_tools: typeof ai_tools;
   auth: typeof auth;
   communities: typeof communities;
+  community_chat: typeof community_chat;
   feed: typeof feed;
   http: typeof http;
   "lib/feedRanking": typeof lib_feedRanking;
@@ -38,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimits": typeof lib_rateLimits;
   personalization: typeof personalization;
   posts: typeof posts;
+  presence: typeof presence;
   profiles: typeof profiles;
   social_graph: typeof social_graph;
 }>;
@@ -1073,6 +1077,68 @@ export declare const components: {
           onUpdateHandle?: string;
         },
         any
+      >;
+    };
+  };
+  presence: {
+    public: {
+      disconnect: FunctionReference<
+        "mutation",
+        "internal",
+        { sessionToken: string },
+        null
+      >;
+      heartbeat: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          interval?: number;
+          roomId: string;
+          sessionId: string;
+          userId: string;
+        },
+        { roomToken: string; sessionToken: string }
+      >;
+      list: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number; roomToken: string },
+        Array<{
+          data?: any;
+          lastDisconnected: number;
+          online: boolean;
+          userId: string;
+        }>
+      >;
+      listRoom: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number; onlineOnly?: boolean; roomId: string },
+        Array<{ lastDisconnected: number; online: boolean; userId: string }>
+      >;
+      listUser: FunctionReference<
+        "query",
+        "internal",
+        { limit?: number; onlineOnly?: boolean; userId: string },
+        Array<{ lastDisconnected: number; online: boolean; roomId: string }>
+      >;
+      removeRoom: FunctionReference<
+        "mutation",
+        "internal",
+        { roomId: string },
+        null
+      >;
+      removeRoomUser: FunctionReference<
+        "mutation",
+        "internal",
+        { roomId: string; userId: string },
+        null
+      >;
+      updateRoomUser: FunctionReference<
+        "mutation",
+        "internal",
+        { data?: any; roomId: string; userId: string },
+        null
       >;
     };
   };

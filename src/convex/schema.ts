@@ -108,6 +108,26 @@ const schema = defineSchema({
 		.index('by_followerAuthId_and_communityId', ['followerAuthId', 'communityId'])
 		.index('by_followerAuthId_and_createdAt', ['followerAuthId', 'createdAt'])
 		.index('by_communityId_and_createdAt', ['communityId', 'createdAt']),
+	community_chat_messages: defineTable({
+		communityId: v.id('communities'),
+		userAuthId: v.string(),
+		userName: v.string(),
+		userImage: v.optional(v.string()),
+		body: v.string(),
+		replyTo: v.optional(v.id('community_chat_messages')),
+		editedAt: v.optional(v.number()),
+		isDeleted: v.boolean(),
+		createdAt: v.number()
+	}).index('by_communityId_and_createdAt', ['communityId', 'createdAt']),
+	community_chat_reactions: defineTable({
+		communityId: v.id('communities'),
+		messageId: v.id('community_chat_messages'),
+		userAuthId: v.string(),
+		emoji: v.string(),
+		createdAt: v.number()
+	})
+		.index('by_communityId_and_messageId', ['communityId', 'messageId'])
+		.index('by_messageId_and_userAuthId', ['messageId', 'userAuthId']),
 	post_embeddings: defineTable({
 		postId: v.id('posts'),
 		model: v.optional(v.string()),

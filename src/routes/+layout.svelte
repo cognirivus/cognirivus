@@ -11,6 +11,9 @@
 	import Toaster from '$lib/components/ui/sonner/sonner.svelte';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import { page } from '$app/state';
+	import { useQuery } from 'convex-svelte';
+	import { api } from '$convex/_generated/api';
+	import CommunityPresenceWidget from '$lib/components/CommunityPresenceWidget.svelte';
 
 	let { children, data } = $props();
 
@@ -37,9 +40,7 @@
 		following: 'Following'
 	};
 
-	const isAuthPage = $derived(
-		page.url.pathname === '/signin' || page.url.pathname === '/signup'
-	);
+	const isAuthPage = $derived(page.url.pathname === '/signin' || page.url.pathname === '/signup');
 
 	let breadcrumbs = $derived.by(() => {
 		const segments = page.url.pathname.split('/').filter((s) => s !== '');
@@ -52,6 +53,15 @@
 		}
 		return crumbs;
 	});
+
+	const slug = $derived(page.params.slug);
+	const isChatPage = $derived(
+		page.url.pathname.startsWith('/c/') && page.url.pathname.endsWith('/chat')
+	);
+	const communityQuery = useQuery((api as any).communities.getBySlug, () =>
+		slug ? { slug } : 'skip'
+	);
+	const communityId = $derived(communityQuery.data?.community?._id);
 </script>
 
 <svelte:head>
@@ -93,8 +103,13 @@
 			</div>
 			{#if !isAuthPage}
 				<aside
-					class="hidden w-64 shrink-0 border-l border-border/50 bg-background lg:block"
+					class="hidden w-64 shrink-0 overflow-y-auto border-l border-border/50 bg-background lg:block"
 				>
+					{#if communityId && isChatPage}
+						<div class="px-4 py-6">
+							<CommunityPresenceWidget {communityId} />
+						</div>
+					{/if}
 				</aside>
 			{/if}
 		</div>
