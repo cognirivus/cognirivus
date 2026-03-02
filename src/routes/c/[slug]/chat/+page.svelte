@@ -201,35 +201,198 @@
 			currentUserId={currentUserId ?? ''}
 			isLoading={messagesQuery.isLoading}
 			onSendMessage={async (body: string, replyToId?: string) => {
-				if (!communityId) return;
-				await client.mutation((api as any).community_chat.sendMessage, {
-					communityId,
-					body,
-					replyTo: replyToId as Id<'community_chat_messages'>
-				});
+				const commId = communityId;
+				if (!commId) return;
+				try {
+					await client.mutation(
+						(api as any).community_chat.sendMessage,
+						{
+							communityId: commId,
+							body,
+							replyTo: replyToId as Id<'community_chat_messages'> | undefined
+						},
+						{
+							optimisticUpdate: (localStore, args) => {
+								const me = localStore.getQuery(api.auth.getCurrentUser, {});
+								if (!me) return;
+
+								const queryArgs = { communityId: commId, limit: 100 };
+								const existingMessages = localStore.getQuery(
+									(api as any).community_chat.getMessages,
+									queryArgs
+								);
+								if (!existingMessages) return;
+
+								let replyToContext = undefined;
+								if (args.replyTo) {
+									const parent = existingMessages.find((m: any) => m._id === args.replyTo);
+									if (parent) {
+										replyToContext = {
+											messageId: args.replyTo,
+											userName: parent.userName,
+											body: parent.isDeleted ? 'message deleted' : parent.body,
+											isDeleted: !!parent.isDeleted
+										};
+									}
+								}
+
+								const newMessage: any = {
+									_id: `temp-${Math.random()}` as any,
+									_creationTime: Date.now(),
+									communityId: commId,
+									userId: me.id,
+									userName: me.name,
+									userImage: me.image ?? undefined,
+									body: args.body,
+									replyTo: replyToContext,
+									createdAt: Date.now(),
+									reactions: [],
+									isDeleted: false
+								};
+
+								localStore.setQuery((api as any).community_chat.getMessages, queryArgs, [
+									...existingMessages,
+									newMessage
+								]);
+							}
+						}
+					);
+				} catch (error) {
+					console.error('Failed to send message:', error);
+					toast.error('Failed to send message');
+				}
 			}}
 			onEditMessage={async (messageId: string, body: string) => {
 				if (!communityId) return;
-				await client.mutation((api as any).community_chat.editMessage, {
-					communityId,
-					messageId: messageId as Id<'community_chat_messages'>,
-					body
-				});
+				try {
+					await client.mutation((api as any).community_chat.editMessage, {
+						communityId,
+						messageId: messageId as Id<'community_chat_messages'>,
+						body
+					});
+				} catch (error) {
+					console.error('Failed to edit message:', error);
+					toast.error('Failed to edit message');
+				}
 			}}
 			onDeleteMessage={async (messageId: string) => {
 				if (!communityId) return;
-				await client.mutation((api as any).community_chat.deleteMessage, {
-					communityId,
-					messageId: messageId as Id<'community_chat_messages'>
-				});
+				try {
+					await client.mutation((api as any).community_chat.deleteMessage, {
+						communityId,
+						messageId: messageId as Id<'community_chat_messages'>
+					});
+				} catch (error) {
+					console.error('Failed to delete message:', error);
+					toast.error('Failed to delete message');
+				}
 			}}
 			onToggleReaction={async (messageId: string, emoji: string) => {
-				if (!communityId) return;
-				await client.mutation((api as any).community_chat.toggleReaction, {
-					communityId,
-					messageId: messageId as Id<'community_chat_messages'>,
-					emoji: emoji as any
-				});
+				const commId = communityId;
+				if (!commId) return;
+				try {
+					await client.mutation(
+						(api as any).community_chat.toggleReaction,
+						{
+							communityId: commId,
+							messageId: messageId as Id<'community_chat_messages'>,
+							emoji: emoji as any
+						},
+						{
+							optimisticUpdate: (localStore, args) => {
+								const me = localStore.getQuery(api.auth.getCurrentUser, {});
+								if (!me) return;
+
+								const queryArgs = { communityId: commId, limit: 100 };
+								const existingMessages = localStore.getQuery(
+									(api as any).community_chat.getMessages,
+									queryArgs
+								);
+								if (!existingMessages) return;
+
+								const messageIndex = existingMessages.findIndex(
+									(m: any) => m._id === args.messageId
+								);
+								if (messageIndex === -1) return;
+
+								const message = existingMessages[messageIndex];
+								const newReactions = JSON.parse(
+									JSON.stringify(message.reactions || [])
+								) as CommunityChatMessage['reactions'];
+
+								// Check if I already had this specific reaction
+								const alreadyHadThisEmoji = newReactions.some(
+									(r) => r.emoji === args.emoji && r.reactedByMe
+								);
+
+								// 1. Remove me from all reactions
+								for (let i = 0; i < newReactions.length; i++) {
+									if (newReactions[i].reactedByMe) {
+										const updatedReactors = newReactions[i].reactors.filter(
+											(r: any) => r.userId !== me.id
+										);
+										newReactions[i] = {
+											...newReactions[i],
+											count: newReactions[i].count - 1,
+											reactedByMe: false,
+											reactors: updatedReactors
+										};
+									}
+								}
+
+								// 2. Add me to the new reaction if I didn't already have it
+								if (!alreadyHadThisEmoji) {
+									const reactionIndex = newReactions.findIndex((r) => r.emoji === args.emoji);
+									if (reactionIndex !== -1) {
+										newReactions[reactionIndex] = {
+											...newReactions[reactionIndex],
+											count: newReactions[reactionIndex].count + 1,
+											reactedByMe: true,
+											reactors: [
+												...newReactions[reactionIndex].reactors,
+												{
+													userId: me.id as string,
+													userName: me.name,
+													userImage: me.image ?? undefined
+												}
+											]
+										};
+									} else {
+										newReactions.push({
+											emoji: args.emoji,
+											count: 1,
+											reactedByMe: true,
+											reactors: [
+												{
+													userId: me.id as string,
+													userName: me.name,
+													userImage: me.image ?? undefined
+												}
+											]
+										});
+									}
+								}
+
+								// 3. Filter out empty reactions and update store
+								const filteredReactions = newReactions.filter((r) => r.count > 0);
+								const newMessages = [...existingMessages];
+								newMessages[messageIndex] = {
+									...message,
+									reactions: filteredReactions
+								} as any;
+
+								localStore.setQuery(
+									(api as any).community_chat.getMessages,
+									queryArgs,
+									newMessages as any
+								);
+							}
+						}
+					);
+				} catch (error) {
+					console.error('Failed to update reaction:', error);
+					toast.error('Failed to update reaction');
+				}
 			}}
 		>
 			{#snippet header()}
