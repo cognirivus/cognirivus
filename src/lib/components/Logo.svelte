@@ -13,7 +13,7 @@
 	const current = $derived(sizes[size as keyof typeof sizes] || sizes.md);
 </script>
 
-<a href="/" class={cn('group flex items-center gap-2 transition-all duration-200', className)}>
+<div class={cn('group flex items-center gap-2 transition-all duration-200', className)}>
 	<div
 		class={cn(
 			'relative flex items-center justify-center rounded-lg bg-foreground text-background transition-transform duration-200 group-hover:scale-105',
@@ -23,4 +23,4 @@
 		<Sparkles class={cn('transition-transform duration-200', current.icon)} />
 	</div>
 	<span class={cn('font-semibold tracking-tight text-foreground', current.text)}> Cognirivus </span>
-</a>
+</div>

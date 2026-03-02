@@ -488,6 +488,11 @@ export const editMessage = mutation({
 		if (message.senderAuthId !== user._id) throw new Error('Forbidden');
 		if (message.isDeleted) throw new Error('Message has been deleted');
 
+		const editWindowMs = 60000;
+		if (Date.now() - message.createdAt > editWindowMs) {
+			throw new Error('Edit window has expired (1 minute limit)');
+		}
+
 		const nextBody = normalizeMessageBody(args.body);
 
 		if (nextBody === message.body) {
