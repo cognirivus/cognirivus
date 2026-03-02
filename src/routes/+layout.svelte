@@ -51,7 +51,13 @@
 		let accumulated = '';
 		for (const segment of segments) {
 			accumulated += '/' + segment;
-			const label = routeLabels[segment] ?? segment;
+			let label = routeLabels[segment] ?? segment;
+			if (segment === 'feed') {
+				const scope = page.url.searchParams.get('scope');
+				if (scope === 'you') label = 'You';
+				else if (scope === 'public') label = 'Public';
+				else if (scope === 'community') label = 'Community';
+			}
 			crumbs.push({ label, href: accumulated });
 		}
 		return crumbs;

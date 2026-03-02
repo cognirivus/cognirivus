@@ -1,6 +1,12 @@
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
-import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import {
+	internalMutation,
+	mutation,
+	query,
+	type MutationCtx,
+	type QueryCtx
+} from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { authComponent } from './auth';
 import { rateLimiter } from './lib/rateLimits';
@@ -66,6 +72,7 @@ const toProfileSummary = async (ctx: QueryCtx | MutationCtx, authId: string) => 
 		ctx.db
 			.query('posts')
 			.withIndex('by_authorAuthId_and_createdAt', (q) => q.eq('authorAuthId', authId))
+			.filter((q) => q.neq(q.field('visibility'), 'private'))
 			.collect()
 			.then((rows) => rows.length),
 		ctx.db

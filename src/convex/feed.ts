@@ -27,6 +27,7 @@ const feedPostValidator = v.object({
 	communityId: v.optional(v.id('communities')),
 	communitySlug: v.optional(v.string()),
 	communityName: v.optional(v.string()),
+	visibility: v.optional(v.union(v.literal('public'), v.literal('private'))),
 	score: v.number(),
 	likes: v.number(),
 	dislikes: v.number(),
@@ -73,6 +74,7 @@ const mapFeedPosts = async (ctx: any, posts: Array<any>, viewerAuthId: string | 
 				communityId: post.communityId,
 				communitySlug: community?.slug,
 				communityName: community?.name,
+				visibility: post.visibility,
 				score: post.score,
 				likes: post.likes,
 				dislikes: post.dislikes,
@@ -106,6 +108,9 @@ const getWindowMetrics = async (ctx: any, postId: any, windowStart: number) => {
 };
 
 const isVisibleToViewer = async (ctx: any, post: any, viewerAuthId: string | null) => {
+	if (post.visibility === 'private') {
+		return viewerAuthId === post.authorAuthId;
+	}
 	if (!post.communityId) {
 		return true;
 	}
@@ -179,6 +184,9 @@ const materializeRanked = async (
 export const listGlobal = query({
 	args: {
 		tab: tabValidator,
+		scope: v.optional(
+			v.union(v.literal('all'), v.literal('public'), v.literal('community'), v.literal('you'))
+		),
 		window: v.optional(windowValidator),
 		paginationOpts: paginationOptsValidator
 	},
@@ -188,11 +196,29 @@ export const listGlobal = query({
 		const windowStart = windowStartFromBucket(args.window ?? '24h');
 		const batchSize = Math.max(args.paginationOpts.numItems * 8, 200);
 
-		const rawPosts = await ctx.db
-			.query('posts')
-			.withIndex('by_createdAt')
-			.order('desc')
-			.take(batchSize);
+		let rawPosts;
+		if (args.scope === 'you') {
+			if (!authUser) {
+				return { page: [], isDone: true, continueCursor: null };
+			}
+			rawPosts = await ctx.db
+				.query('posts')
+				.withIndex('by_authorAuthId_and_visibility_and_createdAt', (q) =>
+					q.eq('authorAuthId', authUser._id).eq('visibility', 'private')
+				)
+				.order('desc')
+				.take(batchSize);
+		} else {
+			let query = ctx.db.query('posts').withIndex('by_createdAt').order('desc');
+
+			if (args.scope === 'public') {
+				query = query.filter((q) => q.eq(q.field('communityId'), undefined));
+			} else if (args.scope === 'community') {
+				query = query.filter((q) => q.neq(q.field('communityId'), undefined));
+			}
+
+			rawPosts = await query.filter((q) => q.neq(q.field('visibility'), 'private')).take(batchSize);
+		}
 
 		return await materializeRanked(
 			ctx,
@@ -248,6 +274,7 @@ export const listCommunity = query({
 		const rawPosts = await ctx.db
 			.query('posts')
 			.withIndex('by_communityId_and_createdAt', (q) => q.eq('communityId', community._id))
+			.filter((q) => q.neq(q.field('visibility'), 'private'))
 			.order('desc')
 			.take(batchSize);
 
@@ -290,6 +317,7 @@ export const listUser = query({
 		const rawPosts = await ctx.db
 			.query('posts')
 			.withIndex('by_authorAuthId_and_createdAt', (q) => q.eq('authorAuthId', profile.authId))
+			.filter((q) => q.neq(q.field('visibility'), 'private'))
 			.order('desc')
 			.take(batchSize);
 

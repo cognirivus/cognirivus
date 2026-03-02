@@ -28,6 +28,7 @@ const postDetailsValidator = v.object({
 	communityId: v.optional(v.id('communities')),
 	communitySlug: v.optional(v.string()),
 	communityName: v.optional(v.string()),
+	visibility: v.optional(v.union(v.literal('public'), v.literal('private'))),
 	score: v.number(),
 	likes: v.number(),
 	dislikes: v.number(),
@@ -104,7 +105,10 @@ const ensureProfile = async (ctx: any, authUser: any) => {
 	return inserted;
 };
 
-const canAccessCommunityPost = async (ctx: any, post: any, authUserId: string | null) => {
+const canAccessPost = async (ctx: any, post: any, authUserId: string | null) => {
+	if (post.visibility === 'private') {
+		return authUserId === post.authorAuthId;
+	}
 	if (!post.communityId) {
 		return true;
 	}
@@ -126,6 +130,8 @@ const canAccessCommunityPost = async (ctx: any, post: any, authUserId: string | 
 		.unique();
 	return membership?.status === 'active';
 };
+
+const canAccessCommunityPost = canAccessPost;
 
 const requirePostWriteAccess = async (ctx: any, post: any, authUserId: string) => {
 	if (!post.communityId) {
@@ -208,6 +214,7 @@ export const createStored = internalMutation({
 	args: {
 		authorAuthId: v.string(),
 		communityId: v.optional(v.id('communities')),
+		visibility: v.optional(v.union(v.literal('public'), v.literal('private'))),
 		type: postTypeValidator,
 		title: v.string(),
 		snippet: v.string(),
@@ -240,6 +247,7 @@ export const createStored = internalMutation({
 		return await ctx.db.insert('posts', {
 			authorAuthId: args.authorAuthId,
 			communityId: args.communityId,
+			visibility: args.visibility ?? 'private',
 			type: args.type,
 			title: args.title,
 			snippet: args.snippet,
@@ -259,6 +267,7 @@ export const createStored = internalMutation({
 export const create = action({
 	args: {
 		communityId: v.optional(v.id('communities')),
+		visibility: v.optional(v.union(v.literal('public'), v.literal('private'))),
 		type: postTypeValidator,
 		title: v.string(),
 		body: v.optional(v.string()),
@@ -306,6 +315,7 @@ export const create = action({
 		return await ctx.runMutation(internal.posts.createStored, {
 			authorAuthId: authUser._id,
 			communityId: args.communityId,
+			visibility: args.visibility ?? 'private',
 			type: args.type,
 			title,
 			snippet,
@@ -381,6 +391,7 @@ export const get = query({
 			communityId: post.communityId,
 			communitySlug: community?.slug,
 			communityName: community?.name,
+			visibility: post.visibility ?? 'public',
 			score: post.score,
 			likes: post.likes,
 			dislikes: post.dislikes,

@@ -7,6 +7,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
+	import { Lock, Globe, Users } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	const client = useConvexClient();
@@ -17,6 +18,7 @@
 	let title = $state('');
 	let body = $state('');
 	let url = $state('');
+	let visibility = $state<'public' | 'private'>('private');
 	let communityId = $state('');
 	let submitting = $state(false);
 
@@ -33,9 +35,10 @@
 			const postId = await client.action((api as any).posts.create, {
 				type,
 				title,
+				visibility,
 				body: body || undefined,
 				url: url || undefined,
-				communityId: communityId || undefined
+				communityId: (visibility === 'public' && communityId) || undefined
 			});
 			toast.success('Post created');
 			goto(`/post/${postId}`);
@@ -55,14 +58,67 @@
 
 <main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	<h1 class="text-2xl font-semibold tracking-tight">Submit Post</h1>
-	<p class="mt-1 text-sm text-muted-foreground">Share a knowledge post to the global feed or a community.</p>
+	<p class="mt-1 text-sm text-muted-foreground">
+		Share a knowledge post to the global feed or a community.
+	</p>
 
-	<form class="mx-auto mt-6 max-w-3xl space-y-4 rounded-xl border border-border bg-card p-5" onsubmit={submitPost}>
+	<form
+		class="mx-auto mt-6 max-w-3xl space-y-4 rounded-xl border border-border bg-card p-5"
+		onsubmit={submitPost}
+	>
+		<div class="space-y-2">
+			<Label>Visibility</Label>
+			<div class="flex flex-wrap gap-2">
+				<Button
+					type="button"
+					variant={visibility === 'private' ? 'default' : 'outline'}
+					onclick={() => {
+						visibility = 'private';
+						communityId = '';
+					}}
+					class="gap-2"
+				>
+					<Lock class="size-4" />
+					Private (Your Feed)
+				</Button>
+				<Button
+					type="button"
+					variant={visibility === 'public' && !communityId ? 'default' : 'outline'}
+					onclick={() => {
+						visibility = 'public';
+						communityId = '';
+					}}
+					class="gap-2"
+				>
+					<Globe class="size-4" />
+					Public (Global)
+				</Button>
+				<Button
+					type="button"
+					variant={visibility === 'public' && communityId ? 'default' : 'outline'}
+					onclick={() => {
+						visibility = 'public';
+						if (!communityId && (communitiesQuery.data?.length ?? 0) > 0) {
+							communityId = communitiesQuery.data![0]._id;
+						}
+					}}
+					class="gap-2"
+				>
+					<Users class="size-4" />
+					Community
+				</Button>
+			</div>
+		</div>
+
 		<div class="space-y-2">
 			<Label>Post Type</Label>
 			<div class="flex gap-2">
 				{#each ['text', 'link', 'media'] as t (t)}
-					<Button type="button" variant={type === t ? 'default' : 'outline'} onclick={() => (type = t as any)}>{t}</Button>
+					<Button
+						type="button"
+						variant={type === t ? 'default' : 'outline'}
+						onclick={() => (type = t as any)}>{t}</Button
+					>
 				{/each}
 			</div>
 		</div>
@@ -89,24 +145,29 @@
 			</div>
 		{/if}
 
-		<div class="space-y-2">
-			<Label for="community">Community (optional)</Label>
-			<select
-				id="community"
-				bind:value={communityId}
-				class="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-			>
-				<option value="">Global feed only</option>
-				{#each communitiesQuery.data ?? [] as c (c._id)}
-					<option value={c._id}>{c.name} (c/{c.slug})</option>
-				{/each}
-			</select>
-		</div>
+		{#if visibility === 'public' && (communityId || (communitiesQuery.data?.length ?? 0) > 0)}
+			<div class="space-y-2">
+				<Label for="community">Community (optional)</Label>
+				<select
+					id="community"
+					bind:value={communityId}
+					class="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+					onchange={() => {
+						if (communityId) visibility = 'public';
+					}}
+				>
+					<option value="">Global feed only</option>
+					{#each communitiesQuery.data ?? [] as c (c._id)}
+						<option value={c._id}>{c.name} (c/{c.slug})</option>
+					{/each}
+				</select>
+			</div>
+		{/if}
 
 		<div class="flex items-center gap-2">
-			<Button type="submit" disabled={submitting}>{submitting ? 'Publishing...' : 'Publish'}</Button>
+			<Button type="submit" disabled={submitting}>{submitting ? 'Publishing...' : 'Publish'}</Button
+			>
 			<Button type="button" variant="outline" href="/feed">Cancel</Button>
 		</div>
 	</form>
 </main>
-

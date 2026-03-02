@@ -44,6 +44,7 @@ const schema = defineSchema({
 	posts: defineTable({
 		authorAuthId: v.string(),
 		communityId: v.optional(v.id('communities')),
+		visibility: v.optional(v.union(v.literal('public'), v.literal('private'))),
 		type: v.union(v.literal('text'), v.literal('link'), v.literal('media')),
 		title: v.string(),
 		body: v.optional(v.string()),
@@ -59,7 +60,12 @@ const schema = defineSchema({
 	})
 		.index('by_createdAt', ['createdAt'])
 		.index('by_communityId_and_createdAt', ['communityId', 'createdAt'])
-		.index('by_authorAuthId_and_createdAt', ['authorAuthId', 'createdAt']),
+		.index('by_authorAuthId_and_createdAt', ['authorAuthId', 'createdAt'])
+		.index('by_authorAuthId_and_visibility_and_createdAt', [
+			'authorAuthId',
+			'visibility',
+			'createdAt'
+		]),
 	post_votes: defineTable({
 		postId: v.id('posts'),
 		userAuthId: v.string(),

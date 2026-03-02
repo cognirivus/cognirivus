@@ -11,6 +11,7 @@
 		Send,
 		CirclePlus,
 		User,
+		Globe,
 		Settings,
 		LogOut,
 		LogIn,
@@ -52,9 +53,9 @@
 	const unreadCount = $derived(unreadQuery.data ?? 0);
 
 	const navItems = [
-		{ title: 'Feed', url: '/feed', icon: Compass, authOnly: false },
-		{ title: 'Communities', url: '/c', icon: Users, authOnly: false },
-		{ title: 'Submit Post', url: '/submit', icon: Send, authOnly: true },
+		{ title: 'Feed', url: '/feed', icon: User, authOnly: true },
+		{ title: 'Communities', url: '/c', icon: Compass, authOnly: false },
+		{ title: 'Submit', url: '/submit', icon: Send, authOnly: true },
 		{ title: 'Chat', url: '/chat', icon: MessageSquare, authOnly: true }
 	];
 
@@ -104,7 +105,7 @@
 											<span>{item.title}</span>
 											{#if item.title === 'Chat' && unreadCount > 0}
 												<span
-													class="text-destructive-foreground ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-white"
+													class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground text-white"
 												>
 													{unreadCount > 99 ? '99+' : unreadCount}
 												</span>
