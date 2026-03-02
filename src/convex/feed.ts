@@ -34,7 +34,8 @@ const feedPostValidator = v.object({
 	commentCount: v.number(),
 	createdAt: v.number(),
 	updatedAt: v.number(),
-	userVote: v.union(v.null(), v.literal(1), v.literal(-1))
+	userVote: v.union(v.null(), v.literal(1), v.literal(-1)),
+	canDelete: v.boolean()
 });
 
 const pagedFeedValidator = v.object({
@@ -81,7 +82,8 @@ const mapFeedPosts = async (ctx: any, posts: Array<any>, viewerAuthId: string | 
 				commentCount: post.commentCount,
 				createdAt: post.createdAt,
 				updatedAt: post.updatedAt,
-				userVote: (vote?.value ?? null) as -1 | 1 | null
+				userVote: (vote?.value ?? null) as -1 | 1 | null,
+				canDelete: viewerAuthId === post.authorAuthId
 			};
 		})
 	);
@@ -108,8 +110,11 @@ const getWindowMetrics = async (ctx: any, postId: any, windowStart: number) => {
 };
 
 const isVisibleToViewer = async (ctx: any, post: any, viewerAuthId: string | null) => {
+	if (viewerAuthId === post.authorAuthId) {
+		return true;
+	}
 	if (post.visibility === 'private') {
-		return viewerAuthId === post.authorAuthId;
+		return false;
 	}
 	if (!post.communityId) {
 		return true;
@@ -185,7 +190,13 @@ export const listGlobal = query({
 	args: {
 		tab: tabValidator,
 		scope: v.optional(
-			v.union(v.literal('all'), v.literal('public'), v.literal('community'), v.literal('you'))
+			v.union(
+				v.literal('all'),
+				v.literal('public'),
+				v.literal('community'),
+				v.literal('you'),
+				v.literal('me')
+			)
 		),
 		window: v.optional(windowValidator),
 		paginationOpts: paginationOptsValidator
@@ -193,7 +204,7 @@ export const listGlobal = query({
 	returns: pagedFeedValidator,
 	handler: async (ctx, args) => {
 		const authUser = await getOptionalAuthUser(ctx);
-		const windowStart = windowStartFromBucket(args.window ?? '24h');
+		const windowStart = args.scope === 'me' ? 0 : windowStartFromBucket(args.window ?? '24h');
 		const batchSize = Math.max(args.paginationOpts.numItems * 8, 200);
 
 		let rawPosts;
@@ -206,6 +217,15 @@ export const listGlobal = query({
 				.withIndex('by_authorAuthId_and_visibility_and_createdAt', (q) =>
 					q.eq('authorAuthId', authUser._id).eq('visibility', 'private')
 				)
+				.order('desc')
+				.take(batchSize);
+		} else if (args.scope === 'me') {
+			if (!authUser) {
+				return { page: [], isDone: true, continueCursor: null };
+			}
+			rawPosts = await ctx.db
+				.query('posts')
+				.withIndex('by_authorAuthId_and_createdAt', (q) => q.eq('authorAuthId', authUser._id))
 				.order('desc')
 				.take(batchSize);
 		} else {

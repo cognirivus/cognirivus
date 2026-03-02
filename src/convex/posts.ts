@@ -106,8 +106,11 @@ const ensureProfile = async (ctx: any, authUser: any) => {
 };
 
 const canAccessPost = async (ctx: any, post: any, authUserId: string | null) => {
+	if (authUserId === post.authorAuthId) {
+		return true;
+	}
 	if (post.visibility === 'private') {
-		return authUserId === post.authorAuthId;
+		return false;
 	}
 	if (!post.communityId) {
 		return true;

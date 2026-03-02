@@ -96,6 +96,12 @@
 						>
 							{isOwnProfile ? 'Your profile' : isFollowing ? 'Unfollow' : 'Follow'}
 						</Button>
+						{#if isOwnProfile}
+							<Button variant="outline" href="/u/{username}/posts/manage">
+								<FileText class="mr-2 size-4" />
+								Manage Posts
+							</Button>
+						{/if}
 						{#if !isOwnProfile && auth.isAuthenticated}
 							<Button variant="outline" onclick={() => goto(`/chat/${username}`)}>
 								<MessageSquare class="mr-2 size-4" />

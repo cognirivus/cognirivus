@@ -12,18 +12,17 @@
 		CirclePlus,
 		User,
 		Globe,
-		Settings,
-		LogOut,
 		LogIn,
 		UserPlus,
-		ChevronsUpDown,
-		MessageSquare
+		MessageSquare,
+		FileText
 	} from '@lucide/svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { useSidebar } from '$lib/components/ui/sidebar/index.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import Logo from './Logo.svelte';
+	import NavUser from './nav-user.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { ComponentProps } from 'svelte';
 
@@ -148,78 +147,14 @@
 
 	<Sidebar.Footer>
 		{#if auth.isAuthenticated && currentUser}
-			<Sidebar.Menu>
-				<Sidebar.MenuItem>
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger>
-							{#snippet child({ props })}
-								<Sidebar.MenuButton
-									size="lg"
-									class="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-									{...props}
-								>
-									<Avatar.Root class="size-8 rounded-lg">
-										{#if currentUser.image}
-											<Avatar.Image src={currentUser.image} alt={currentUser.name} />
-										{/if}
-										<Avatar.Fallback class="rounded-lg">
-											{(currentUser.name ?? currentUser.email ?? '?').slice(0, 2).toUpperCase()}
-										</Avatar.Fallback>
-									</Avatar.Root>
-									<div class="grid flex-1 text-start text-sm leading-tight">
-										<span class="truncate font-medium">
-											{currentUser.username ?? currentUser.name}
-										</span>
-										<span class="truncate text-xs">{currentUser.email}</span>
-									</div>
-									<ChevronsUpDown class="ms-auto size-4" />
-								</Sidebar.MenuButton>
-							{/snippet}
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content
-							class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
-							side={sidebar.isMobile ? 'bottom' : 'right'}
-							align="end"
-							sideOffset={4}
-						>
-							<DropdownMenu.Label class="p-0 font-normal">
-								<div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
-									<Avatar.Root class="size-8 rounded-lg">
-										{#if currentUser.image}
-											<Avatar.Image src={currentUser.image} alt={currentUser.name} />
-										{/if}
-										<Avatar.Fallback class="rounded-lg">
-											{(currentUser.name ?? currentUser.email ?? '?').slice(0, 2).toUpperCase()}
-										</Avatar.Fallback>
-									</Avatar.Root>
-									<div class="grid flex-1 text-start text-sm leading-tight">
-										<span class="truncate font-medium">
-											{currentUser.username ?? currentUser.name}
-										</span>
-										<span class="truncate text-xs">{currentUser.email}</span>
-									</div>
-								</div>
-							</DropdownMenu.Label>
-							<DropdownMenu.Separator />
-							<DropdownMenu.Group>
-								<DropdownMenu.Item onclick={() => goto(profileHref)}>
-									<User />
-									Profile
-								</DropdownMenu.Item>
-								<DropdownMenu.Item onclick={() => goto('/settings')}>
-									<Settings />
-									Settings
-								</DropdownMenu.Item>
-							</DropdownMenu.Group>
-							<DropdownMenu.Separator />
-							<DropdownMenu.Item onclick={signOut}>
-								<LogOut />
-								Sign out
-							</DropdownMenu.Item>
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
-				</Sidebar.MenuItem>
-			</Sidebar.Menu>
+			<NavUser
+				user={{
+					name: currentUser.name ?? '',
+					email: currentUser.email ?? '',
+					image: currentUser.image ?? undefined,
+					username: currentUser.username ?? undefined
+				}}
+			/>
 		{:else}
 			<Sidebar.Menu>
 				<Sidebar.MenuItem>

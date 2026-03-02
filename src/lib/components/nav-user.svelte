@@ -1,17 +1,41 @@
 <script lang="ts">
-	import * as Avatar from "$lib/components/ui/avatar/index.js";
-	import * as DropdownMenu from "$lib/components/ui/dropdown-menu/index.js";
-	import * as Sidebar from "$lib/components/ui/sidebar/index.js";
-	import { useSidebar } from "$lib/components/ui/sidebar/index.js";
-	import BadgeCheckIcon from "@lucide/svelte/icons/badge-check";
-	import BellIcon from "@lucide/svelte/icons/bell";
-	import ChevronsUpDownIcon from "@lucide/svelte/icons/chevrons-up-down";
-	import CreditCardIcon from "@lucide/svelte/icons/credit-card";
-	import LogOutIcon from "@lucide/svelte/icons/log-out";
-	import SparklesIcon from "@lucide/svelte/icons/sparkles";
+	import { goto, invalidateAll } from '$app/navigation';
+	import * as Avatar from '$lib/components/ui/avatar/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import { useSidebar } from '$lib/components/ui/sidebar/index.js';
+	import { authClient } from '$lib/auth-client';
+	import {
+		BadgeCheck,
+		Bell,
+		ChevronsUpDown,
+		CreditCard,
+		LogOut,
+		Sparkles,
+		User,
+		FileText,
+		Settings
+	} from '@lucide/svelte';
 
-	let { user }: { user: { name: string; email: string; avatar: string } } = $props();
+	let {
+		user
+	}: {
+		user: {
+			name: string;
+			email: string;
+			image?: string;
+			username?: string;
+		};
+	} = $props();
+
 	const sidebar = useSidebar();
+	const profileHref = $derived(user.username ? `/u/${user.username}` : '/settings/username');
+
+	async function signOut() {
+		await authClient.signOut();
+		await invalidateAll();
+		goto('/');
+	}
 </script>
 
 <Sidebar.Menu>
@@ -25,31 +49,39 @@
 						{...props}
 					>
 						<Avatar.Root class="size-8 rounded-lg">
-							<Avatar.Image src={user.avatar} alt={user.name} />
-							<Avatar.Fallback class="rounded-lg">CN</Avatar.Fallback>
+							{#if user.image}
+								<Avatar.Image src={user.image} alt={user.name} />
+							{/if}
+							<Avatar.Fallback class="rounded-lg">
+								{(user.name ?? user.email ?? '?').slice(0, 2).toUpperCase()}
+							</Avatar.Fallback>
 						</Avatar.Root>
 						<div class="grid flex-1 text-start text-sm leading-tight">
-							<span class="truncate font-medium">{user.name}</span>
+							<span class="truncate font-medium">{user.username ?? user.name}</span>
 							<span class="truncate text-xs">{user.email}</span>
 						</div>
-						<ChevronsUpDownIcon class="ms-auto size-4" />
+						<ChevronsUpDown class="ms-auto size-4" />
 					</Sidebar.MenuButton>
 				{/snippet}
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content
 				class="w-(--bits-dropdown-menu-anchor-width) min-w-56 rounded-lg"
-				side={sidebar.isMobile ? "bottom" : "right"}
+				side={sidebar.isMobile ? 'bottom' : 'right'}
 				align="end"
 				sideOffset={4}
 			>
 				<DropdownMenu.Label class="p-0 font-normal">
 					<div class="flex items-center gap-2 px-1 py-1.5 text-start text-sm">
 						<Avatar.Root class="size-8 rounded-lg">
-							<Avatar.Image src={user.avatar} alt={user.name} />
-							<Avatar.Fallback class="rounded-lg">CN</Avatar.Fallback>
+							{#if user.image}
+								<Avatar.Image src={user.image} alt={user.name} />
+							{/if}
+							<Avatar.Fallback class="rounded-lg">
+								{(user.name ?? user.email ?? '?').slice(0, 2).toUpperCase()}
+							</Avatar.Fallback>
 						</Avatar.Root>
 						<div class="grid flex-1 text-start text-sm leading-tight">
-							<span class="truncate font-medium">{user.name}</span>
+							<span class="truncate font-medium">{user.username ?? user.name}</span>
 							<span class="truncate text-xs">{user.email}</span>
 						</div>
 					</div>
@@ -57,28 +89,41 @@
 				<DropdownMenu.Separator />
 				<DropdownMenu.Group>
 					<DropdownMenu.Item>
-						<SparklesIcon />
+						<Sparkles class="size-4" />
 						Upgrade to Pro
 					</DropdownMenu.Item>
 				</DropdownMenu.Group>
 				<DropdownMenu.Separator />
 				<DropdownMenu.Group>
+					<DropdownMenu.Item onclick={() => goto(profileHref)}>
+						<User class="size-4" />
+						Profile
+					</DropdownMenu.Item>
+					{#if user.username}
+						<DropdownMenu.Item onclick={() => goto(`${profileHref}/posts/manage`)}>
+							<FileText class="size-4" />
+							Manage posts
+						</DropdownMenu.Item>
+					{/if}
+					<DropdownMenu.Item onclick={() => goto('/settings')}>
+						<Settings class="size-4" />
+						Account Settings
+					</DropdownMenu.Item>
+				</DropdownMenu.Group>
+				<DropdownMenu.Separator />
+				<DropdownMenu.Group>
 					<DropdownMenu.Item>
-						<BadgeCheckIcon />
-						Account
+						<BadgeCheck class="size-4" />
+						Achievements
 					</DropdownMenu.Item>
 					<DropdownMenu.Item>
-						<CreditCardIcon />
-						Billing
-					</DropdownMenu.Item>
-					<DropdownMenu.Item>
-						<BellIcon />
+						<Bell class="size-4" />
 						Notifications
 					</DropdownMenu.Item>
 				</DropdownMenu.Group>
 				<DropdownMenu.Separator />
-				<DropdownMenu.Item>
-					<LogOutIcon />
+				<DropdownMenu.Item onclick={signOut}>
+					<LogOut class="size-4" />
 					Log out
 				</DropdownMenu.Item>
 			</DropdownMenu.Content>
