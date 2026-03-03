@@ -162,6 +162,46 @@
 							No nightly refresh run has been recorded yet.
 						</p>
 					{/if}
+					<div class="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+						<div class="rounded-md border p-3">
+							<p class="text-xs text-muted-foreground">Nightly Lock</p>
+							<div class="mt-1">
+								<Badge
+									variant={dashboardQuery.data.debug.nightlyLock.isLocked ? 'secondary' : 'default'}
+								>
+									{dashboardQuery.data.debug.nightlyLock.isLocked ? 'locked' : 'unlocked'}
+								</Badge>
+							</div>
+							{#if dashboardQuery.data.debug.nightlyLock.owner}
+								<p class="mt-1 truncate text-xs text-muted-foreground">
+									Owner: {dashboardQuery.data.debug.nightlyLock.owner}
+								</p>
+							{/if}
+						</div>
+						<div class="rounded-md border p-3">
+							<p class="text-xs text-muted-foreground">R2 Retry Backlog</p>
+							<p class="mt-1 font-medium">
+								Q:{dashboardQuery.data.debug.retryBacklog.queued} | R:{dashboardQuery.data.debug
+									.retryBacklog.running} | F:{dashboardQuery.data.debug.retryBacklog.failed}
+							</p>
+						</div>
+						<div class="rounded-md border p-3">
+							<p class="text-xs text-muted-foreground">Failures (24h)</p>
+							<p class="mt-1 font-medium">
+								Sync:{dashboardQuery.data.debug.failures24h.sourceJobs24h} | Delete:{dashboardQuery
+									.data.debug.failures24h.deletionJobs24h} | R2:{dashboardQuery.data.debug
+									.failures24h.r2RetryJobs24h}
+							</p>
+						</div>
+						<div class="rounded-md border p-3">
+							<p class="text-xs text-muted-foreground">Last Sweeper Success</p>
+							<p class="mt-1 font-medium">
+								{dashboardQuery.data.debug.sweeper.lastSuccessAt
+									? new Date(dashboardQuery.data.debug.sweeper.lastSuccessAt).toLocaleString()
+									: 'Never'}
+							</p>
+						</div>
+					</div>
 				</CardContent>
 			</Card>
 

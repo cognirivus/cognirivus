@@ -51,6 +51,9 @@ const sourceStatusValidator = v.union(
 	v.literal('error'),
 	v.literal('deleting')
 );
+const UTC_DAY_MS = 24 * 60 * 60 * 1000;
+
+const utcRunDateKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
 const dashboardSourceValidator = v.object({
 	_id: v.id('sources'),
@@ -95,6 +98,37 @@ const dashboardNightlyRunValidator = v.union(
 		error: v.optional(v.string())
 	})
 );
+
+const dashboardLockStateValidator = v.object({
+	lockKey: v.string(),
+	isLocked: v.boolean(),
+	owner: v.optional(v.string()),
+	leaseExpiresAt: v.optional(v.number()),
+	updatedAt: v.optional(v.number())
+});
+
+const dashboardRetryBacklogValidator = v.object({
+	queued: v.number(),
+	running: v.number(),
+	failed: v.number()
+});
+
+const dashboardFailureCountsValidator = v.object({
+	sourceJobs24h: v.number(),
+	deletionJobs24h: v.number(),
+	r2RetryJobs24h: v.number()
+});
+
+const dashboardSweeperValidator = v.object({
+	lastSuccessAt: v.union(v.number(), v.null())
+});
+
+const dashboardDebugValidator = v.object({
+	nightlyLock: dashboardLockStateValidator,
+	retryBacklog: dashboardRetryBacklogValidator,
+	failures24h: dashboardFailureCountsValidator,
+	sweeper: dashboardSweeperValidator
+});
 
 const deleteSourceDbResultValidator = v.object({
 	deleted: v.boolean(),
@@ -285,7 +319,8 @@ export const listDashboard = query({
 		sources: v.array(dashboardSourceValidator),
 		sourceItems: v.array(dashboardSourceItemValidator),
 		posts: v.array(dashboardPostValidator),
-		nightlyRun: dashboardNightlyRunValidator
+		nightlyRun: dashboardNightlyRunValidator,
+		debug: dashboardDebugValidator
 	}),
 	handler: async (ctx) => {
 		await requireAdminUser(ctx);
@@ -380,7 +415,88 @@ export const listDashboard = query({
 						error: latestNightlyRuns[0].error
 					};
 
-		return { sources, sourceItems, posts, nightlyRun };
+		const now = Date.now();
+		const failedSince = now - UTC_DAY_MS;
+		const nightlyLockKey = `nightly_source_refresh:${utcRunDateKey(now)}`;
+		const nightlyLock = (
+			await ctx.db
+				.query('scheduler_locks')
+				.withIndex('by_lockKey', (q) => q.eq('lockKey', nightlyLockKey))
+				.take(1)
+		)[0];
+
+		const [r2QueuedJobs, r2RunningJobs, r2FailedJobs] = await Promise.all([
+			ctx.db
+				.query('r2_retry_jobs')
+				.withIndex('by_status_and_nextRunAt', (q) => q.eq('status', 'queued'))
+				.collect(),
+			ctx.db
+				.query('r2_retry_jobs')
+				.withIndex('by_status_and_nextRunAt', (q) => q.eq('status', 'running'))
+				.collect(),
+			ctx.db
+				.query('r2_retry_jobs')
+				.withIndex('by_status_and_nextRunAt', (q) => q.eq('status', 'failed'))
+				.collect()
+		]);
+
+		const [failedSourceJobs24h, failedDeletionJobs24h, failedR2RetryJobs24h, sweeperEvents] =
+			await Promise.all([
+				ctx.db
+					.query('source_jobs')
+					.withIndex('by_status_and_updatedAt', (q) =>
+						q.eq('status', 'failed').gte('updatedAt', failedSince)
+					)
+					.collect(),
+				ctx.db
+					.query('deletion_jobs')
+					.withIndex('by_status_and_updatedAt', (q) =>
+						q.eq('status', 'failed').gte('updatedAt', failedSince)
+					)
+					.collect(),
+				ctx.db
+					.query('r2_retry_jobs')
+					.withIndex('by_status_and_nextRunAt', (q) =>
+						q.eq('status', 'failed').gte('nextRunAt', failedSince)
+					)
+					.collect(),
+				ctx.db
+					.query('security_events')
+					.withIndex('by_eventType_and_createdAt', (q) =>
+						q.eq('eventType', 'r2_orphan_sweeper_success')
+					)
+					.order('desc')
+					.take(1)
+			]);
+
+		return {
+			sources,
+			sourceItems,
+			posts,
+			nightlyRun,
+			debug: {
+				nightlyLock: {
+					lockKey: nightlyLockKey,
+					isLocked: !!nightlyLock,
+					owner: nightlyLock?.owner,
+					leaseExpiresAt: nightlyLock?.leaseExpiresAt,
+					updatedAt: nightlyLock?.updatedAt
+				},
+				retryBacklog: {
+					queued: r2QueuedJobs.length,
+					running: r2RunningJobs.length,
+					failed: r2FailedJobs.length
+				},
+				failures24h: {
+					sourceJobs24h: failedSourceJobs24h.length,
+					deletionJobs24h: failedDeletionJobs24h.length,
+					r2RetryJobs24h: failedR2RetryJobs24h.length
+				},
+				sweeper: {
+					lastSuccessAt: sweeperEvents[0]?.createdAt ?? null
+				}
+			}
+		};
 	}
 });
 
