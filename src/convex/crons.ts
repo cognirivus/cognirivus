@@ -3,16 +3,22 @@ import { internal } from './_generated/api';
 
 const crons = cronJobs();
 
-crons.daily(
+crons.cron(
 	'nightly-source-refresh',
-	{
-		hourUTC: 0,
-		minuteUTC: 0
-	},
+	'0 0 * * *',
 	(internal as any).sources.runNightlySourceRefreshBatch,
 	{
 		cursor: null
 	}
 );
+
+crons.cron('r2-orphan-sweeper', '0 1 * * *', (internal as any).admin.runR2OrphanSweeper, {
+	phase: 'source_items',
+	cursor: null,
+	sourceItemsScanned: 0,
+	sourceItemsMissing: 0,
+	postsScanned: 0,
+	postsMissing: 0
+});
 
 export default crons;

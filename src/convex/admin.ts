@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import {
 	action,
@@ -60,6 +61,7 @@ const sourceStatusValidator = v.union(
 	v.literal('deleting')
 );
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
+const R2_ORPHAN_SWEEPER_BATCH_SIZE = 100;
 
 const utcRunDateKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
@@ -214,6 +216,18 @@ const r2RetryStatusValidator = v.union(
 	v.literal('done'),
 	v.literal('failed')
 );
+
+const r2OrphanSweeperPhaseValidator = v.union(v.literal('source_items'), v.literal('posts'));
+
+const sourceItemR2RefRowValidator = v.object({
+	_id: v.id('source_items'),
+	r2Key: v.optional(v.string())
+});
+
+const postR2RefRowValidator = v.object({
+	_id: v.id('posts'),
+	r2Key: v.optional(v.string())
+});
 
 const r2RetryJobClaimValidator = v.object({
 	jobId: v.id('r2_retry_jobs'),
@@ -536,6 +550,254 @@ export const listDashboard = query({
 				}
 			}
 		};
+	}
+});
+
+export const listSourceItemR2RefsBatch = internalQuery({
+	args: {
+		paginationOpts: paginationOptsValidator
+	},
+	returns: v.object({
+		page: v.array(sourceItemR2RefRowValidator),
+		isDone: v.boolean(),
+		continueCursor: v.union(v.string(), v.null())
+	}),
+	handler: async (ctx, args) => {
+		const page = await ctx.db
+			.query('source_items')
+			.withIndex('by_publishedAt')
+			.order('asc')
+			.paginate(args.paginationOpts);
+
+		return {
+			page: page.page.map((row) => ({
+				_id: row._id,
+				r2Key: row.r2Key
+			})),
+			isDone: page.isDone,
+			continueCursor: page.continueCursor
+		};
+	}
+});
+
+export const listPostR2RefsBatch = internalQuery({
+	args: {
+		paginationOpts: paginationOptsValidator
+	},
+	returns: v.object({
+		page: v.array(postR2RefRowValidator),
+		isDone: v.boolean(),
+		continueCursor: v.union(v.string(), v.null())
+	}),
+	handler: async (ctx, args) => {
+		const page = await ctx.db
+			.query('posts')
+			.withIndex('by_createdAt')
+			.order('asc')
+			.paginate(args.paginationOpts);
+
+		return {
+			page: page.page.map((row) => ({
+				_id: row._id,
+				r2Key: row.r2Key
+			})),
+			isDone: page.isDone,
+			continueCursor: page.continueCursor
+		};
+	}
+});
+
+export const quarantineMissingSourceItemR2Refs = internalMutation({
+	args: {
+		sourceItemIds: v.array(v.id('source_items'))
+	},
+	returns: v.number(),
+	handler: async (ctx, args) => {
+		let updated = 0;
+		for (const sourceItemId of args.sourceItemIds) {
+			const sourceItem = await ctx.db.get(sourceItemId);
+			if (!sourceItem?.r2Key) {
+				continue;
+			}
+			await ctx.db.patch(sourceItemId, {
+				r2Key: undefined,
+				body: sourceItem.body ?? sourceItem.snippet,
+				updatedAt: Date.now()
+			});
+			updated += 1;
+		}
+		return updated;
+	}
+});
+
+export const quarantineMissingPostR2Refs = internalMutation({
+	args: {
+		postIds: v.array(v.id('posts'))
+	},
+	returns: v.number(),
+	handler: async (ctx, args) => {
+		let updated = 0;
+		for (const postId of args.postIds) {
+			const post = await ctx.db.get(postId);
+			if (!post?.r2Key) {
+				continue;
+			}
+			const previous = post;
+			await ctx.db.patch(postId, {
+				r2Key: undefined,
+				body: post.body ?? post.snippet,
+				updatedAt: Date.now()
+			});
+			const next = await ctx.db.get(postId);
+			if (next) {
+				await trackPostReplaced(ctx, previous, next);
+			}
+			updated += 1;
+		}
+		return updated;
+	}
+});
+
+export const runR2OrphanSweeper = internalAction({
+	args: {
+		phase: r2OrphanSweeperPhaseValidator,
+		cursor: v.union(v.string(), v.null()),
+		sourceItemsScanned: v.number(),
+		sourceItemsMissing: v.number(),
+		postsScanned: v.number(),
+		postsMissing: v.number()
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		try {
+			if (args.phase === 'source_items') {
+				const batch: {
+					page: Array<{ _id: Id<'source_items'>; r2Key?: string }>;
+					isDone: boolean;
+					continueCursor: string | null;
+				} = await ctx.runQuery((internal as any).admin.listSourceItemR2RefsBatch, {
+					paginationOpts: {
+						numItems: R2_ORPHAN_SWEEPER_BATCH_SIZE,
+						cursor: args.cursor
+					}
+				});
+
+				const missingIds: Array<Id<'source_items'>> = [];
+				for (const row of batch.page) {
+					if (!row.r2Key) {
+						continue;
+					}
+					const url = await r2.getUrl(row.r2Key);
+					if (!url) {
+						missingIds.push(row._id);
+					}
+				}
+				if (missingIds.length > 0) {
+					await ctx.runMutation((internal as any).admin.quarantineMissingSourceItemR2Refs, {
+						sourceItemIds: missingIds
+					});
+				}
+
+				const sourceItemsScanned = args.sourceItemsScanned + batch.page.length;
+				const sourceItemsMissing = args.sourceItemsMissing + missingIds.length;
+				if (!batch.isDone) {
+					await ctx.scheduler.runAfter(0, (internal as any).admin.runR2OrphanSweeper, {
+						phase: 'source_items',
+						cursor: batch.continueCursor,
+						sourceItemsScanned,
+						sourceItemsMissing,
+						postsScanned: args.postsScanned,
+						postsMissing: args.postsMissing
+					});
+					return null;
+				}
+
+				await ctx.scheduler.runAfter(0, (internal as any).admin.runR2OrphanSweeper, {
+					phase: 'posts',
+					cursor: null,
+					sourceItemsScanned,
+					sourceItemsMissing,
+					postsScanned: args.postsScanned,
+					postsMissing: args.postsMissing
+				});
+				return null;
+			}
+
+			const batch: {
+				page: Array<{ _id: Id<'posts'>; r2Key?: string }>;
+				isDone: boolean;
+				continueCursor: string | null;
+			} = await ctx.runQuery((internal as any).admin.listPostR2RefsBatch, {
+				paginationOpts: {
+					numItems: R2_ORPHAN_SWEEPER_BATCH_SIZE,
+					cursor: args.cursor
+				}
+			});
+
+			const missingIds: Array<Id<'posts'>> = [];
+			for (const row of batch.page) {
+				if (!row.r2Key) {
+					continue;
+				}
+				const url = await r2.getUrl(row.r2Key);
+				if (!url) {
+					missingIds.push(row._id);
+				}
+			}
+			if (missingIds.length > 0) {
+				await ctx.runMutation((internal as any).admin.quarantineMissingPostR2Refs, {
+					postIds: missingIds
+				});
+			}
+
+			const postsScanned = args.postsScanned + batch.page.length;
+			const postsMissing = args.postsMissing + missingIds.length;
+			if (!batch.isDone) {
+				await ctx.scheduler.runAfter(0, (internal as any).admin.runR2OrphanSweeper, {
+					phase: 'posts',
+					cursor: batch.continueCursor,
+					sourceItemsScanned: args.sourceItemsScanned,
+					sourceItemsMissing: args.sourceItemsMissing,
+					postsScanned,
+					postsMissing
+				});
+				return null;
+			}
+
+			await ctx.runMutation((internal as any).security.logEvent, {
+				eventType: 'r2_orphan_sweeper_success',
+				severity: 'info',
+				surface: 'admin.runR2OrphanSweeper',
+				message: 'R2 orphan sweeper completed.',
+				metadata: stringifyDetails({
+					sourceItemsScanned: args.sourceItemsScanned,
+					sourceItemsMissing: args.sourceItemsMissing,
+					postsScanned,
+					postsMissing
+				})
+			});
+		} catch (error) {
+			await ctx.runMutation((internal as any).security.logEvent, {
+				eventType: 'r2_orphan_sweeper_failed',
+				severity: 'error',
+				surface: 'admin.runR2OrphanSweeper',
+				message: toFailureMessage(
+					JOB_FAILURE_CODE.R2_ORPHAN_SWEEPER_FAILED,
+					error,
+					'R2 orphan sweeper failed.'
+				),
+				metadata: stringifyDetails({
+					phase: args.phase,
+					cursor: args.cursor,
+					sourceItemsScanned: args.sourceItemsScanned,
+					sourceItemsMissing: args.sourceItemsMissing,
+					postsScanned: args.postsScanned,
+					postsMissing: args.postsMissing
+				})
+			});
+		}
+
+		return null;
 	}
 });
 
