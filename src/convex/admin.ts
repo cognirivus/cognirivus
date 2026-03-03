@@ -1,9 +1,16 @@
 import { v } from 'convex/values';
-import { action, internalMutation, query } from './_generated/server';
+import {
+	action,
+	internalAction,
+	internalMutation,
+	internalQuery,
+	query
+} from './_generated/server';
 import { internal } from './_generated/api';
 import { r2 } from './lib/r2';
 import type { Id } from './_generated/dataModel';
 import { requireAdminUser } from './lib/adminAuth';
+import { actionRetrier } from './lib/actionRetrier';
 
 const stringifyDetails = (value: unknown): string => {
 	try {
@@ -142,6 +149,37 @@ const deletionJobClaimValidator = v.object({
 	error: v.optional(v.string())
 });
 
+const r2RetryStatusValidator = v.union(
+	v.literal('queued'),
+	v.literal('running'),
+	v.literal('done'),
+	v.literal('failed')
+);
+
+const r2RetryJobClaimValidator = v.object({
+	jobId: v.id('r2_retry_jobs'),
+	status: r2RetryStatusValidator,
+	shouldRun: v.boolean()
+});
+
+const r2RetryJobValidator = v.union(
+	v.null(),
+	v.object({
+		_id: v.id('r2_retry_jobs'),
+		entityType: v.string(),
+		entityId: v.string(),
+		r2Key: v.string(),
+		operation: v.literal('delete'),
+		status: r2RetryStatusValidator,
+		attemptCount: v.number(),
+		nextRunAt: v.number(),
+		lastError: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		finishedAt: v.optional(v.number())
+	})
+);
+
 const sourceStatuses: Array<'active' | 'paused' | 'error' | 'deleting'> = [
 	'active',
 	'paused',
@@ -219,6 +257,12 @@ type DeletionJobClaim = {
 	shouldRun: boolean;
 	result?: string;
 	error?: string;
+};
+
+type R2RetryJobClaim = {
+	jobId: Id<'r2_retry_jobs'>;
+	status: 'queued' | 'running' | 'done' | 'failed';
+	shouldRun: boolean;
 };
 
 const createDeletionRequestKey = (targetType: DeletionJobTargetType, targetId: string) =>
@@ -581,7 +625,7 @@ export const claimDeletionJob = internalMutation({
 		targetId: v.string()
 	},
 	returns: deletionJobClaimValidator,
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<DeletionJobClaim> => {
 		const now = Date.now();
 		const existing = await ctx.db
 			.query('deletion_jobs')
@@ -613,7 +657,7 @@ export const claimDeletionJob = internalMutation({
 		) {
 			return {
 				jobId: existing._id,
-				status: existing.status,
+				status: existing.status as 'queued' | 'running' | 'done',
 				shouldRun: false,
 				result: existing.result,
 				error: existing.error
@@ -659,14 +703,292 @@ export const finishDeletionJob = internalMutation({
 	}
 });
 
-const deleteR2Keys = async (ctx: any, r2Keys: Array<string>) => {
-	let deletedCount = 0;
-	for (const r2Key of r2Keys) {
+export const upsertR2DeleteRetryJob = internalMutation({
+	args: {
+		entityType: v.string(),
+		entityId: v.string(),
+		r2Key: v.string()
+	},
+	returns: r2RetryJobClaimValidator,
+	handler: async (ctx, args): Promise<R2RetryJobClaim> => {
+		const now = Date.now();
+		const existing = await ctx.db
+			.query('r2_retry_jobs')
+			.withIndex('by_entityType_and_entityId_and_r2Key', (q) =>
+				q.eq('entityType', args.entityType).eq('entityId', args.entityId).eq('r2Key', args.r2Key)
+			)
+			.unique();
+
+		if (!existing) {
+			const jobId = await ctx.db.insert('r2_retry_jobs', {
+				entityType: args.entityType,
+				entityId: args.entityId,
+				r2Key: args.r2Key,
+				operation: 'delete',
+				status: 'queued',
+				attemptCount: 0,
+				nextRunAt: now,
+				createdAt: now,
+				updatedAt: now
+			});
+			return {
+				jobId,
+				status: 'queued',
+				shouldRun: true
+			};
+		}
+
+		if (existing.status === 'done') {
+			return {
+				jobId: existing._id,
+				status: 'done',
+				shouldRun: false
+			};
+		}
+
+		if (existing.status === 'running' || existing.status === 'queued') {
+			return {
+				jobId: existing._id,
+				status: existing.status as 'queued' | 'running',
+				shouldRun: false
+			};
+		}
+
+		await ctx.db.patch(existing._id, {
+			status: 'queued',
+			nextRunAt: now,
+			lastError: undefined,
+			finishedAt: undefined,
+			updatedAt: now
+		});
+		return {
+			jobId: existing._id,
+			status: 'queued',
+			shouldRun: true
+		};
+	}
+});
+
+export const getR2RetryJob = internalQuery({
+	args: {
+		retryJobId: v.id('r2_retry_jobs')
+	},
+	returns: r2RetryJobValidator,
+	handler: async (ctx, args) => {
+		const job = await ctx.db.get(args.retryJobId);
+		if (!job || job.operation !== 'delete') {
+			return null;
+		}
+		return job;
+	}
+});
+
+export const markR2RetryJobAttempt = internalMutation({
+	args: {
+		retryJobId: v.id('r2_retry_jobs')
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const job = await ctx.db.get(args.retryJobId);
+		if (!job) {
+			return null;
+		}
+		await ctx.db.patch(job._id, {
+			status: 'running',
+			attemptCount: job.attemptCount + 1,
+			nextRunAt: Date.now(),
+			updatedAt: Date.now()
+		});
+		return null;
+	}
+});
+
+export const markR2RetryJobDone = internalMutation({
+	args: {
+		retryJobId: v.id('r2_retry_jobs')
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const now = Date.now();
+		const job = await ctx.db.get(args.retryJobId);
+		if (!job) {
+			return null;
+		}
+		await ctx.db.patch(job._id, {
+			status: 'done',
+			lastError: undefined,
+			updatedAt: now,
+			finishedAt: now
+		});
+		return null;
+	}
+});
+
+export const markR2RetryJobFailed = internalMutation({
+	args: {
+		retryJobId: v.id('r2_retry_jobs'),
+		error: v.string()
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const now = Date.now();
+		const job = await ctx.db.get(args.retryJobId);
+		if (!job) {
+			return null;
+		}
+		await ctx.db.patch(job._id, {
+			status: 'failed',
+			lastError: args.error.slice(0, 1000),
+			nextRunAt: now,
+			updatedAt: now,
+			finishedAt: now
+		});
+		return null;
+	}
+});
+
+export const runR2DeleteAttempt = internalAction({
+	args: {
+		retryJobId: v.id('r2_retry_jobs')
+	},
+	returns: v.object({
+		retryJobId: v.id('r2_retry_jobs')
+	}),
+	handler: async (ctx, args) => {
+		const retryJob = await ctx.runQuery((internal as any).admin.getR2RetryJob, {
+			retryJobId: args.retryJobId
+		});
+		if (!retryJob) {
+			throw new Error('R2 retry job not found.');
+		}
+		if (retryJob.status === 'done') {
+			return { retryJobId: args.retryJobId };
+		}
+		await ctx.runMutation((internal as any).admin.markR2RetryJobAttempt, {
+			retryJobId: args.retryJobId
+		});
+		await r2.deleteObject(ctx, retryJob.r2Key);
+		return { retryJobId: args.retryJobId };
+	}
+});
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const retrierErrorToMessage = (value: unknown) => {
+	if (typeof value === 'string') {
+		return value;
+	}
+	if (value instanceof Error) {
+		return value.message;
+	}
+	if (value && typeof value === 'object') {
+		const maybeMessage = (value as { message?: unknown }).message;
+		if (typeof maybeMessage === 'string') {
+			return maybeMessage;
+		}
+	}
+	return stringifyDetails(value);
+};
+
+const runRetriedR2Delete = async (
+	ctx: any,
+	args: {
+		entityType: string;
+		entityId: string;
+		r2Key: string;
+	}
+) => {
+	const claim: R2RetryJobClaim = await ctx.runMutation(
+		(internal as any).admin.upsertR2DeleteRetryJob,
+		{
+			entityType: args.entityType,
+			entityId: args.entityId,
+			r2Key: args.r2Key
+		}
+	);
+	if (claim.status === 'done') {
+		return true;
+	}
+	if (!claim.shouldRun) {
+		return false;
+	}
+
+	const runId = await actionRetrier.run(
+		ctx,
+		(internal as any).admin.runR2DeleteAttempt,
+		{
+			retryJobId: claim.jobId
+		},
+		{
+			initialBackoffMs: 250,
+			base: 2,
+			maxFailures: 4
+		}
+	);
+
+	try {
+		while (true) {
+			const status: any = await actionRetrier.status(ctx, runId);
+			if (status?.type === 'inProgress') {
+				await sleep(120);
+				continue;
+			}
+			const result = status?.result;
+			if (result?.type === 'success') {
+				await ctx.runMutation((internal as any).admin.markR2RetryJobDone, {
+					retryJobId: claim.jobId
+				});
+				return true;
+			}
+
+			const errorMessage =
+				result?.type === 'failed'
+					? retrierErrorToMessage(result.error)
+					: 'R2 deletion retrier run was canceled.';
+			await ctx.runMutation((internal as any).admin.markR2RetryJobFailed, {
+				retryJobId: claim.jobId,
+				error: errorMessage
+			});
+			return false;
+		}
+	} finally {
 		try {
-			await r2.deleteObject(ctx, r2Key);
-			deletedCount += 1;
+			await actionRetrier.cleanup(ctx, runId);
+		} catch (cleanupError) {
+			console.error('Failed to cleanup action retrier run for R2 delete.', cleanupError);
+		}
+	}
+};
+
+const deleteR2Keys = async (
+	ctx: any,
+	args: { entityType: string; entityId: string; r2Keys: Array<string> }
+) => {
+	const uniqueKeys = Array.from(new Set(args.r2Keys.filter((key) => key.length > 0)));
+	let deletedCount = 0;
+	for (const r2Key of uniqueKeys) {
+		try {
+			const deleted = await runRetriedR2Delete(ctx, {
+				entityType: args.entityType,
+				entityId: args.entityId,
+				r2Key
+			});
+			if (deleted) {
+				deletedCount += 1;
+			}
 		} catch (error) {
 			console.error('Admin cleanup failed to delete R2 object', r2Key, error);
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: 'system',
+				action: 'r2_delete_retry_enqueue_failed',
+				targetType: args.entityType,
+				targetId: args.entityId,
+				status: 'failed',
+				details: stringifyDetails({
+					r2Key,
+					error: error instanceof Error ? error.message : String(error)
+				})
+			});
 		}
 	}
 	return deletedCount;
@@ -726,7 +1048,11 @@ export const deleteSourcePermanently = action({
 					sourceId: args.sourceId
 				}
 			);
-			const r2DeletedCount = await deleteR2Keys(ctx, result.r2Keys);
+			const r2DeletedCount = await deleteR2Keys(ctx, {
+				entityType: 'source',
+				entityId: args.sourceId,
+				r2Keys: result.r2Keys
+			});
 			const response: DeleteSourcePermanentlyResult = {
 				deleted: result.deleted,
 				sourceId: result.sourceId,
@@ -827,7 +1153,13 @@ export const deleteSourceItemPermanently = action({
 					sourceItemId: args.sourceItemId
 				}
 			);
-			const r2Deleted = result.r2Key ? (await deleteR2Keys(ctx, [result.r2Key])) > 0 : false;
+			const r2Deleted = result.r2Key
+				? (await deleteR2Keys(ctx, {
+						entityType: 'source_item',
+						entityId: args.sourceItemId,
+						r2Keys: [result.r2Key]
+					})) > 0
+				: false;
 			const response: DeleteSourceItemPermanentlyResult = {
 				deleted: result.deleted,
 				sourceItemId: result.sourceItemId,
@@ -928,7 +1260,13 @@ export const deletePostPermanently = action({
 					postId: args.postId
 				}
 			);
-			const r2Deleted = result.r2Key ? (await deleteR2Keys(ctx, [result.r2Key])) > 0 : false;
+			const r2Deleted = result.r2Key
+				? (await deleteR2Keys(ctx, {
+						entityType: 'post',
+						entityId: args.postId,
+						r2Keys: [result.r2Key]
+					})) > 0
+				: false;
 			const response: DeletePostPermanentlyResult = {
 				deleted: result.deleted,
 				postId: result.postId,

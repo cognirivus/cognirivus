@@ -308,6 +308,7 @@ const schema = defineSchema({
 		finishedAt: v.optional(v.number())
 	})
 		.index('by_status_and_nextRunAt', ['status', 'nextRunAt'])
+		.index('by_entityType_and_entityId_and_r2Key', ['entityType', 'entityId', 'r2Key'])
 		.index('by_entityType_and_entityId_and_createdAt', ['entityType', 'entityId', 'createdAt'])
 		.index('by_r2Key_and_createdAt', ['r2Key', 'createdAt']),
 	scheduler_locks: defineTable({

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@convex-dev/action-retrier':
+        specifier: ^0.3.0
+        version: 0.3.0(convex@1.31.7(react@19.2.3))
       '@convex-dev/aggregate':
         specifier: ^0.2.1
         version: 0.2.1(convex@1.31.7(react@19.2.3))
