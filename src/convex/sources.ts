@@ -21,6 +21,12 @@ import {
 	trackSourceItemInserted,
 	trackSourceItemReplaced
 } from './lib/aggregates';
+import {
+	classifySourceSyncFailureCode,
+	JOB_FAILURE_CODE,
+	toFailureMessage
+} from './lib/jobFailure';
+import { assertNightlyRunTransition, assertSourceJobTransition } from './lib/jobTransitions';
 
 const SOURCE_ITEM_INLINE_LIMIT = 1000;
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
@@ -940,6 +946,17 @@ export const completeNightlyRun = internalMutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		const run = await ctx.db.get(args.runId);
+		if (!run) {
+			return null;
+		}
+		if (run.status === 'done') {
+			return null;
+		}
+		if (run.status === 'failed') {
+			return null;
+		}
+		assertNightlyRunTransition(run.status, 'done');
 		await ctx.db.patch(args.runId, {
 			status: 'done',
 			finishedAt: Date.now(),
@@ -957,6 +974,17 @@ export const failNightlyRun = internalMutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		const run = await ctx.db.get(args.runId);
+		if (!run) {
+			return null;
+		}
+		if (run.status === 'failed') {
+			return null;
+		}
+		if (run.status === 'done') {
+			return null;
+		}
+		assertNightlyRunTransition(run.status, 'failed');
 		await ctx.db.patch(args.runId, {
 			status: 'failed',
 			error: args.error.slice(0, 1000),
@@ -1040,13 +1068,24 @@ export const markJobRunning = internalMutation({
 	args: {
 		jobId: v.id('source_jobs')
 	},
-	returns: v.null(),
+	returns: v.boolean(),
 	handler: async (ctx, args) => {
+		const job = await ctx.db.get(args.jobId);
+		if (!job) {
+			return false;
+		}
+		if (job.status === 'running') {
+			return true;
+		}
+		if (job.status === 'done' || job.status === 'failed') {
+			return false;
+		}
+		assertSourceJobTransition(job.status, 'running');
 		await ctx.db.patch(args.jobId, {
 			status: 'running',
 			updatedAt: Date.now()
 		});
-		return null;
+		return true;
 	}
 });
 
@@ -1060,6 +1099,9 @@ export const updateJobProgress = internalMutation({
 	handler: async (ctx, args) => {
 		const job = await ctx.db.get(args.jobId);
 		if (!job) {
+			return null;
+		}
+		if (job.status !== 'running') {
 			return null;
 		}
 		await ctx.db.patch(args.jobId, {
@@ -1077,6 +1119,17 @@ export const completeJob = internalMutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		const job = await ctx.db.get(args.jobId);
+		if (!job) {
+			return null;
+		}
+		if (job.status === 'done') {
+			return null;
+		}
+		if (job.status === 'failed') {
+			return null;
+		}
+		assertSourceJobTransition(job.status, 'done');
 		await ctx.db.patch(args.jobId, {
 			status: 'done',
 			cursor: undefined,
@@ -1094,6 +1147,17 @@ export const failJob = internalMutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		const job = await ctx.db.get(args.jobId);
+		if (!job) {
+			return null;
+		}
+		if (job.status === 'failed') {
+			return null;
+		}
+		if (job.status === 'done') {
+			return null;
+		}
+		assertSourceJobTransition(job.status, 'failed');
 		await ctx.db.patch(args.jobId, {
 			status: 'failed',
 			error: args.error.slice(0, 500),
@@ -1373,9 +1437,12 @@ export const runSourceSync = internalAction({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ctx.runMutation((internal as any).sources.markJobRunning, {
+		const shouldRun: boolean = await ctx.runMutation((internal as any).sources.markJobRunning, {
 			jobId: args.jobId
 		});
+		if (!shouldRun) {
+			return null;
+		}
 
 		try {
 			const source: {
@@ -1437,7 +1504,11 @@ export const runSourceSync = internalAction({
 				jobId: args.jobId
 			});
 		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Source sync failed.';
+			const message = toFailureMessage(
+				classifySourceSyncFailureCode(error),
+				error,
+				'Source sync failed.'
+			);
 			await logSecurityEvent(ctx, {
 				eventType: 'source_sync_failed',
 				severity: 'error',
@@ -1619,10 +1690,15 @@ export const runNightlySourceRefreshBatch = internalAction({
 				owner: lockOwner
 			});
 		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.SOURCE_NIGHTLY_REFRESH_FAILED,
+				error,
+				'Nightly refresh failed.'
+			);
 			if (runId) {
 				await ctx.runMutation((internal as any).sources.failNightlyRun, {
 					runId,
-					error: error instanceof Error ? error.message : 'Nightly refresh failed.'
+					error: failureMessage
 				});
 			}
 			await ctx.runMutation((internal as any).sources.releaseNightlyLock, {
@@ -1894,9 +1970,12 @@ export const runBulkUnsubscribeCleanup = internalAction({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ctx.runMutation((internal as any).sources.markJobRunning, {
+		const shouldRun: boolean = await ctx.runMutation((internal as any).sources.markJobRunning, {
 			jobId: args.jobId
 		});
+		if (!shouldRun) {
+			return null;
+		}
 
 		if (args.sourceIndex >= args.sourceIds.length) {
 			await ctx.runMutation((internal as any).sources.completeJob, {
@@ -1947,7 +2026,11 @@ export const runBulkUnsubscribeCleanup = internalAction({
 		} catch (error) {
 			await ctx.runMutation((internal as any).sources.failJob, {
 				jobId: args.jobId,
-				error: error instanceof Error ? error.message : 'Bulk unsubscribe failed.'
+				error: toFailureMessage(
+					JOB_FAILURE_CODE.SOURCE_BULK_UNSUBSCRIBE_FAILED,
+					error,
+					'Bulk unsubscribe failed.'
+				)
 			});
 		}
 
@@ -2025,9 +2108,12 @@ export const runResubscribeBackfill = internalAction({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		await ctx.runMutation((internal as any).sources.markJobRunning, {
+		const shouldRun: boolean = await ctx.runMutation((internal as any).sources.markJobRunning, {
 			jobId: args.jobId
 		});
+		if (!shouldRun) {
+			return null;
+		}
 
 		try {
 			const batch: {
@@ -2065,7 +2151,11 @@ export const runResubscribeBackfill = internalAction({
 		} catch (error) {
 			await ctx.runMutation((internal as any).sources.failJob, {
 				jobId: args.jobId,
-				error: error instanceof Error ? error.message : 'Resubscribe backfill failed.'
+				error: toFailureMessage(
+					JOB_FAILURE_CODE.SOURCE_RESUBSCRIBE_BACKFILL_FAILED,
+					error,
+					'Resubscribe backfill failed.'
+				)
 			});
 		}
 

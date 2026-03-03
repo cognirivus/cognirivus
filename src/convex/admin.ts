@@ -17,6 +17,8 @@ import {
 	trackPostReplaced,
 	trackSourceItemDeleted
 } from './lib/aggregates';
+import { JOB_FAILURE_CODE, toFailureMessage } from './lib/jobFailure';
+import { assertDeletionJobTransition, assertR2RetryJobTransition } from './lib/jobTransitions';
 
 const stringifyDetails = (value: unknown): string => {
 	try {
@@ -830,6 +832,7 @@ export const claimDeletionJob = internalMutation({
 			};
 		}
 
+		assertDeletionJobTransition(existing.status, 'running');
 		await ctx.db.patch(existing._id, {
 			status: 'running',
 			processed: 0,
@@ -856,6 +859,17 @@ export const finishDeletionJob = internalMutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		const job = await ctx.db.get(args.jobId);
+		if (!job) {
+			return null;
+		}
+		if (job.status === args.status) {
+			return null;
+		}
+		if (job.status === 'done' || job.status === 'cancelled') {
+			return null;
+		}
+		assertDeletionJobTransition(job.status, args.status);
 		const now = Date.now();
 		await ctx.db.patch(args.jobId, {
 			status: args.status,
@@ -920,6 +934,7 @@ export const upsertR2DeleteRetryJob = internalMutation({
 			};
 		}
 
+		assertR2RetryJobTransition(existing.status, 'queued');
 		await ctx.db.patch(existing._id, {
 			status: 'queued',
 			nextRunAt: now,
@@ -959,6 +974,13 @@ export const markR2RetryJobAttempt = internalMutation({
 		if (!job) {
 			return null;
 		}
+		if (job.status === 'running') {
+			return null;
+		}
+		if (job.status === 'done') {
+			return null;
+		}
+		assertR2RetryJobTransition(job.status, 'running');
 		await ctx.db.patch(job._id, {
 			status: 'running',
 			attemptCount: job.attemptCount + 1,
@@ -980,6 +1002,10 @@ export const markR2RetryJobDone = internalMutation({
 		if (!job) {
 			return null;
 		}
+		if (job.status === 'done') {
+			return null;
+		}
+		assertR2RetryJobTransition(job.status, 'done');
 		await ctx.db.patch(job._id, {
 			status: 'done',
 			lastError: undefined,
@@ -1002,6 +1028,13 @@ export const markR2RetryJobFailed = internalMutation({
 		if (!job) {
 			return null;
 		}
+		if (job.status === 'failed') {
+			return null;
+		}
+		if (job.status === 'done') {
+			return null;
+		}
+		assertR2RetryJobTransition(job.status, 'failed');
 		await ctx.db.patch(job._id, {
 			status: 'failed',
 			lastError: args.error.slice(0, 1000),
@@ -1039,22 +1072,6 @@ export const runR2DeleteAttempt = internalAction({
 });
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const retrierErrorToMessage = (value: unknown) => {
-	if (typeof value === 'string') {
-		return value;
-	}
-	if (value instanceof Error) {
-		return value.message;
-	}
-	if (value && typeof value === 'object') {
-		const maybeMessage = (value as { message?: unknown }).message;
-		if (typeof maybeMessage === 'string') {
-			return maybeMessage;
-		}
-	}
-	return stringifyDetails(value);
-};
 
 const runRetriedR2Delete = async (
 	ctx: any,
@@ -1109,8 +1126,16 @@ const runRetriedR2Delete = async (
 
 			const errorMessage =
 				result?.type === 'failed'
-					? retrierErrorToMessage(result.error)
-					: 'R2 deletion retrier run was canceled.';
+					? toFailureMessage(
+							JOB_FAILURE_CODE.R2_DELETE_FAILED,
+							result.error,
+							'R2 deletion retrier run failed.'
+						)
+					: toFailureMessage(
+							JOB_FAILURE_CODE.R2_DELETE_FAILED,
+							null,
+							'R2 deletion retrier run was canceled.'
+						);
 			await ctx.runMutation((internal as any).admin.markR2RetryJobFailed, {
 				retryJobId: claim.jobId,
 				error: errorMessage
@@ -1249,11 +1274,16 @@ export const deleteSourcePermanently = action({
 			});
 			return response;
 		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_SOURCE_FAILED,
+				error,
+				'Source deletion failed.'
+			);
 			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
 				jobId: claim.jobId,
 				status: 'failed',
 				processed: 0,
-				error: error instanceof Error ? error.message : 'Unknown error'
+				error: failureMessage
 			});
 			await logAdminAuditEvent(ctx, {
 				actorAuthId: authUser._id,
@@ -1261,7 +1291,7 @@ export const deleteSourcePermanently = action({
 				targetType: 'source',
 				targetId: args.sourceId,
 				status: 'failed',
-				details: error instanceof Error ? error.message : 'Unknown error'
+				details: failureMessage
 			});
 			throw error;
 		}
@@ -1352,11 +1382,16 @@ export const deleteSourceItemPermanently = action({
 			});
 			return response;
 		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_SOURCE_ITEM_FAILED,
+				error,
+				'Source item deletion failed.'
+			);
 			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
 				jobId: claim.jobId,
 				status: 'failed',
 				processed: 0,
-				error: error instanceof Error ? error.message : 'Unknown error'
+				error: failureMessage
 			});
 			await logAdminAuditEvent(ctx, {
 				actorAuthId: authUser._id,
@@ -1364,7 +1399,7 @@ export const deleteSourceItemPermanently = action({
 				targetType: 'source_item',
 				targetId: args.sourceItemId,
 				status: 'failed',
-				details: error instanceof Error ? error.message : 'Unknown error'
+				details: failureMessage
 			});
 			throw error;
 		}
@@ -1463,11 +1498,16 @@ export const deletePostPermanently = action({
 			});
 			return response;
 		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_POST_FAILED,
+				error,
+				'Post deletion failed.'
+			);
 			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
 				jobId: claim.jobId,
 				status: 'failed',
 				processed: 0,
-				error: error instanceof Error ? error.message : 'Unknown error'
+				error: failureMessage
 			});
 			await logAdminAuditEvent(ctx, {
 				actorAuthId: authUser._id,
@@ -1475,7 +1515,7 @@ export const deletePostPermanently = action({
 				targetType: 'post',
 				targetId: args.postId,
 				status: 'failed',
-				details: error instanceof Error ? error.message : 'Unknown error'
+				details: failureMessage
 			});
 			throw error;
 		}
