@@ -229,6 +229,10 @@ const postR2RefRowValidator = v.object({
 	r2Key: v.optional(v.string())
 });
 
+const aggregateParitySourceRowValidator = v.object({
+	sourceId: v.id('sources')
+});
+
 const r2RetryJobClaimValidator = v.object({
 	jobId: v.id('r2_retry_jobs'),
 	status: r2RetryStatusValidator,
@@ -793,6 +797,132 @@ export const runR2OrphanSweeper = internalAction({
 					sourceItemsMissing: args.sourceItemsMissing,
 					postsScanned: args.postsScanned,
 					postsMissing: args.postsMissing
+				})
+			});
+		}
+
+		return null;
+	}
+});
+
+export const listSourcesForAggregateParity = internalQuery({
+	args: {
+		paginationOpts: paginationOptsValidator
+	},
+	returns: v.object({
+		page: v.array(aggregateParitySourceRowValidator),
+		isDone: v.boolean(),
+		continueCursor: v.union(v.string(), v.null())
+	}),
+	handler: async (ctx, args) => {
+		const page = await ctx.db
+			.query('sources')
+			.withIndex('by_status_and_updatedAt', (q) => q.eq('status', 'active'))
+			.order('desc')
+			.paginate(args.paginationOpts);
+		return {
+			page: page.page.map((row) => ({ sourceId: row._id })),
+			isDone: page.isDone,
+			continueCursor: page.continueCursor
+		};
+	}
+});
+
+export const countSourceItemsRaw = internalQuery({
+	args: {
+		sourceId: v.id('sources')
+	},
+	returns: v.number(),
+	handler: async (ctx, args) => {
+		const rows = await ctx.db
+			.query('source_items')
+			.withIndex('by_sourceId_and_publishedAt', (q) => q.eq('sourceId', args.sourceId))
+			.collect();
+		return rows.length;
+	}
+});
+
+export const runAggregateParityCheck = internalAction({
+	args: {
+		cursor: v.union(v.string(), v.null()),
+		checked: v.number(),
+		mismatches: v.number()
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		try {
+			const batch: {
+				page: Array<{ sourceId: Id<'sources'> }>;
+				isDone: boolean;
+				continueCursor: string | null;
+			} = await ctx.runQuery((internal as any).admin.listSourcesForAggregateParity, {
+				paginationOpts: {
+					numItems: 50,
+					cursor: args.cursor
+				}
+			});
+
+			let mismatchDelta = 0;
+			for (const row of batch.page) {
+				const [aggregateCount, rawCount] = await Promise.all([
+					countSourceItemsForSource(ctx, row.sourceId),
+					ctx.runQuery((internal as any).admin.countSourceItemsRaw, { sourceId: row.sourceId })
+				]);
+				if (aggregateCount !== rawCount) {
+					mismatchDelta += 1;
+					await ctx.runMutation((internal as any).security.logEvent, {
+						eventType: 'aggregate_parity_mismatch',
+						severity: 'warn',
+						surface: 'admin.runAggregateParityCheck',
+						message: `Aggregate mismatch for source ${row.sourceId}`,
+						entityType: 'source',
+						entityId: row.sourceId,
+						metadata: stringifyDetails({
+							aggregateCount,
+							rawCount
+						})
+					});
+				}
+			}
+
+			const checked = args.checked + batch.page.length;
+			const mismatches = args.mismatches + mismatchDelta;
+			if (!batch.isDone) {
+				await ctx.scheduler.runAfter(0, (internal as any).admin.runAggregateParityCheck, {
+					cursor: batch.continueCursor,
+					checked,
+					mismatches
+				});
+				return null;
+			}
+
+			await ctx.runMutation((internal as any).security.logEvent, {
+				eventType: 'aggregate_parity_check_success',
+				severity: mismatches > 0 ? 'warn' : 'info',
+				surface: 'admin.runAggregateParityCheck',
+				message:
+					mismatches > 0
+						? `Aggregate parity check finished with ${mismatches} mismatches.`
+						: 'Aggregate parity check finished with no mismatches.',
+				metadata: stringifyDetails({
+					checked,
+					mismatches
+				})
+			});
+		} catch (error) {
+			await ctx.runMutation((internal as any).security.logEvent, {
+				eventType: 'aggregate_parity_check_failed',
+				severity: 'error',
+				surface: 'admin.runAggregateParityCheck',
+				message: toFailureMessage(
+					JOB_FAILURE_CODE.AGGREGATE_PARITY_CHECK_FAILED,
+					error,
+					'Aggregate parity check failed.'
+				),
+				metadata: stringifyDetails({
+					cursor: args.cursor,
+					checked: args.checked,
+					mismatches: args.mismatches
 				})
 			});
 		}

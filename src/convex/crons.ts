@@ -21,4 +21,10 @@ crons.cron('r2-orphan-sweeper', '0 1 * * *', (internal as any).admin.runR2Orphan
 	postsMissing: 0
 });
 
+crons.cron('aggregate-parity-check', '0 2 * * *', (internal as any).admin.runAggregateParityCheck, {
+	cursor: null,
+	checked: 0,
+	mismatches: 0
+});
+
 export default crons;
