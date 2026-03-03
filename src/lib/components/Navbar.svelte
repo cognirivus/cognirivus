@@ -62,7 +62,12 @@
 		<div class="flex items-center gap-3">
 			<DropdownMenu>
 				<DropdownMenuTrigger>
-					<Button variant="outline" size="icon-sm" class="md:hidden" aria-label="Open navigation menu">
+					<Button
+						variant="outline"
+						size="icon-sm"
+						class="md:hidden"
+						aria-label="Open navigation menu"
+					>
 						<Menu class="size-4" />
 					</Button>
 				</DropdownMenuTrigger>
@@ -90,11 +95,15 @@
 				</DropdownMenuContent>
 			</DropdownMenu>
 
-			<Logo size="sm" />
+			<a href="/" class="transition-opacity hover:opacity-80">
+				<Logo size="sm" />
+			</a>
 			<div class="hidden items-center gap-2 md:flex">
 				<a
 					href="/feed"
-					class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive('/feed')
+					class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive(
+						'/feed'
+					)
 						? 'text-foreground'
 						: 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}"
 				>
@@ -103,7 +112,9 @@
 				</a>
 				<a
 					href="/c"
-					class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive('/c')
+					class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive(
+						'/c'
+					)
 						? 'text-foreground'
 						: 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}"
 				>
@@ -113,7 +124,9 @@
 				{#if auth.isAuthenticated}
 					<a
 						href="/submit"
-						class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive('/submit')
+						class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive(
+							'/submit'
+						)
 							? 'text-foreground'
 							: 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}"
 					>
@@ -122,7 +135,9 @@
 					</a>
 					<a
 						href="/c/new"
-						class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive('/c/new')
+						class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive(
+							'/c/new'
+						)
 							? 'text-foreground'
 							: 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}"
 					>

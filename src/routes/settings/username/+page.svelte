@@ -43,10 +43,20 @@
 	{#if profileQuery.isLoading}
 		<p class="mt-4 text-sm text-muted-foreground">Loading profile...</p>
 	{:else}
-		<form class="mx-auto mt-5 max-w-3xl space-y-3 rounded-xl border border-border bg-card p-5" onsubmit={save}>
+		<form
+			class="mx-auto mt-5 max-w-3xl space-y-3 rounded-xl border border-border bg-card p-5"
+			onsubmit={save}
+		>
 			<div class="space-y-2">
 				<Label for="username">Username</Label>
-				<Input id="username" bind:value={username} required minlength={3} maxlength={20} disabled={!!profileQuery.data?.username} />
+				<Input
+					id="username"
+					bind:value={username}
+					required
+					minlength={3}
+					maxlength={20}
+					disabled={!!profileQuery.data?.username}
+				/>
 			</div>
 			<div class="flex gap-2">
 				<Button type="submit" disabled={saving || !!profileQuery.data?.username}>
@@ -57,4 +67,3 @@
 		</form>
 	{/if}
 </main>
-

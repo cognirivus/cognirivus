@@ -3,38 +3,109 @@
 	import { goto } from '$app/navigation';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
-	import { Calendar, Globe, MessageSquare, ThumbsDown, ThumbsUp, User, Users } from '@lucide/svelte';
+	import {
+		Calendar,
+		Globe,
+		MessageSquare,
+		ThumbsDown,
+		ThumbsUp,
+		User,
+		Users,
+		Lock,
+		ExternalLink,
+		Tag,
+		Archive,
+		Search,
+		X
+	} from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
+	import { Input } from '$lib/components/ui/input';
 	import { toast } from 'svelte-sonner';
+	import TagMultiSelect from '$lib/components/TagMultiSelect.svelte';
 
 	type FeedTab = 'new' | 'top' | 'discussed';
-	type FeedWindow = '24h' | '7d' | '30d';
+	type FeedWindow = 'all' | '24h' | '7d' | '30d';
+	type FeedScope = 'you' | 'public' | 'community';
 
 	const auth = useAuth();
 	const client = useConvexClient();
 
 	const tab = $derived((page.url.searchParams.get('tab') as FeedTab | null) ?? 'new');
-	const windowBucket = $derived((page.url.searchParams.get('window') as FeedWindow | null) ?? '24h');
+	const windowBucket = $derived(
+		(page.url.searchParams.get('window') as FeedWindow | null) ?? '24h'
+	);
+	const scope = $derived(
+		(page.url.searchParams.get('scope') as FeedScope | null) ??
+			(auth.isAuthenticated ? 'you' : 'public')
+	);
+	const search = $derived(page.url.searchParams.get('search') ?? '');
+	const selectedTags = $derived(
+		page.url.searchParams.get('tags')?.split(',').filter(Boolean) ?? []
+	);
 	const cursor = $derived(page.url.searchParams.get('cursor'));
 
-	const feedQuery = useQuery((api as any).feed.listGlobal, () => ({
-		tab,
-		window: windowBucket,
-		paginationOpts: {
-			numItems: 20,
-			cursor
-		}
-	}));
+	let searchInput = $state('');
 
-	function updateParams(next: { tab?: FeedTab; window?: FeedWindow; cursor?: string | null }) {
+	// Sync input with URL search param
+	$effect(() => {
+		searchInput = search;
+	});
+
+	const feedQuery = useQuery((api as any).feed.listGlobal, () => {
+		const s = search;
+		const ts = selectedTags;
+		const base = {
+			paginationOpts: {
+				numItems: 20,
+				cursor
+			}
+		};
+		return {
+			...base,
+			tab,
+			scope,
+			window: windowBucket,
+			search: s || undefined,
+			tags: ts.length > 0 ? ts : undefined
+		};
+	});
+
+	function updateParams(next: {
+		scope?: FeedScope;
+		tab?: FeedTab;
+		window?: FeedWindow;
+		search?: string | null;
+		tags?: string[] | null;
+		cursor?: string | null;
+	}) {
 		const params = Object.fromEntries(page.url.searchParams.entries()) as Record<string, string>;
-		if (next.tab) params.tab = next.tab;
-		if (next.window) params.window = next.window;
+		if (next.scope) {
+			params.scope = next.scope;
+			delete params.cursor;
+		}
+		if (next.tab) {
+			params.tab = next.tab;
+			delete params.cursor;
+		}
+		if (next.window) {
+			params.window = next.window;
+			delete params.cursor;
+		}
+		if (next.search !== undefined) {
+			if (next.search === null || next.search === '') delete params.search;
+			else params.search = next.search;
+			delete params.cursor;
+		}
+		if (next.tags !== undefined) {
+			if (next.tags === null || next.tags.length === 0) delete params.tags;
+			else params.tags = next.tags.join(',');
+			delete params.cursor;
+		}
 		if (next.cursor) params.cursor = next.cursor;
-		else delete params.cursor;
+		else if (next.cursor === null) delete params.cursor;
 
 		const queryString = new URLSearchParams(params).toString();
 		const target = queryString.length > 0 ? `/feed?${queryString}` : '/feed';
@@ -56,8 +127,14 @@
 <main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
 		<div>
-			<h1 class="text-2xl font-semibold tracking-tight">Global Feed</h1>
-			<p class="text-sm text-muted-foreground">Knowledge posts ranked by new, top, and discussed.</p>
+			<h1 class="text-2xl font-semibold tracking-tight">
+				{#if scope === 'you'}My Private Feed{:else if scope === 'community'}Community Feed{:else}Public
+					Feed{/if}
+			</h1>
+			<p class="text-sm text-muted-foreground">
+				{#if scope === 'you'}Your link collection and private notes.{:else}Knowledge posts ranked by
+					new, top, and discussed.{/if}
+			</p>
 		</div>
 		{#if auth.isAuthenticated}
 			<Button href="/submit">Submit Post</Button>
@@ -68,7 +145,19 @@
 		{/if}
 	</div>
 
-	{#if !auth.isAuthenticated}
+	{#if !auth.isAuthenticated && scope === 'you'}
+		<Card class="mb-4 gap-0 py-3">
+			<CardContent class="text-xs text-muted-foreground">
+				Sign in to view your private feed.
+				<a
+					class="ml-2 font-medium underline"
+					href={`/signin?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`}
+				>
+					Sign in
+				</a>
+			</CardContent>
+		</Card>
+	{:else if !auth.isAuthenticated}
 		<Card class="mb-4 gap-0 py-3">
 			<CardContent class="text-xs text-muted-foreground">
 				Sign in to vote and comment.
@@ -83,17 +172,85 @@
 	{/if}
 
 	<div class="mb-4 flex flex-wrap items-center gap-2">
+		<div
+			class="flex items-center gap-1 overflow-hidden rounded-md border border-border bg-muted/20 p-1"
+		>
+			{#each ['you', 'public', 'community'] as s (s)}
+				{#if s !== 'you' || auth.isAuthenticated}
+					<Button
+						variant={scope === s ? 'secondary' : 'ghost'}
+						size="sm"
+						class="h-8 px-3 text-xs"
+						onclick={() => updateParams({ scope: s as FeedScope })}
+					>
+						{s.charAt(0).toUpperCase() + s.slice(1)}
+					</Button>
+				{/if}
+			{/each}
+		</div>
+
+		<div class="mx-1 h-4 w-px bg-border"></div>
 		{#each ['new', 'top', 'discussed'] as t (t)}
-			<Button variant={tab === t ? 'default' : 'outline'} size="sm" onclick={() => updateParams({ tab: t as FeedTab, cursor: null })}>
+			<Button
+				variant={tab === t ? 'default' : 'outline'}
+				size="sm"
+				class="h-8"
+				onclick={() => updateParams({ tab: t as FeedTab, cursor: null })}
+			>
 				{t}
 			</Button>
 		{/each}
-		<div class="mx-2 h-4 w-px bg-border"></div>
-		{#each ['24h', '7d', '30d'] as w (w)}
-			<Button variant={windowBucket === w ? 'secondary' : 'ghost'} size="sm" onclick={() => updateParams({ window: w as FeedWindow, cursor: null })}>
-				{w}
+		<div class="mx-1 h-4 w-px bg-border"></div>
+		{#each ['all', '24h', '7d', '30d'] as w (w)}
+			<Button
+				variant={windowBucket === w ? 'secondary' : 'ghost'}
+				size="sm"
+				class="h-8"
+				onclick={() => updateParams({ window: w as FeedWindow, cursor: null })}
+			>
+				{w === 'all' ? 'All' : w}
 			</Button>
 		{/each}
+	</div>
+
+	<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+		<div class="relative flex-1">
+			<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+			<Input
+				placeholder="Search feed..."
+				class="pr-9 pl-9"
+				bind:value={searchInput}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						const nextSearch = searchInput.trim();
+						updateParams({
+							search: nextSearch,
+							window: nextSearch.length > 0 ? 'all' : undefined,
+							cursor: null
+						});
+					}
+				}}
+			/>
+			{#if searchInput}
+				<button
+					class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+					onclick={() => {
+						searchInput = '';
+						updateParams({ search: '', cursor: null });
+					}}
+				>
+					<X class="size-4" />
+				</button>
+			{/if}
+		</div>
+
+		<TagMultiSelect
+			availableTags={Array.from(
+				new Set((feedQuery.data?.page ?? []).flatMap((p: any) => p.tags ?? []))
+			)}
+			{selectedTags}
+			onSelect={(tags: string[]) => updateParams({ tags: tags, cursor: null })}
+		/>
 	</div>
 
 	{#if feedQuery.isLoading}
@@ -108,104 +265,131 @@
 				<Card class="gap-0 py-4">
 					<CardContent>
 						<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-						<div class="min-w-0 flex-1">
-							<div class="flex items-start justify-between gap-3">
-								<a href="/post/{post._id}" class="line-clamp-2 text-base font-medium hover:underline">
-									{post.title}
-								</a>
-								<span class="hidden shrink-0 items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:inline-flex">
+							<div class="min-w-0 flex-1">
+								<div class="flex items-start justify-between gap-3">
+									<div class="flex items-center gap-2">
+										<a
+											href="/post/{post._id}"
+											class="line-clamp-2 text-base font-medium hover:underline"
+										>
+											{post.title}
+										</a>
+										{#if post.visibility === 'private'}
+											<Lock class="size-3.5 text-muted-foreground" />
+										{/if}
+										{#if post.type === 'link' && post.url}
+											<a
+												href={post.url}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="text-muted-foreground hover:text-foreground"
+											>
+												<ExternalLink class="size-3.5" />
+											</a>
+										{/if}
+									</div>
+									<span
+										class="hidden shrink-0 items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:inline-flex"
+									>
+										<Calendar class="size-3.5" />
+										{new Date(post.createdAt).toLocaleString()}
+									</span>
+								</div>
+								<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
+								<span
+									class="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:hidden"
+								>
 									<Calendar class="size-3.5" />
 									{new Date(post.createdAt).toLocaleString()}
 								</span>
+								<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+									{#if post.authorUsername}
+										<Badge href="/u/{post.authorUsername}" variant="outline" class="gap-1">
+											<User class="size-3.5" />
+											<span class="font-semibold">u/{post.authorUsername}</span>
+										</Badge>
+									{:else}
+										<Badge variant="outline" class="gap-1">
+											<User class="size-3.5" />
+											<span class="font-semibold">{post.authorName}</span>
+										</Badge>
+									{/if}
+									{#if post.communitySlug}
+										<Badge href="/c/{post.communitySlug}" variant="outline" class="gap-1">
+											<Users class="size-3.5" />
+											<span class="font-semibold">c/{post.communitySlug}</span>
+										</Badge>
+									{:else if post.visibility === 'private'}
+										<Badge variant="outline" class="gap-1 border-muted-foreground/30 bg-muted/20">
+											<Lock class="size-3.5" />
+											<span class="font-semibold text-muted-foreground">Private</span>
+										</Badge>
+									{:else}
+										<Badge variant="outline" class="gap-1">
+											<Globe class="size-3.5" />
+											<span class="font-semibold">Public</span>
+										</Badge>
+									{/if}
+									{#if (post.tags?.length ?? 0) > 0}
+										{#each post.tags as tag}
+											<Badge variant="secondary" class="gap-1 bg-secondary/50">
+												<Tag class="size-3" />
+												{tag}
+											</Badge>
+										{/each}
+									{/if}
+									{#if post.sourceType}
+										<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
+											<Archive class="size-3" />
+											{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
+										</Badge>
+									{/if}
+								</div>
 							</div>
-							<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
-							<span class="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:hidden">
-								<Calendar class="size-3.5" />
-								{new Date(post.createdAt).toLocaleString()}
-							</span>
-							<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-								{#if post.authorUsername}
-									<Badge
-										href="/u/{post.authorUsername}"
-										variant="outline"
-										class="gap-1"
-									>
-										<User class="size-3.5" />
-										<span class="font-semibold">u/{post.authorUsername}</span>
-									</Badge>
-								{:else}
-									<Badge
-										variant="outline"
-										class="gap-1"
-									>
-										<User class="size-3.5" />
-										<span class="font-semibold">{post.authorName}</span>
-									</Badge>
-								{/if}
-								{#if post.communitySlug}
-									<Badge
-										href="/c/{post.communitySlug}"
-										variant="outline"
-										class="gap-1"
-									>
-										<Users class="size-3.5" />
-										<span class="font-semibold">c/{post.communitySlug}</span>
-									</Badge>
-								{:else}
-									<Badge
-										variant="outline"
-										class="gap-1"
-									>
-										<Globe class="size-3.5" />
-										<span class="font-semibold">Public</span>
-									</Badge>
-								{/if}
+						</div>
+						<div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+								<span class="inline-flex items-center gap-1">
+									<MessageSquare class="size-3.5" />
+									{post.commentCount} comments
+								</span>
+								<span class="inline-flex items-center gap-1">
+									<ThumbsUp class="size-3.5" />
+									{post.likes}
+								</span>
+								<span class="inline-flex items-center gap-1">
+									<ThumbsDown class="size-3.5" />
+									{post.dislikes}
+								</span>
+								<span>score {post.score}</span>
+							</div>
+							<div class="flex shrink-0 items-center gap-2 self-end sm:self-auto">
+								<Button
+									size="icon-sm"
+									variant={post.userVote === 1 ? 'secondary' : 'outline'}
+									class={post.userVote === 1
+										? 'border-primary/40 text-primary [&_svg_path]:!fill-current'
+										: ''}
+									disabled={!auth.isAuthenticated}
+									onclick={() => vote(post._id, 1)}
+									aria-label="Like post"
+								>
+									<ThumbsUp class="size-4" />
+								</Button>
+								<Button
+									size="icon-sm"
+									variant={post.userVote === -1 ? 'secondary' : 'outline'}
+									class={post.userVote === -1
+										? 'border-destructive/40 text-destructive [&_svg_path]:!fill-current'
+										: ''}
+									disabled={!auth.isAuthenticated}
+									onclick={() => vote(post._id, -1)}
+									aria-label="Dislike post"
+								>
+									<ThumbsDown class="size-4" />
+								</Button>
 							</div>
 						</div>
-					</div>
-					<div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-						<div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-							<span class="inline-flex items-center gap-1">
-								<MessageSquare class="size-3.5" />
-								{post.commentCount} comments
-							</span>
-							<span class="inline-flex items-center gap-1">
-								<ThumbsUp class="size-3.5" />
-								{post.likes}
-							</span>
-							<span class="inline-flex items-center gap-1">
-								<ThumbsDown class="size-3.5" />
-								{post.dislikes}
-							</span>
-							<span>score {post.score}</span>
-						</div>
-						<div class="flex shrink-0 items-center gap-2 self-end sm:self-auto">
-							<Button
-								size="icon-sm"
-								variant={post.userVote === 1 ? 'secondary' : 'outline'}
-								class={post.userVote === 1
-									? 'border-primary/40 text-primary [&_svg_path]:!fill-current'
-									: ''}
-								disabled={!auth.isAuthenticated}
-								onclick={() => vote(post._id, 1)}
-								aria-label="Like post"
-							>
-								<ThumbsUp class="size-4" />
-							</Button>
-							<Button
-								size="icon-sm"
-								variant={post.userVote === -1 ? 'secondary' : 'outline'}
-								class={post.userVote === -1
-									? 'border-destructive/40 text-destructive [&_svg_path]:!fill-current'
-									: ''}
-								disabled={!auth.isAuthenticated}
-								onclick={() => vote(post._id, -1)}
-								aria-label="Dislike post"
-							>
-								<ThumbsDown class="size-4" />
-							</Button>
-						</div>
-					</div>
 					</CardContent>
 				</Card>
 			{/each}
@@ -213,7 +397,12 @@
 
 		{#if cursor || !(feedQuery.data?.isDone ?? true)}
 			<div class="mt-5 flex items-center justify-between">
-				<Button variant="outline" size="sm" disabled={!cursor} onclick={() => updateParams({ cursor: null })}>
+				<Button
+					variant="outline"
+					size="sm"
+					disabled={!cursor}
+					onclick={() => updateParams({ cursor: null })}
+				>
 					First Page
 				</Button>
 				<Button
@@ -228,4 +417,3 @@
 		{/if}
 	{/if}
 </main>
-

@@ -8,6 +8,8 @@ const isProtectedRoute = (pathname: string) => {
 	if (pathname === '/settings' || pathname.startsWith('/settings/')) return true;
 	if (pathname === '/c/new') return true;
 	if (/^\/c\/[^/]+\/manage$/.test(pathname)) return true;
+	if (pathname === '/chat' || pathname.startsWith('/chat/')) return true;
+	if (/^\/c\/[^/]+\/chat$/.test(pathname)) return true;
 	return false;
 };
 

@@ -15,20 +15,20 @@
 	const publicCommunitiesQuery = useQuery((api as any).communities.listPublic, { limit: 100 });
 	const myCommunitiesQuery = useQuery((api as any).communities.listMine, {});
 	const myMembershipByCommunityId = $derived.by(() => {
-		const membershipMap = new Map<
+		const membershipByCommunityId: Record<
 			string,
 			{
 				membershipStatus: 'active' | 'pending' | 'none' | 'rejected';
 				membershipRole: 'owner' | 'admin' | 'member';
 			}
-		>();
+		> = {};
 		for (const item of myCommunitiesQuery.data ?? []) {
-			membershipMap.set(item.community._id, {
+			membershipByCommunityId[item.community._id] = {
 				membershipStatus: item.membershipStatus,
 				membershipRole: item.membershipRole
-			});
+			};
 		}
-		return membershipMap;
+		return membershipByCommunityId;
 	});
 
 	async function requestJoin(communityId: string) {
@@ -73,22 +73,22 @@
 					{#each myCommunitiesQuery.data ?? [] as item (item.community._id)}
 						<Card class="gap-0 py-4">
 							<CardContent>
-							<a href={`/c/${item.community.slug}`} class="font-medium hover:underline">
-								c/{item.community.slug}
-							</a>
-							<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">
-								{item.community.description}
-							</p>
-							<p class="mt-2 text-xs text-muted-foreground">
-								status {item.membershipStatus} | role {item.membershipRole}
-							</p>
-							<div class="mt-3 flex flex-wrap gap-2">
-								{#if item.membershipRole === 'owner' || item.membershipRole === 'admin'}
-									<Button size="sm" variant="outline" href={`/c/${item.community.slug}/manage`}>
-										Manage
-									</Button>
-								{/if}
-							</div>
+								<a href={`/c/${item.community.slug}`} class="font-medium hover:underline">
+									c/{item.community.slug}
+								</a>
+								<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">
+									{item.community.description}
+								</p>
+								<p class="mt-2 text-xs text-muted-foreground">
+									status {item.membershipStatus} | role {item.membershipRole}
+								</p>
+								<div class="mt-3 flex flex-wrap gap-2">
+									{#if item.membershipRole === 'owner' || item.membershipRole === 'admin'}
+										<Button size="sm" variant="outline" href={`/c/${item.community.slug}/manage`}>
+											Manage
+										</Button>
+									{/if}
+								</div>
 							</CardContent>
 						</Card>
 					{/each}
@@ -106,49 +106,51 @@
 		{:else}
 			<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 				{#each publicCommunitiesQuery.data ?? [] as community (community._id)}
-					{@const membership = myMembershipByCommunityId.get(community._id)}
+					{@const membership = myMembershipByCommunityId[community._id]}
 					<Card class="gap-0 py-4">
 						<CardContent>
-						<a href={`/c/${community.slug}`} class="font-medium hover:underline">
-							c/{community.slug}
-						</a>
-						<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{community.description}</p>
-						<div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-							<span class="inline-flex items-center gap-1">
-								<Users class="size-3.5" />
-								{community.memberCount} members
-							</span>
-							<span class="inline-flex items-center gap-1">
-								{#if community.visibility === 'public'}
-									<Globe class="size-3.5" />
+							<a href={`/c/${community.slug}`} class="font-medium hover:underline">
+								c/{community.slug}
+							</a>
+							<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{community.description}</p>
+							<div class="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+								<span class="inline-flex items-center gap-1">
+									<Users class="size-3.5" />
+									{community.memberCount} members
+								</span>
+								<span class="inline-flex items-center gap-1">
+									{#if community.visibility === 'public'}
+										<Globe class="size-3.5" />
+									{:else}
+										<ShieldCheck class="size-3.5" />
+									{/if}
+									{community.visibility}
+								</span>
+							</div>
+							<div class="mt-3 flex flex-wrap gap-2">
+								{#if !auth.isAuthenticated}
+									<Button size="sm" disabled>Join</Button>
+								{:else if membership?.membershipStatus === 'active'}
+									<Button size="sm" variant="secondary" disabled>Joined</Button>
+								{:else if membership?.membershipStatus === 'pending'}
+									<Button size="sm" variant="secondary" disabled>Requested</Button>
 								{:else}
-									<ShieldCheck class="size-3.5" />
+									<Button size="sm" onclick={() => requestJoin(community._id)}>Join</Button>
 								{/if}
-								{community.visibility}
-							</span>
-						</div>
-						<div class="mt-3 flex flex-wrap gap-2">
-							{#if !auth.isAuthenticated}
-								<Button size="sm" disabled>Join</Button>
-							{:else if membership?.membershipStatus === 'active'}
-								<Button size="sm" variant="secondary" disabled>Joined</Button>
-							{:else if membership?.membershipStatus === 'pending'}
-								<Button size="sm" variant="secondary" disabled>Requested</Button>
-							{:else}
-								<Button size="sm" onclick={() => requestJoin(community._id)}>Join</Button>
-							{/if}
-							{#if membership?.membershipRole === 'owner' || membership?.membershipRole === 'admin'}
-								<Button size="sm" variant="outline" href={`/c/${community.slug}/manage`}>
-									Manage
-								</Button>
-							{/if}
-						</div>
+								{#if membership?.membershipRole === 'owner' || membership?.membershipRole === 'admin'}
+									<Button size="sm" variant="outline" href={`/c/${community.slug}/manage`}>
+										Manage
+									</Button>
+								{/if}
+							</div>
 						</CardContent>
 					</Card>
 				{/each}
 			</div>
 			{#if !auth.isAuthenticated}
-				<div class="mt-4 rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+				<div
+					class="mt-4 rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground"
+				>
 					Sign in to join communities, vote, comment, and follow.
 				</div>
 			{/if}

@@ -58,7 +58,10 @@
 		Build a focused space for collaborative discussions. Default visibility is private.
 	</p>
 
-	<form class="mx-auto mt-6 max-w-3xl space-y-4 rounded-xl border border-border bg-card p-5" onsubmit={createCommunity}>
+	<form
+		class="mx-auto mt-6 max-w-3xl space-y-4 rounded-xl border border-border bg-card p-5"
+		onsubmit={createCommunity}
+	>
 		<div class="space-y-2">
 			<Label for="name">Name</Label>
 			<Input id="name" bind:value={name} required maxlength={80} />
