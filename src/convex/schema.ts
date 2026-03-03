@@ -138,7 +138,12 @@ const schema = defineSchema({
 		canonicalUrl: v.string(),
 		title: v.string(),
 		description: v.optional(v.string()),
-		status: v.union(v.literal('active'), v.literal('paused'), v.literal('error')),
+		status: v.union(
+			v.literal('active'),
+			v.literal('paused'),
+			v.literal('error'),
+			v.literal('deleting')
+		),
 		lastFetchedAt: v.optional(v.number()),
 		lastSuccessAt: v.optional(v.number()),
 		lastError: v.optional(v.string()),
@@ -228,6 +233,93 @@ const schema = defineSchema({
 		.index('by_runDate', ['runDate'])
 		.index('by_startedAt', ['startedAt'])
 		.index('by_status_and_updatedAt', ['status', 'updatedAt']),
+	security_events: defineTable({
+		eventType: v.string(),
+		severity: v.union(
+			v.literal('info'),
+			v.literal('warn'),
+			v.literal('error'),
+			v.literal('critical')
+		),
+		surface: v.string(),
+		message: v.string(),
+		actorAuthId: v.optional(v.string()),
+		entityType: v.optional(v.string()),
+		entityId: v.optional(v.string()),
+		metadata: v.optional(v.string()),
+		createdAt: v.number()
+	})
+		.index('by_createdAt', ['createdAt'])
+		.index('by_severity_and_createdAt', ['severity', 'createdAt'])
+		.index('by_eventType_and_createdAt', ['eventType', 'createdAt'])
+		.index('by_actorAuthId_and_createdAt', ['actorAuthId', 'createdAt']),
+	admin_audit_logs: defineTable({
+		actorAuthId: v.string(),
+		action: v.string(),
+		targetType: v.string(),
+		targetId: v.string(),
+		status: v.union(v.literal('started'), v.literal('succeeded'), v.literal('failed')),
+		details: v.optional(v.string()),
+		createdAt: v.number()
+	})
+		.index('by_createdAt', ['createdAt'])
+		.index('by_actorAuthId_and_createdAt', ['actorAuthId', 'createdAt'])
+		.index('by_action_and_createdAt', ['action', 'createdAt'])
+		.index('by_targetType_and_targetId_and_createdAt', ['targetType', 'targetId', 'createdAt']),
+	deletion_jobs: defineTable({
+		requestKey: v.string(),
+		requestedByAuthId: v.string(),
+		targetType: v.union(v.literal('source'), v.literal('source_item'), v.literal('post')),
+		targetId: v.string(),
+		status: v.union(
+			v.literal('queued'),
+			v.literal('running'),
+			v.literal('done'),
+			v.literal('failed'),
+			v.literal('cancelled')
+		),
+		processed: v.number(),
+		error: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		finishedAt: v.optional(v.number())
+	})
+		.index('by_requestKey', ['requestKey'])
+		.index('by_status_and_updatedAt', ['status', 'updatedAt'])
+		.index('by_requestedByAuthId_and_createdAt', ['requestedByAuthId', 'createdAt'])
+		.index('by_targetType_and_targetId_and_createdAt', ['targetType', 'targetId', 'createdAt']),
+	r2_retry_jobs: defineTable({
+		entityType: v.string(),
+		entityId: v.string(),
+		r2Key: v.string(),
+		operation: v.literal('delete'),
+		status: v.union(
+			v.literal('queued'),
+			v.literal('running'),
+			v.literal('done'),
+			v.literal('failed')
+		),
+		attemptCount: v.number(),
+		nextRunAt: v.number(),
+		lastError: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		finishedAt: v.optional(v.number())
+	})
+		.index('by_status_and_nextRunAt', ['status', 'nextRunAt'])
+		.index('by_entityType_and_entityId_and_createdAt', ['entityType', 'entityId', 'createdAt'])
+		.index('by_r2Key_and_createdAt', ['r2Key', 'createdAt']),
+	scheduler_locks: defineTable({
+		lockKey: v.string(),
+		owner: v.string(),
+		leaseExpiresAt: v.number(),
+		heartbeatAt: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_lockKey', ['lockKey'])
+		.index('by_leaseExpiresAt', ['leaseExpiresAt'])
+		.index('by_owner_and_updatedAt', ['owner', 'updatedAt']),
 	post_tags: defineTable({
 		postId: v.id('posts'),
 		tagLower: v.string(),

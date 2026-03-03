@@ -30,6 +30,32 @@ const requireAdmin = async (ctx: any) => {
 	return authUser;
 };
 
+const stringifyDetails = (value: unknown): string => {
+	try {
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
+};
+
+const logAdminAuditEvent = async (
+	ctx: any,
+	args: {
+		actorAuthId: string;
+		action: string;
+		targetType: string;
+		targetId: string;
+		status: 'started' | 'succeeded' | 'failed';
+		details?: string;
+	}
+) => {
+	try {
+		await ctx.runMutation((internal as any).security.logAdminAuditEvent, args);
+	} catch (error) {
+		console.error('Failed to write admin audit log.', error);
+	}
+};
+
 const sourceTypeValidator = v.union(
 	v.literal('website'),
 	v.literal('rss'),
@@ -37,7 +63,12 @@ const sourceTypeValidator = v.union(
 	v.literal('bookmarks')
 );
 
-const sourceStatusValidator = v.union(v.literal('active'), v.literal('paused'), v.literal('error'));
+const sourceStatusValidator = v.union(
+	v.literal('active'),
+	v.literal('paused'),
+	v.literal('error'),
+	v.literal('deleting')
+);
 
 const dashboardSourceValidator = v.object({
 	_id: v.id('sources'),
@@ -114,7 +145,12 @@ const deletePostDbResultValidator = v.object({
 	r2Key: v.optional(v.string())
 });
 
-const sourceStatuses: Array<'active' | 'paused' | 'error'> = ['active', 'paused', 'error'];
+const sourceStatuses: Array<'active' | 'paused' | 'error' | 'deleting'> = [
+	'active',
+	'paused',
+	'error',
+	'deleting'
+];
 
 type DeleteSourceCascadeResult = {
 	deleted: boolean;
@@ -544,24 +580,55 @@ export const deleteSourcePermanently = action({
 		r2DeletedCount: v.number()
 	}),
 	handler: async (ctx, args): Promise<DeleteSourcePermanentlyResult> => {
-		await requireAdmin(ctx);
-		const result: DeleteSourceCascadeResult = await ctx.runMutation(
-			(internal as any).admin.deleteSourceCascadeFromDb,
-			{
-				sourceId: args.sourceId
-			}
-		);
-		const r2DeletedCount = await deleteR2Keys(ctx, result.r2Keys);
-		return {
-			deleted: result.deleted,
-			sourceId: result.sourceId,
-			sourceItemCount: result.sourceItemCount,
-			deliveryCount: result.deliveryCount,
-			subscriptionCount: result.subscriptionCount,
-			jobCount: result.jobCount,
-			unlinkedPostCount: result.unlinkedPostCount,
-			r2DeletedCount
-		};
+		const authUser = await requireAdmin(ctx);
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deleteSourcePermanently',
+			targetType: 'source',
+			targetId: args.sourceId,
+			status: 'started'
+		});
+		try {
+			const result: DeleteSourceCascadeResult = await ctx.runMutation(
+				(internal as any).admin.deleteSourceCascadeFromDb,
+				{
+					sourceId: args.sourceId
+				}
+			);
+			const r2DeletedCount = await deleteR2Keys(ctx, result.r2Keys);
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteSourcePermanently',
+				targetType: 'source',
+				targetId: args.sourceId,
+				status: 'succeeded',
+				details: stringifyDetails({
+					deleted: result.deleted,
+					sourceItemCount: result.sourceItemCount,
+					r2DeletedCount
+				})
+			});
+			return {
+				deleted: result.deleted,
+				sourceId: result.sourceId,
+				sourceItemCount: result.sourceItemCount,
+				deliveryCount: result.deliveryCount,
+				subscriptionCount: result.subscriptionCount,
+				jobCount: result.jobCount,
+				unlinkedPostCount: result.unlinkedPostCount,
+				r2DeletedCount
+			};
+		} catch (error) {
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteSourcePermanently',
+				targetType: 'source',
+				targetId: args.sourceId,
+				status: 'failed',
+				details: error instanceof Error ? error.message : 'Unknown error'
+			});
+			throw error;
+		}
 	}
 });
 
@@ -577,21 +644,51 @@ export const deleteSourceItemPermanently = action({
 		r2Deleted: v.boolean()
 	}),
 	handler: async (ctx, args): Promise<DeleteSourceItemPermanentlyResult> => {
-		await requireAdmin(ctx);
-		const result: DeleteSourceItemCascadeResult = await ctx.runMutation(
-			(internal as any).admin.deleteSourceItemCascadeFromDb,
-			{
-				sourceItemId: args.sourceItemId
-			}
-		);
-		const r2Deleted = result.r2Key ? (await deleteR2Keys(ctx, [result.r2Key])) > 0 : false;
-		return {
-			deleted: result.deleted,
-			sourceItemId: result.sourceItemId,
-			deliveryCount: result.deliveryCount,
-			unlinkedPostCount: result.unlinkedPostCount,
-			r2Deleted
-		};
+		const authUser = await requireAdmin(ctx);
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deleteSourceItemPermanently',
+			targetType: 'source_item',
+			targetId: args.sourceItemId,
+			status: 'started'
+		});
+		try {
+			const result: DeleteSourceItemCascadeResult = await ctx.runMutation(
+				(internal as any).admin.deleteSourceItemCascadeFromDb,
+				{
+					sourceItemId: args.sourceItemId
+				}
+			);
+			const r2Deleted = result.r2Key ? (await deleteR2Keys(ctx, [result.r2Key])) > 0 : false;
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteSourceItemPermanently',
+				targetType: 'source_item',
+				targetId: args.sourceItemId,
+				status: 'succeeded',
+				details: stringifyDetails({
+					deleted: result.deleted,
+					r2Deleted
+				})
+			});
+			return {
+				deleted: result.deleted,
+				sourceItemId: result.sourceItemId,
+				deliveryCount: result.deliveryCount,
+				unlinkedPostCount: result.unlinkedPostCount,
+				r2Deleted
+			};
+		} catch (error) {
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteSourceItemPermanently',
+				targetType: 'source_item',
+				targetId: args.sourceItemId,
+				status: 'failed',
+				details: error instanceof Error ? error.message : 'Unknown error'
+			});
+			throw error;
+		}
 	}
 });
 
@@ -611,24 +708,54 @@ export const deletePostPermanently = action({
 		r2Deleted: v.boolean()
 	}),
 	handler: async (ctx, args): Promise<DeletePostPermanentlyResult> => {
-		await requireAdmin(ctx);
-		const result: DeletePostCascadeResult = await ctx.runMutation(
-			(internal as any).admin.deletePostCascadeFromDb,
-			{
-				postId: args.postId
-			}
-		);
-		const r2Deleted = result.r2Key ? (await deleteR2Keys(ctx, [result.r2Key])) > 0 : false;
-		return {
-			deleted: result.deleted,
-			postId: result.postId,
-			commentCount: result.commentCount,
-			commentVoteCount: result.commentVoteCount,
-			voteCount: result.voteCount,
-			postTagCount: result.postTagCount,
-			embeddingCount: result.embeddingCount,
-			summaryCount: result.summaryCount,
-			r2Deleted
-		};
+		const authUser = await requireAdmin(ctx);
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deletePostPermanently',
+			targetType: 'post',
+			targetId: args.postId,
+			status: 'started'
+		});
+		try {
+			const result: DeletePostCascadeResult = await ctx.runMutation(
+				(internal as any).admin.deletePostCascadeFromDb,
+				{
+					postId: args.postId
+				}
+			);
+			const r2Deleted = result.r2Key ? (await deleteR2Keys(ctx, [result.r2Key])) > 0 : false;
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deletePostPermanently',
+				targetType: 'post',
+				targetId: args.postId,
+				status: 'succeeded',
+				details: stringifyDetails({
+					deleted: result.deleted,
+					r2Deleted
+				})
+			});
+			return {
+				deleted: result.deleted,
+				postId: result.postId,
+				commentCount: result.commentCount,
+				commentVoteCount: result.commentVoteCount,
+				voteCount: result.voteCount,
+				postTagCount: result.postTagCount,
+				embeddingCount: result.embeddingCount,
+				summaryCount: result.summaryCount,
+				r2Deleted
+			};
+		} catch (error) {
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deletePostPermanently',
+				targetType: 'post',
+				targetId: args.postId,
+				status: 'failed',
+				details: error instanceof Error ? error.message : 'Unknown error'
+			});
+			throw error;
+		}
 	}
 });

@@ -32,7 +32,12 @@ const sourceTypeValidator = v.union(
 	v.literal('youtube'),
 	v.literal('bookmarks')
 );
-const sourceStatusValidator = v.union(v.literal('active'), v.literal('paused'), v.literal('error'));
+const sourceStatusValidator = v.union(
+	v.literal('active'),
+	v.literal('paused'),
+	v.literal('error'),
+	v.literal('deleting')
+);
 const sourceJobTypeValidator = v.union(
 	v.literal('sync_source'),
 	v.literal('bulk_unsubscribe'),
@@ -288,6 +293,26 @@ const maybeStoreBodyToR2 = async (
 			inlineBody: trimmed.slice(0, SOURCE_ITEM_INLINE_LIMIT),
 			r2Key: undefined
 		};
+	}
+};
+
+const logSecurityEvent = async (
+	ctx: any,
+	args: {
+		eventType: string;
+		severity: 'info' | 'warn' | 'error' | 'critical';
+		surface: string;
+		message: string;
+		actorAuthId?: string;
+		entityType?: string;
+		entityId?: string;
+		metadata?: string;
+	}
+) => {
+	try {
+		await ctx.runMutation((internal as any).security.logEvent, args);
+	} catch (error) {
+		console.error('Failed to write security event.', error);
 	}
 };
 
@@ -847,6 +872,75 @@ export const failNightlyRun = internalMutation({
 	}
 });
 
+export const acquireNightlyLock = internalMutation({
+	args: {
+		lockKey: v.string(),
+		owner: v.string(),
+		leaseMs: v.number()
+	},
+	returns: v.object({
+		acquired: v.boolean(),
+		lockId: v.optional(v.id('scheduler_locks')),
+		leaseExpiresAt: v.optional(v.number())
+	}),
+	handler: async (ctx, args) => {
+		const now = Date.now();
+		const leaseExpiresAt = now + Math.max(60_000, Math.floor(args.leaseMs));
+		const existing = (
+			await ctx.db
+				.query('scheduler_locks')
+				.withIndex('by_lockKey', (q) => q.eq('lockKey', args.lockKey))
+				.take(1)
+		)[0];
+
+		if (!existing) {
+			const lockId = await ctx.db.insert('scheduler_locks', {
+				lockKey: args.lockKey,
+				owner: args.owner,
+				leaseExpiresAt,
+				heartbeatAt: now,
+				createdAt: now,
+				updatedAt: now
+			});
+			return { acquired: true, lockId, leaseExpiresAt };
+		}
+
+		if (existing.owner === args.owner || existing.leaseExpiresAt <= now) {
+			await ctx.db.patch(existing._id, {
+				owner: args.owner,
+				leaseExpiresAt,
+				heartbeatAt: now,
+				updatedAt: now
+			});
+			return { acquired: true, lockId: existing._id, leaseExpiresAt };
+		}
+
+		return { acquired: false };
+	}
+});
+
+export const releaseNightlyLock = internalMutation({
+	args: {
+		lockKey: v.string(),
+		owner: v.string()
+	},
+	returns: v.boolean(),
+	handler: async (ctx, args) => {
+		const existing = (
+			await ctx.db
+				.query('scheduler_locks')
+				.withIndex('by_lockKey', (q) => q.eq('lockKey', args.lockKey))
+				.take(1)
+		)[0];
+
+		if (!existing || existing.owner !== args.owner) {
+			return false;
+		}
+		await ctx.db.delete(existing._id);
+		return true;
+	}
+});
+
 export const markJobRunning = internalMutation({
 	args: {
 		jobId: v.id('source_jobs')
@@ -1249,6 +1343,14 @@ export const runSourceSync = internalAction({
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Source sync failed.';
+			await logSecurityEvent(ctx, {
+				eventType: 'source_sync_failed',
+				severity: 'error',
+				surface: 'sources.runSourceSync',
+				message,
+				entityType: 'source',
+				entityId: args.sourceId
+			});
 			await ctx.runMutation((internal as any).sources.patchSourceSyncError, {
 				sourceId: args.sourceId,
 				error: message
@@ -1333,12 +1435,29 @@ export const getMyRefreshQuota = query({
 export const runNightlySourceRefreshBatch = internalAction({
 	args: {
 		cursor: v.union(v.string(), v.null()),
-		runId: v.optional(v.id('source_nightly_runs'))
+		runId: v.optional(v.id('source_nightly_runs')),
+		lockOwner: v.optional(v.string())
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		let runId: Id<'source_nightly_runs'> | null = args.runId ?? null;
+		const lockOwner =
+			args.lockOwner ?? `nightly:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
+		const lockKey = `nightly_source_refresh:${utcRunDateKey()}`;
 		try {
+			const lockResult: {
+				acquired: boolean;
+				lockId?: Id<'scheduler_locks'>;
+				leaseExpiresAt?: number;
+			} = await ctx.runMutation((internal as any).sources.acquireNightlyLock, {
+				lockKey,
+				owner: lockOwner,
+				leaseMs: 15 * 60 * 1000
+			});
+			if (!lockResult.acquired) {
+				return null;
+			}
+
 			if (!runId) {
 				const initialized: {
 					runId: Id<'source_nightly_runs'>;
@@ -1391,13 +1510,18 @@ export const runNightlySourceRefreshBatch = internalAction({
 			if (!sourceBatch.isDone) {
 				await ctx.scheduler.runAfter(0, (internal as any).sources.runNightlySourceRefreshBatch, {
 					cursor: sourceBatch.continueCursor,
-					runId
+					runId,
+					lockOwner
 				});
 				return null;
 			}
 
 			await ctx.runMutation((internal as any).sources.completeNightlyRun, {
 				runId
+			});
+			await ctx.runMutation((internal as any).sources.releaseNightlyLock, {
+				lockKey,
+				owner: lockOwner
 			});
 		} catch (error) {
 			if (runId) {
@@ -1406,6 +1530,10 @@ export const runNightlySourceRefreshBatch = internalAction({
 					error: error instanceof Error ? error.message : 'Nightly refresh failed.'
 				});
 			}
+			await ctx.runMutation((internal as any).sources.releaseNightlyLock, {
+				lockKey,
+				owner: lockOwner
+			});
 		}
 
 		return null;
@@ -1439,7 +1567,7 @@ export const listMySources = query({
 			title: string;
 			description?: string;
 			type: 'website' | 'rss' | 'youtube' | 'bookmarks';
-			status: 'active' | 'paused' | 'error';
+			status: 'active' | 'paused' | 'error' | 'deleting';
 			canonicalUrl: string;
 			lastFetchedAt?: number;
 			lastSuccessAt?: number;
