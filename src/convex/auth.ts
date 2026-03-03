@@ -51,6 +51,7 @@ const buildAuthComponent = () =>
 						authId: authUser._id,
 						email: authUser.email,
 						name: authUser.name,
+						nameLower: authUser.name.trim().toLowerCase(),
 						image: authUser.image,
 						createdAt: now,
 						updatedAt: now
@@ -68,6 +69,7 @@ const buildAuthComponent = () =>
 							authId: newAuthUser._id,
 							email: newAuthUser.email,
 							name: newAuthUser.name,
+							nameLower: newAuthUser.name.trim().toLowerCase(),
 							image: newAuthUser.image,
 							createdAt: now,
 							updatedAt: now
@@ -78,6 +80,7 @@ const buildAuthComponent = () =>
 					await ctx.db.patch(profile._id, {
 						email: newAuthUser.email,
 						name: newAuthUser.name,
+						nameLower: newAuthUser.name.trim().toLowerCase(),
 						image: newAuthUser.image,
 						updatedAt: Date.now()
 					});

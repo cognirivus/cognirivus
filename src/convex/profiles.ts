@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import {
@@ -27,6 +28,7 @@ const RESERVED_USERNAMES = new Set([
 ]);
 
 const normalizeUsername = (value: string) => value.trim().toLowerCase();
+const normalizeSearchText = (value: string) => value.trim().toLowerCase();
 
 const profileSummaryValidator = v.object({
 	authId: v.string(),
@@ -120,6 +122,7 @@ export const ensureProfileForAuth = internalMutation({
 			await ctx.db.patch(existing._id, {
 				email: args.email,
 				name: args.name,
+				nameLower: normalizeSearchText(args.name),
 				image: args.image,
 				updatedAt: Date.now()
 			});
@@ -131,6 +134,7 @@ export const ensureProfileForAuth = internalMutation({
 			authId: args.authId,
 			email: args.email,
 			name: args.name,
+			nameLower: normalizeSearchText(args.name),
 			image: args.image,
 			createdAt: now,
 			updatedAt: now
@@ -180,7 +184,7 @@ export const setUsername = mutation({
 
 		const taken = await ctx.db
 			.query('users_profile')
-			.withIndex('by_username', (q) => q.eq('username', username))
+			.withIndex('by_usernameLower', (q) => q.eq('usernameLower', username))
 			.unique();
 
 		if (taken && taken._id !== profile._id) {
@@ -189,6 +193,7 @@ export const setUsername = mutation({
 
 		await ctx.db.patch(profile._id, {
 			username,
+			usernameLower: username,
 			usernameSetAt: profile.usernameSetAt ?? Date.now(),
 			updatedAt: Date.now()
 		});
@@ -228,5 +233,41 @@ export const getByUsername = query({
 
 		const summary = await toProfileSummary(ctx, profile.authId);
 		return summary;
+	}
+});
+
+export const backfillSearchFields = internalMutation({
+	args: {
+		paginationOpts: paginationOptsValidator
+	},
+	returns: v.object({
+		processedProfiles: v.number(),
+		isDone: v.boolean(),
+		continueCursor: v.union(v.string(), v.null())
+	}),
+	handler: async (ctx, args) => {
+		const result = await ctx.db.query('users_profile').paginate(args.paginationOpts);
+		let processedProfiles = 0;
+
+		for (const profile of result.page) {
+			const nextNameLower = normalizeSearchText(profile.name);
+			const nextUsernameLower = profile.username ? normalizeUsername(profile.username) : undefined;
+
+			if (profile.nameLower !== nextNameLower || profile.usernameLower !== nextUsernameLower) {
+				await ctx.db.patch(profile._id, {
+					nameLower: nextNameLower,
+					usernameLower: nextUsernameLower,
+					updatedAt: Date.now()
+				});
+			}
+
+			processedProfiles += 1;
+		}
+
+		return {
+			processedProfiles,
+			isDone: result.isDone,
+			continueCursor: result.continueCursor
+		};
 	}
 });
