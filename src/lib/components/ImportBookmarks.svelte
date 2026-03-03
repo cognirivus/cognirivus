@@ -10,7 +10,7 @@
 	import * as Dialog from './ui/dialog';
 
 	import { Input } from './ui/input';
-	import { ArrowUpDown, ArrowUp, ArrowDown, Search, Filter } from '@lucide/svelte';
+	import { ArrowUpDown, Search, Filter } from '@lucide/svelte';
 
 	interface Bookmark {
 		title: string;
@@ -171,10 +171,29 @@
 
 		isImporting = true;
 		try {
-			const count = await client.mutation((api as any).bookmarks.importSelectedBookmarks, {
-				bookmarks: selected.map(({ selected, ...rest }) => rest)
+			const result = await client.mutation((api as any).bookmarks.importSelectedBookmarks, {
+				bookmarks: selected.map((bookmark) => ({
+					title: bookmark.title,
+					url: bookmark.url,
+					tags: bookmark.tags,
+					createdAt: bookmark.createdAt
+				}))
 			});
-			toast.success(`Successfully imported ${count} bookmarks.`);
+			const { importedCount, rejectedCount, errors } = result as {
+				importedCount: number;
+				rejectedCount: number;
+				errors: Array<{ index: number; reason: string }>;
+			};
+
+			if (importedCount > 0) {
+				toast.success(`Imported ${importedCount} bookmark${importedCount === 1 ? '' : 's'}.`);
+			}
+			if (rejectedCount > 0) {
+				const firstError = errors[0]?.reason ?? 'Some bookmarks were rejected.';
+				toast.warning(
+					`${rejectedCount} bookmark${rejectedCount === 1 ? '' : 's'} rejected: ${firstError}`
+				);
+			}
 			reset();
 		} catch (error: any) {
 			console.error(error);
@@ -203,9 +222,6 @@
 
 	const allFilteredSelected = $derived(
 		filteredBookmarks.length > 0 && filteredBookmarks.every((b) => b.selected)
-	);
-	const someFilteredSelected = $derived(
-		filteredBookmarks.some((b) => b.selected) && !filteredBookmarks.every((b) => b.selected)
 	);
 </script>
 
@@ -268,7 +284,7 @@
 				{#if availableTags.length > 0}
 					<div class="flex max-w-[400px] flex-wrap items-center gap-1">
 						<Filter class="mr-1 size-3.5 text-muted-foreground" />
-						{#each availableTags as tag}
+						{#each availableTags as tag (tag)}
 							<Badge
 								variant={selectedTags.includes(tag) ? 'default' : 'outline'}
 								class="h-6 cursor-pointer text-[10px]"
@@ -339,7 +355,7 @@
 					</TableRow>
 				</TableHeader>
 				<TableBody>
-					{#each filteredBookmarks as bookmark}
+					{#each filteredBookmarks as bookmark, index (bookmark.url + ':' + bookmark.createdAt + ':' + index)}
 						<TableRow>
 							<TableCell>
 								<Checkbox bind:checked={bookmark.selected} aria-label="Select bookmark" />
@@ -352,7 +368,7 @@
 							</TableCell>
 							<TableCell>
 								<div class="flex flex-wrap gap-1">
-									{#each bookmark.tags as tag}
+									{#each bookmark.tags as tag (tag)}
 										<Badge variant="secondary" class="h-5 gap-1 px-1.5 text-[10px]">
 											<TagIcon class="size-2.5" />
 											{tag}
