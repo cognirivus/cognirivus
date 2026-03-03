@@ -1449,7 +1449,34 @@ export const getR2RetryJob = internalQuery({
 		if (!job || job.operation !== 'delete') {
 			return null;
 		}
-		return job;
+		const response: {
+			_id: Id<'r2_retry_jobs'>;
+			entityType: string;
+			entityId: string;
+			r2Key: string;
+			operation: 'delete';
+			status: 'queued' | 'running' | 'done' | 'failed';
+			attemptCount: number;
+			nextRunAt: number;
+			lastError?: string;
+			createdAt: number;
+			updatedAt: number;
+			finishedAt?: number;
+		} = {
+			_id: job._id,
+			entityType: job.entityType,
+			entityId: job.entityId,
+			r2Key: job.r2Key,
+			operation: job.operation,
+			status: job.status,
+			attemptCount: job.attemptCount,
+			nextRunAt: job.nextRunAt,
+			createdAt: job.createdAt,
+			updatedAt: job.updatedAt
+		};
+		if (job.lastError) response.lastError = job.lastError;
+		if (job.finishedAt !== undefined) response.finishedAt = job.finishedAt;
+		return response;
 	}
 });
 

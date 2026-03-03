@@ -115,9 +115,15 @@
 	);
 
 	$effect(() => {
-		if (!currentUserId) return;
+		if (!currentUserId || !activeConversationId) return;
+		const roomId = `dm:${activeConversationId}`;
 		const sendHeartbeat = () =>
-			client.mutation((api as any).presence.heartbeat, {}).catch(() => {});
+			client
+				.mutation((api as any).presence.heartbeat, {
+					roomId,
+					interval: 20_000
+				})
+				.catch(() => {});
 		sendHeartbeat();
 		const timer = setInterval(sendHeartbeat, 20_000);
 		return () => clearInterval(timer);

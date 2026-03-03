@@ -1,9 +1,7 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
-import { tables as authTables } from './betterAuth/schema';
 
 const schema = defineSchema({
-	...authTables,
 	users_profile: defineTable({
 		authId: v.string(),
 		email: v.string(),
@@ -406,10 +404,6 @@ const schema = defineSchema({
 		embedding: v.optional(v.array(v.number())),
 		createdAt: v.number()
 	}).index('by_postId', ['postId']),
-	user_presence: defineTable({
-		userAuthId: v.string(),
-		expiresAt: v.number()
-	}).index('by_userAuthId', ['userAuthId']),
 	ai_summary_cache: defineTable({
 		entityType: v.union(v.literal('post'), v.literal('thread')),
 		entityId: v.string(),

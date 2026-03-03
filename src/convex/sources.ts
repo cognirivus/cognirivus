@@ -1557,32 +1557,6 @@ export const getUserProfileCreatedAt = internalQuery({
 	}
 });
 
-export const getSessionRateLimitSignals = internalQuery({
-	args: {
-		sessionId: v.union(v.string(), v.null())
-	},
-	returns: v.union(
-		v.null(),
-		v.object({
-			sessionId: v.string(),
-			ipAddress: v.optional(v.string())
-		})
-	),
-	handler: async (ctx, args) => {
-		if (!args.sessionId) {
-			return null;
-		}
-		const session = await ctx.db.get('session', args.sessionId as any);
-		if (!session) {
-			return null;
-		}
-		return {
-			sessionId: args.sessionId,
-			ipAddress: typeof session.ipAddress === 'string' ? session.ipAddress : undefined
-		};
-	}
-});
-
 export const addSource = action({
 	args: {
 		type: sourceTypeValidator,
@@ -1601,16 +1575,17 @@ export const addSource = action({
 		}
 		const identity = await ctx.auth.getUserIdentity();
 		const rawSessionId = (identity as { sessionId?: unknown } | null)?.sessionId;
-		const sessionSignals: {
-			sessionId: string;
-			ipAddress?: string;
-		} | null = await ctx.runQuery((internal as any).sources.getSessionRateLimitSignals, {
-			sessionId: typeof rawSessionId === 'string' ? rawSessionId : null
-		});
-		const sessionRateLimitKey = sessionSignals?.sessionId ?? `sessionless:${authUser._id}`;
-		const ipRateLimitKey = sessionSignals?.ipAddress
-			? await sha256Hex(sessionSignals.ipAddress)
-			: null;
+		const rawIpAddress = (identity as { ipAddress?: unknown; ip?: unknown } | null)?.ipAddress;
+		const fallbackIpAddress =
+			(typeof rawIpAddress === 'string' && rawIpAddress) ||
+			(typeof (identity as { ip?: unknown } | null)?.ip === 'string'
+				? ((identity as { ip?: string } | null)?.ip ?? null)
+				: null);
+		const sessionRateLimitKey =
+			typeof rawSessionId === 'string' && rawSessionId
+				? rawSessionId
+				: `sessionless:${authUser._id}`;
+		const ipRateLimitKey = fallbackIpAddress ? await sha256Hex(fallbackIpAddress) : null;
 
 		const normalizedInput = normalizeSourceInput(args.type, args.inputUrlOrId);
 		await rateLimiter.limit(ctx, 'addSource', { key: authUser._id, throws: true });
@@ -1815,16 +1790,17 @@ export const refreshSource = action({
 		if (!isAdminRole(authUser.role)) {
 			const identity = await ctx.auth.getUserIdentity();
 			const rawSessionId = (identity as { sessionId?: unknown } | null)?.sessionId;
-			const sessionSignals: {
-				sessionId: string;
-				ipAddress?: string;
-			} | null = await ctx.runQuery((internal as any).sources.getSessionRateLimitSignals, {
-				sessionId: typeof rawSessionId === 'string' ? rawSessionId : null
-			});
-			const sessionRateLimitKey = sessionSignals?.sessionId ?? `sessionless:${authUser._id}`;
-			const ipRateLimitKey = sessionSignals?.ipAddress
-				? await sha256Hex(sessionSignals.ipAddress)
-				: null;
+			const rawIpAddress = (identity as { ipAddress?: unknown; ip?: unknown } | null)?.ipAddress;
+			const fallbackIpAddress =
+				(typeof rawIpAddress === 'string' && rawIpAddress) ||
+				(typeof (identity as { ip?: unknown } | null)?.ip === 'string'
+					? ((identity as { ip?: string } | null)?.ip ?? null)
+					: null);
+			const sessionRateLimitKey =
+				typeof rawSessionId === 'string' && rawSessionId
+					? rawSessionId
+					: `sessionless:${authUser._id}`;
+			const ipRateLimitKey = fallbackIpAddress ? await sha256Hex(fallbackIpAddress) : null;
 
 			await rateLimiter.limit(ctx, 'manualSourceRefresh', {
 				key: authUser._id,

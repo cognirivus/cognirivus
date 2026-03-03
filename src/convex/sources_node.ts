@@ -14,7 +14,7 @@ const SOURCE_ITEM_SNIPPET_LIMIT = 500;
 const SOURCE_TITLE_LIMIT = 220;
 const SOURCE_SYNC_ITEM_LIMIT = 25;
 const SOURCE_URL_LIMIT = 2048;
-const MAX_FETCH_REDIRECTS = 5;
+const MAX_FETCH_REDIRECTS = 10;
 
 const REQUEST_HEADERS = {
 	'User-Agent':
@@ -127,7 +127,12 @@ const isBlockedHostname = (hostname: string) => {
 	return false;
 };
 
-const normalizeHttpUrl = (inputUrl: string) => {
+const normalizeHttpUrl = (
+	inputUrl: string,
+	options?: {
+		preserveTrailingSlash?: boolean;
+	}
+) => {
 	let withProtocol = inputUrl.trim();
 	if (!/^https?:\/\//i.test(withProtocol)) {
 		withProtocol = `https://${withProtocol}`;
@@ -144,7 +149,9 @@ const normalizeHttpUrl = (inputUrl: string) => {
 	}
 	parsed.hash = '';
 	parsed.searchParams.sort();
-	parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+	if (!options?.preserveTrailingSlash) {
+		parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+	}
 	return parsed.toString();
 };
 
@@ -226,7 +233,7 @@ const resolveAndValidateHostname = async (hostname: string) => {
 };
 
 const assertSafeFetchUrl = async (url: string) => {
-	const normalized = normalizeHttpUrl(url);
+	const normalized = normalizeHttpUrl(url, { preserveTrailingSlash: true });
 	const parsed = new URL(normalized);
 	if (isBlockedHostname(parsed.hostname)) {
 		throw new Error('Source host is blocked for safety.');
@@ -245,8 +252,13 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 const fetchRssTextWithGuards = async (url: string, timeoutMs = 15000) => {
 	let nextUrl = url;
+	const visited = new Set<string>();
 	for (let redirectCount = 0; redirectCount <= MAX_FETCH_REDIRECTS; redirectCount += 1) {
 		const safeUrl = await assertSafeFetchUrl(nextUrl);
+		if (visited.has(safeUrl)) {
+			throw new Error('Source redirect loop detected.');
+		}
+		visited.add(safeUrl);
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), timeoutMs);
 		try {
