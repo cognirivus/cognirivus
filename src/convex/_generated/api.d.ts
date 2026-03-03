@@ -19,6 +19,7 @@ import type * as http from "../http.js";
 import type * as lib_feedRanking from "../lib/feedRanking.js";
 import type * as lib_r2 from "../lib/r2.js";
 import type * as lib_rateLimits from "../lib/rateLimits.js";
+import type * as migrations from "../migrations.js";
 import type * as personalization from "../personalization.js";
 import type * as posts from "../posts.js";
 import type * as presence from "../presence.js";
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   "lib/feedRanking": typeof lib_feedRanking;
   "lib/r2": typeof lib_r2;
   "lib/rateLimits": typeof lib_rateLimits;
+  migrations: typeof migrations;
   personalization: typeof personalization;
   posts: typeof posts;
   presence: typeof presence;
