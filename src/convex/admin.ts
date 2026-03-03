@@ -120,6 +120,28 @@ const deletePostDbResultValidator = v.object({
 	r2Key: v.optional(v.string())
 });
 
+const deletionJobTargetTypeValidator = v.union(
+	v.literal('source'),
+	v.literal('source_item'),
+	v.literal('post')
+);
+
+const deletionJobStatusValidator = v.union(
+	v.literal('queued'),
+	v.literal('running'),
+	v.literal('done'),
+	v.literal('failed'),
+	v.literal('cancelled')
+);
+
+const deletionJobClaimValidator = v.object({
+	jobId: v.id('deletion_jobs'),
+	status: deletionJobStatusValidator,
+	shouldRun: v.boolean(),
+	result: v.optional(v.string()),
+	error: v.optional(v.string())
+});
+
 const sourceStatuses: Array<'active' | 'paused' | 'error' | 'deleting'> = [
 	'active',
 	'paused',
@@ -187,6 +209,30 @@ type DeletePostPermanentlyResult = {
 	embeddingCount: number;
 	summaryCount: number;
 	r2Deleted: boolean;
+};
+
+type DeletionJobTargetType = 'source' | 'source_item' | 'post';
+
+type DeletionJobClaim = {
+	jobId: Id<'deletion_jobs'>;
+	status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+	shouldRun: boolean;
+	result?: string;
+	error?: string;
+};
+
+const createDeletionRequestKey = (targetType: DeletionJobTargetType, targetId: string) =>
+	`v1:${targetType}:${targetId}`;
+
+const parseStoredDeleteResult = <T>(value: string | undefined): T | null => {
+	if (!value) {
+		return null;
+	}
+	try {
+		return JSON.parse(value) as T;
+	} catch {
+		return null;
+	}
 };
 
 export const listDashboard = query({
@@ -527,6 +573,92 @@ export const deletePostCascadeFromDb = internalMutation({
 	}
 });
 
+export const claimDeletionJob = internalMutation({
+	args: {
+		requestKey: v.string(),
+		requestedByAuthId: v.string(),
+		targetType: deletionJobTargetTypeValidator,
+		targetId: v.string()
+	},
+	returns: deletionJobClaimValidator,
+	handler: async (ctx, args) => {
+		const now = Date.now();
+		const existing = await ctx.db
+			.query('deletion_jobs')
+			.withIndex('by_requestKey', (q) => q.eq('requestKey', args.requestKey))
+			.unique();
+
+		if (!existing) {
+			const jobId = await ctx.db.insert('deletion_jobs', {
+				requestKey: args.requestKey,
+				requestedByAuthId: args.requestedByAuthId,
+				targetType: args.targetType,
+				targetId: args.targetId,
+				status: 'running',
+				processed: 0,
+				createdAt: now,
+				updatedAt: now
+			});
+			return {
+				jobId,
+				status: 'running',
+				shouldRun: true
+			};
+		}
+
+		if (
+			existing.status === 'done' ||
+			existing.status === 'running' ||
+			existing.status === 'queued'
+		) {
+			return {
+				jobId: existing._id,
+				status: existing.status,
+				shouldRun: false,
+				result: existing.result,
+				error: existing.error
+			};
+		}
+
+		await ctx.db.patch(existing._id, {
+			status: 'running',
+			processed: 0,
+			result: undefined,
+			error: undefined,
+			finishedAt: undefined,
+			updatedAt: now
+		});
+		return {
+			jobId: existing._id,
+			status: 'running',
+			shouldRun: true
+		};
+	}
+});
+
+export const finishDeletionJob = internalMutation({
+	args: {
+		jobId: v.id('deletion_jobs'),
+		status: v.union(v.literal('done'), v.literal('failed')),
+		processed: v.number(),
+		result: v.optional(v.string()),
+		error: v.optional(v.string())
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const now = Date.now();
+		await ctx.db.patch(args.jobId, {
+			status: args.status,
+			processed: Math.max(0, Math.trunc(args.processed)),
+			result: args.result,
+			error: args.error,
+			updatedAt: now,
+			finishedAt: now
+		});
+		return null;
+	}
+});
+
 const deleteR2Keys = async (ctx: any, r2Keys: Array<string>) => {
 	let deletedCount = 0;
 	for (const r2Key of r2Keys) {
@@ -556,12 +688,36 @@ export const deleteSourcePermanently = action({
 	}),
 	handler: async (ctx, args): Promise<DeleteSourcePermanentlyResult> => {
 		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('source', args.sourceId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{
+				requestKey,
+				requestedByAuthId: authUser._id,
+				targetType: 'source',
+				targetId: args.sourceId
+			}
+		);
+
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<DeleteSourcePermanentlyResult>(claim.result);
+			if (previous) {
+				return previous;
+			}
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress for this source.'
+					: (claim.error ?? 'Deletion was already attempted for this source.')
+			);
+		}
+
 		await logAdminAuditEvent(ctx, {
 			actorAuthId: authUser._id,
 			action: 'deleteSourcePermanently',
 			targetType: 'source',
 			targetId: args.sourceId,
-			status: 'started'
+			status: 'started',
+			details: stringifyDetails({ requestKey, deletionJobId: claim.jobId })
 		});
 		try {
 			const result: DeleteSourceCascadeResult = await ctx.runMutation(
@@ -571,6 +727,22 @@ export const deleteSourcePermanently = action({
 				}
 			);
 			const r2DeletedCount = await deleteR2Keys(ctx, result.r2Keys);
+			const response: DeleteSourcePermanentlyResult = {
+				deleted: result.deleted,
+				sourceId: result.sourceId,
+				sourceItemCount: result.sourceItemCount,
+				deliveryCount: result.deliveryCount,
+				subscriptionCount: result.subscriptionCount,
+				jobCount: result.jobCount,
+				unlinkedPostCount: result.unlinkedPostCount,
+				r2DeletedCount
+			};
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: stringifyDetails(response)
+			});
 			await logAdminAuditEvent(ctx, {
 				actorAuthId: authUser._id,
 				action: 'deleteSourcePermanently',
@@ -583,17 +755,14 @@ export const deleteSourcePermanently = action({
 					r2DeletedCount
 				})
 			});
-			return {
-				deleted: result.deleted,
-				sourceId: result.sourceId,
-				sourceItemCount: result.sourceItemCount,
-				deliveryCount: result.deliveryCount,
-				subscriptionCount: result.subscriptionCount,
-				jobCount: result.jobCount,
-				unlinkedPostCount: result.unlinkedPostCount,
-				r2DeletedCount
-			};
+			return response;
 		} catch (error) {
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: error instanceof Error ? error.message : 'Unknown error'
+			});
 			await logAdminAuditEvent(ctx, {
 				actorAuthId: authUser._id,
 				action: 'deleteSourcePermanently',
@@ -620,12 +789,36 @@ export const deleteSourceItemPermanently = action({
 	}),
 	handler: async (ctx, args): Promise<DeleteSourceItemPermanentlyResult> => {
 		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('source_item', args.sourceItemId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{
+				requestKey,
+				requestedByAuthId: authUser._id,
+				targetType: 'source_item',
+				targetId: args.sourceItemId
+			}
+		);
+
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<DeleteSourceItemPermanentlyResult>(claim.result);
+			if (previous) {
+				return previous;
+			}
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress for this source item.'
+					: (claim.error ?? 'Deletion was already attempted for this source item.')
+			);
+		}
+
 		await logAdminAuditEvent(ctx, {
 			actorAuthId: authUser._id,
 			action: 'deleteSourceItemPermanently',
 			targetType: 'source_item',
 			targetId: args.sourceItemId,
-			status: 'started'
+			status: 'started',
+			details: stringifyDetails({ requestKey, deletionJobId: claim.jobId })
 		});
 		try {
 			const result: DeleteSourceItemCascadeResult = await ctx.runMutation(
@@ -635,6 +828,19 @@ export const deleteSourceItemPermanently = action({
 				}
 			);
 			const r2Deleted = result.r2Key ? (await deleteR2Keys(ctx, [result.r2Key])) > 0 : false;
+			const response: DeleteSourceItemPermanentlyResult = {
+				deleted: result.deleted,
+				sourceItemId: result.sourceItemId,
+				deliveryCount: result.deliveryCount,
+				unlinkedPostCount: result.unlinkedPostCount,
+				r2Deleted
+			};
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: stringifyDetails(response)
+			});
 			await logAdminAuditEvent(ctx, {
 				actorAuthId: authUser._id,
 				action: 'deleteSourceItemPermanently',
@@ -646,14 +852,14 @@ export const deleteSourceItemPermanently = action({
 					r2Deleted
 				})
 			});
-			return {
-				deleted: result.deleted,
-				sourceItemId: result.sourceItemId,
-				deliveryCount: result.deliveryCount,
-				unlinkedPostCount: result.unlinkedPostCount,
-				r2Deleted
-			};
+			return response;
 		} catch (error) {
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: error instanceof Error ? error.message : 'Unknown error'
+			});
 			await logAdminAuditEvent(ctx, {
 				actorAuthId: authUser._id,
 				action: 'deleteSourceItemPermanently',
@@ -684,12 +890,36 @@ export const deletePostPermanently = action({
 	}),
 	handler: async (ctx, args): Promise<DeletePostPermanentlyResult> => {
 		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('post', args.postId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{
+				requestKey,
+				requestedByAuthId: authUser._id,
+				targetType: 'post',
+				targetId: args.postId
+			}
+		);
+
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<DeletePostPermanentlyResult>(claim.result);
+			if (previous) {
+				return previous;
+			}
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress for this post.'
+					: (claim.error ?? 'Deletion was already attempted for this post.')
+			);
+		}
+
 		await logAdminAuditEvent(ctx, {
 			actorAuthId: authUser._id,
 			action: 'deletePostPermanently',
 			targetType: 'post',
 			targetId: args.postId,
-			status: 'started'
+			status: 'started',
+			details: stringifyDetails({ requestKey, deletionJobId: claim.jobId })
 		});
 		try {
 			const result: DeletePostCascadeResult = await ctx.runMutation(
@@ -699,6 +929,23 @@ export const deletePostPermanently = action({
 				}
 			);
 			const r2Deleted = result.r2Key ? (await deleteR2Keys(ctx, [result.r2Key])) > 0 : false;
+			const response: DeletePostPermanentlyResult = {
+				deleted: result.deleted,
+				postId: result.postId,
+				commentCount: result.commentCount,
+				commentVoteCount: result.commentVoteCount,
+				voteCount: result.voteCount,
+				postTagCount: result.postTagCount,
+				embeddingCount: result.embeddingCount,
+				summaryCount: result.summaryCount,
+				r2Deleted
+			};
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: stringifyDetails(response)
+			});
 			await logAdminAuditEvent(ctx, {
 				actorAuthId: authUser._id,
 				action: 'deletePostPermanently',
@@ -710,18 +957,14 @@ export const deletePostPermanently = action({
 					r2Deleted
 				})
 			});
-			return {
-				deleted: result.deleted,
-				postId: result.postId,
-				commentCount: result.commentCount,
-				commentVoteCount: result.commentVoteCount,
-				voteCount: result.voteCount,
-				postTagCount: result.postTagCount,
-				embeddingCount: result.embeddingCount,
-				summaryCount: result.summaryCount,
-				r2Deleted
-			};
+			return response;
 		} catch (error) {
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: error instanceof Error ? error.message : 'Unknown error'
+			});
 			await logAdminAuditEvent(ctx, {
 				actorAuthId: authUser._id,
 				action: 'deletePostPermanently',

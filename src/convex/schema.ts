@@ -279,6 +279,7 @@ const schema = defineSchema({
 			v.literal('cancelled')
 		),
 		processed: v.number(),
+		result: v.optional(v.string()),
 		error: v.optional(v.string()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
