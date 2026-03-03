@@ -11,6 +11,12 @@ import { r2 } from './lib/r2';
 import type { Id } from './_generated/dataModel';
 import { requireAdminUser } from './lib/adminAuth';
 import { actionRetrier } from './lib/actionRetrier';
+import {
+	countSourceItemsForSource,
+	trackPostDeleted,
+	trackPostReplaced,
+	trackSourceItemDeleted
+} from './lib/aggregates';
 
 const stringifyDetails = (value: unknown): string => {
 	try {
@@ -341,12 +347,7 @@ export const listDashboard = query({
 
 		const sources = await Promise.all(
 			recentSources.map(async (source) => {
-				const itemCount = (
-					await ctx.db
-						.query('source_items')
-						.withIndex('by_sourceId_and_publishedAt', (q) => q.eq('sourceId', source._id))
-						.collect()
-				).length;
+				const itemCount = await countSourceItemsForSource(ctx, source._id);
 				return {
 					_id: source._id,
 					title: source.title,
@@ -533,11 +534,16 @@ export const deleteSourceCascadeFromDb = internalMutation({
 				.withIndex('by_sourceItemId_and_createdAt', (q) => q.eq('sourceItemId', sourceItem._id))
 				.collect();
 			for (const post of linkedPosts) {
+				const oldPost = post;
 				await ctx.db.patch(post._id, {
 					sourceId: undefined,
 					sourceItemId: undefined,
 					updatedAt: Date.now()
 				});
+				const updatedPost = await ctx.db.get(post._id);
+				if (updatedPost) {
+					await trackPostReplaced(ctx, oldPost, updatedPost);
+				}
 				unlinkedPostCount += 1;
 			}
 		}
@@ -576,6 +582,7 @@ export const deleteSourceCascadeFromDb = internalMutation({
 		}
 
 		for (const sourceItem of sourceItems) {
+			await trackSourceItemDeleted(ctx, sourceItem);
 			await ctx.db.delete(sourceItem._id);
 		}
 		await ctx.db.delete(args.sourceId);
@@ -614,11 +621,16 @@ export const deleteSourceItemCascadeFromDb = internalMutation({
 			.withIndex('by_sourceItemId_and_createdAt', (q) => q.eq('sourceItemId', args.sourceItemId))
 			.collect();
 		for (const post of linkedPosts) {
+			const oldPost = post;
 			await ctx.db.patch(post._id, {
 				sourceId: undefined,
 				sourceItemId: undefined,
 				updatedAt: Date.now()
 			});
+			const updatedPost = await ctx.db.get(post._id);
+			if (updatedPost) {
+				await trackPostReplaced(ctx, oldPost, updatedPost);
+			}
 		}
 
 		const deliveries = await ctx.db
@@ -629,6 +641,7 @@ export const deleteSourceItemCascadeFromDb = internalMutation({
 			await ctx.db.delete(delivery._id);
 		}
 
+		await trackSourceItemDeleted(ctx, sourceItem);
 		await ctx.db.delete(args.sourceItemId);
 
 		const source = await ctx.db.get(sourceItem.sourceId);
@@ -717,6 +730,7 @@ export const deletePostCascadeFromDb = internalMutation({
 			await ctx.db.delete(summary._id);
 		}
 
+		await trackPostDeleted(ctx, post);
 		await ctx.db.delete(args.postId);
 
 		return {

@@ -6,6 +6,7 @@ import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { r2 } from './lib/r2';
 import { rateLimiter } from './lib/rateLimits';
+import { trackPostDeleted, trackPostInserted } from './lib/aggregates';
 
 const POST_BODY_INLINE_LIMIT = 1000;
 const POST_SNIPPET_LIMIT = 500;
@@ -357,6 +358,10 @@ export const createStored = internalMutation({
 				tagLower,
 				createdAt: args.createdAt ?? now
 			});
+		}
+		const insertedPost = await ctx.db.get(postId);
+		if (insertedPost) {
+			await trackPostInserted(ctx, insertedPost);
 		}
 
 		return postId;
@@ -925,6 +930,7 @@ export const deletePost = mutation({
 			await ctx.db.delete(postTag._id);
 		}
 
+		await trackPostDeleted(ctx, post);
 		await ctx.db.delete(post._id);
 		if (post.r2Key) {
 			await ctx.scheduler.runAfter(0, internal.posts.deleteStoredBody, {

@@ -14,6 +14,13 @@ import type { Id } from './_generated/dataModel';
 import { rateLimiter } from './lib/rateLimits';
 import { r2 } from './lib/r2';
 import { isAdminRole } from '../lib/shared/adminRole';
+import {
+	countAuthorSharedPostsForSource,
+	countSourceItemsForSource,
+	trackPostReplaced,
+	trackSourceItemInserted,
+	trackSourceItemReplaced
+} from './lib/aggregates';
 
 const SOURCE_ITEM_INLINE_LIMIT = 1000;
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
@@ -690,6 +697,7 @@ export const ingestSourceItemFromInput = internalMutation({
 		let sourceItemId: Id<'source_items'>;
 		let created = false;
 		if (existing) {
+			const previous = existing;
 			await ctx.db.patch(existing._id, {
 				url: normalizedUrl,
 				urlHash: normalizedUrlHash,
@@ -702,6 +710,10 @@ export const ingestSourceItemFromInput = internalMutation({
 				contentType: args.contentType,
 				updatedAt: now
 			});
+			const updated = await ctx.db.get(existing._id);
+			if (updated) {
+				await trackSourceItemReplaced(ctx, previous, updated);
+			}
 			sourceItemId = existing._id;
 		} else {
 			sourceItemId = await ctx.db.insert('source_items', {
@@ -719,6 +731,10 @@ export const ingestSourceItemFromInput = internalMutation({
 				contentHash: args.contentHash,
 				contentType: args.contentType
 			});
+			const inserted = await ctx.db.get(sourceItemId);
+			if (inserted) {
+				await trackSourceItemInserted(ctx, inserted);
+			}
 			created = true;
 		}
 
@@ -1662,20 +1678,10 @@ export const listMySources = query({
 			if (!source) {
 				continue;
 			}
-			const itemCount = (
-				await ctx.db
-					.query('source_items')
-					.withIndex('by_sourceId_and_publishedAt', (q) => q.eq('sourceId', source._id))
-					.collect()
-			).length;
-			const sharedPostCount = (
-				await ctx.db
-					.query('posts')
-					.withIndex('by_authorAuthId_and_sourceId_and_createdAt', (q) =>
-						q.eq('authorAuthId', authUser._id).eq('sourceId', source._id)
-					)
-					.collect()
-			).length;
+			const [itemCount, sharedPostCount] = await Promise.all([
+				countSourceItemsForSource(ctx, source._id),
+				countAuthorSharedPostsForSource(ctx, authUser._id, source._id)
+			]);
 
 			page.push({
 				sourceId: source._id,
@@ -1843,11 +1849,16 @@ export const cleanupUnsubscribeBatch = internalMutation({
 			)
 			.take(args.limit);
 		for (const post of posts) {
+			const oldPost = post;
 			await ctx.db.patch(post._id, {
 				sourceId: undefined,
 				sourceItemId: undefined,
 				updatedAt: Date.now()
 			});
+			const updatedPost = await ctx.db.get(post._id);
+			if (updatedPost) {
+				await trackPostReplaced(ctx, oldPost, updatedPost);
+			}
 		}
 
 		let subscriptionRemoved = false;
