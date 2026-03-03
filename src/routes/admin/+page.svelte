@@ -201,6 +201,24 @@
 									: 'Never'}
 							</p>
 						</div>
+						<div class="rounded-md border p-3">
+							<p class="text-xs text-muted-foreground">Aggregate Backfill</p>
+							<p class="mt-1 font-medium">
+								Items:{dashboardQuery.data.debug.aggregateBackfill.sourceItemsState} (
+								{dashboardQuery.data.debug.aggregateBackfill.sourceItemsProcessed}) | Shares:
+								{dashboardQuery.data.debug.aggregateBackfill.postSharesState} (
+								{dashboardQuery.data.debug.aggregateBackfill.postSharesProcessed})
+							</p>
+							<div class="mt-1">
+								<Badge
+									variant={dashboardQuery.data.debug.aggregateBackfill.allDone
+										? 'default'
+										: 'secondary'}
+								>
+									{dashboardQuery.data.debug.aggregateBackfill.allDone ? 'complete' : 'incomplete'}
+								</Badge>
+							</div>
+						</div>
 					</div>
 				</CardContent>
 			</Card>

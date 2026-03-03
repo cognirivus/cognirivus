@@ -129,11 +129,28 @@ const dashboardSweeperValidator = v.object({
 	lastSuccessAt: v.union(v.number(), v.null())
 });
 
+const dashboardMigrationStateValidator = v.union(
+	v.literal('inProgress'),
+	v.literal('success'),
+	v.literal('failed'),
+	v.literal('canceled'),
+	v.literal('unknown')
+);
+
+const dashboardAggregateBackfillValidator = v.object({
+	sourceItemsState: dashboardMigrationStateValidator,
+	sourceItemsProcessed: v.number(),
+	postSharesState: dashboardMigrationStateValidator,
+	postSharesProcessed: v.number(),
+	allDone: v.boolean()
+});
+
 const dashboardDebugValidator = v.object({
 	nightlyLock: dashboardLockStateValidator,
 	retryBacklog: dashboardRetryBacklogValidator,
 	failures24h: dashboardFailureCountsValidator,
-	sweeper: dashboardSweeperValidator
+	sweeper: dashboardSweeperValidator,
+	aggregateBackfill: dashboardAggregateBackfillValidator
 });
 
 const deleteSourceDbResultValidator = v.object({
@@ -469,6 +486,18 @@ export const listDashboard = query({
 					.order('desc')
 					.take(1)
 			]);
+		const migrationStatuses: Array<{
+			name: string;
+			processed: number;
+			isDone: boolean;
+			state: 'inProgress' | 'success' | 'failed' | 'canceled' | 'unknown';
+		}> = await ctx.runQuery((internal as any).migrations.getAggregateBackfillStatus, {});
+		const sourceItemsMigration = migrationStatuses.find((status) =>
+			status.name.includes('backfillSourceItemCountAggregate')
+		);
+		const postSharesMigration = migrationStatuses.find((status) =>
+			status.name.includes('backfillPostShareAggregate')
+		);
 
 		return {
 			sources,
@@ -495,6 +524,13 @@ export const listDashboard = query({
 				},
 				sweeper: {
 					lastSuccessAt: sweeperEvents[0]?.createdAt ?? null
+				},
+				aggregateBackfill: {
+					sourceItemsState: sourceItemsMigration?.state ?? 'unknown',
+					sourceItemsProcessed: sourceItemsMigration?.processed ?? 0,
+					postSharesState: postSharesMigration?.state ?? 'unknown',
+					postSharesProcessed: postSharesMigration?.processed ?? 0,
+					allDone: (sourceItemsMigration?.isDone ?? false) && (postSharesMigration?.isDone ?? false)
 				}
 			}
 		};
