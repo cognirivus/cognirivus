@@ -9,11 +9,12 @@ import {
 	query
 } from './_generated/server';
 import { authComponent } from './auth';
-import { internal } from './_generated/api';
+import { components, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { rateLimiter } from './lib/rateLimits';
 import { r2 } from './lib/r2';
 import { isAdminRole } from '../lib/shared/adminRole';
+import { Workpool } from '@convex-dev/workpool';
 import {
 	countAuthorSharedPostsForSource,
 	countSourceItemsForSource,
@@ -44,6 +45,16 @@ const NEW_ACCOUNT_WINDOW_MS = 7 * UTC_DAY_MS;
 const NEW_ACCOUNT_MANUAL_REFRESH_DAILY_LIMIT = 1;
 const MAX_FETCH_REDIRECTS = 5;
 
+const sourceSyncWorkpool = new Workpool((components as any).sourceSyncWorkpool, {
+	maxParallelism: 8,
+	retryActionsByDefault: true
+});
+
+const sourceCleanupWorkpool = new Workpool((components as any).sourceCleanupWorkpool, {
+	maxParallelism: 6,
+	retryActionsByDefault: true
+});
+
 const sourceTypeValidator = v.union(
 	v.literal('website'),
 	v.literal('rss'),
@@ -73,6 +84,27 @@ const nextUtcMidnightMs = (now = Date.now()) =>
 const utcRunDateKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 const isNewAccount = (profileCreatedAt: number | null, now = Date.now()) =>
 	profileCreatedAt !== null && now - profileCreatedAt < NEW_ACCOUNT_WINDOW_MS;
+
+const enqueueSourceSyncWork = async (
+	ctx: any,
+	args: { jobId: Id<'source_jobs'>; sourceId: Id<'sources'> },
+	runAfter = 0
+) => {
+	await sourceSyncWorkpool.enqueueAction(ctx, (internal as any).sources.runSourceSync, args, {
+		runAfter
+	});
+};
+
+const enqueueSourceCleanupWork = async (
+	ctx: any,
+	action: any,
+	args: Record<string, unknown>,
+	runAfter = 0
+) => {
+	await sourceCleanupWorkpool.enqueueAction(ctx, action, args, {
+		runAfter
+	});
+};
 
 const createSnippet = (value: string) =>
 	value.trim().replace(/\s+/g, ' ').slice(0, SOURCE_ITEM_SNIPPET_LIMIT);
@@ -1574,14 +1606,14 @@ export const addSource = action({
 		});
 
 		if (ensureResult.shouldBackfill) {
-			await ctx.scheduler.runAfter(0, (internal as any).sources.runResubscribeBackfill, {
+			await enqueueSourceCleanupWork(ctx, (internal as any).sources.runResubscribeBackfill, {
 				jobId,
 				userAuthId: authUser._id,
 				sourceId: ensureResult.sourceId,
 				cursor: null
 			});
 		} else {
-			await ctx.scheduler.runAfter(0, (internal as any).sources.runSourceSync, {
+			await enqueueSourceSyncWork(ctx, {
 				jobId,
 				sourceId: ensureResult.sourceId
 			});
@@ -1735,7 +1767,7 @@ export const refreshSource = action({
 				sourceId: args.sourceId
 			}
 		);
-		await ctx.scheduler.runAfter(0, (internal as any).sources.runSourceSync, {
+		await enqueueSourceSyncWork(ctx, {
 			jobId,
 			sourceId: args.sourceId
 		});
@@ -1868,10 +1900,14 @@ export const runNightlySourceRefreshBatch = internalAction({
 					continue;
 				}
 				queuedJobs += 1;
-				await ctx.scheduler.runAfter(index * 25, (internal as any).sources.runSourceSync, {
-					jobId,
-					sourceId: source.sourceId
-				});
+				await enqueueSourceSyncWork(
+					ctx,
+					{
+						jobId,
+						sourceId: source.sourceId
+					},
+					index * 25
+				);
 			}
 
 			await ctx.runMutation((internal as any).sources.updateNightlyRunProgress, {
@@ -2056,7 +2092,7 @@ const enqueueBulkUnsubscribeJob = async (
 		jobType: 'bulk_unsubscribe',
 		userAuthId
 	});
-	await ctx.scheduler.runAfter(0, (internal as any).sources.runBulkUnsubscribeCleanup, {
+	await enqueueSourceCleanupWork(ctx, (internal as any).sources.runBulkUnsubscribeCleanup, {
 		jobId,
 		userAuthId,
 		sourceIds,
@@ -2216,7 +2252,7 @@ export const runBulkUnsubscribeCleanup = internalAction({
 			});
 
 			if (!batchResult.done) {
-				await ctx.scheduler.runAfter(0, (internal as any).sources.runBulkUnsubscribeCleanup, {
+				await enqueueSourceCleanupWork(ctx, (internal as any).sources.runBulkUnsubscribeCleanup, {
 					jobId: args.jobId,
 					userAuthId: args.userAuthId,
 					sourceIds: args.sourceIds,
@@ -2225,7 +2261,7 @@ export const runBulkUnsubscribeCleanup = internalAction({
 				return null;
 			}
 
-			await ctx.scheduler.runAfter(0, (internal as any).sources.runBulkUnsubscribeCleanup, {
+			await enqueueSourceCleanupWork(ctx, (internal as any).sources.runBulkUnsubscribeCleanup, {
 				jobId: args.jobId,
 				userAuthId: args.userAuthId,
 				sourceIds: args.sourceIds,
@@ -2350,7 +2386,7 @@ export const runResubscribeBackfill = internalAction({
 				return null;
 			}
 
-			await ctx.scheduler.runAfter(0, (internal as any).sources.runResubscribeBackfill, {
+			await enqueueSourceCleanupWork(ctx, (internal as any).sources.runResubscribeBackfill, {
 				jobId: args.jobId,
 				userAuthId: args.userAuthId,
 				sourceId: args.sourceId,
