@@ -45,11 +45,8 @@
 		return () => clearInterval(timer);
 	});
 
-	const memberAuthIds = $derived([
-		...new Set(members.map((member: any) => member.userAuthId).filter(Boolean))
-	]);
-	const presenceQuery = useQuery((api as any).presence.getOnlineUsers, () =>
-		browser && memberAuthIds.length > 0 ? { userAuthIds: memberAuthIds } : 'skip'
+	const presenceQuery = useQuery((api as any).presence.getOnlineUsersForCommunity, () =>
+		browser && communityId ? { communityId } : 'skip'
 	);
 	const onlineUserIds = $derived(new Set((presenceQuery.data ?? []) as Array<string>));
 	const onlineUsers = $derived(

@@ -4,28 +4,13 @@
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import type { Id } from '$convex/_generated/dataModel';
 	import { api } from '$convex/_generated/api';
-	import { tick, onDestroy } from 'svelte';
-	import { fade } from 'svelte/transition';
+	import { onDestroy } from 'svelte';
 	import ChatInterface from '$lib/components/chat/ChatInterface.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Popover from '$lib/components/ui/popover';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import { Input } from '$lib/components/ui/input';
-	import {
-		ArrowDown,
-		ArrowLeft,
-		CornerDownRight,
-		MessageSquare,
-		Pencil,
-		PenSquare,
-		Reply,
-		Search,
-		SendHorizontal,
-		SmilePlus,
-		Trash2,
-		X
-	} from '@lucide/svelte';
+	import { ArrowLeft, MessageSquare, PenSquare, Search } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	type MessageReaction = {
@@ -119,9 +104,9 @@
 	);
 	const searchResults = $derived((searchUsersQuery.data ?? []) as Array<SearchUser>);
 
-	const otherUserIds = $derived(conversations.map((c) => c.otherUser.authId));
-	const onlineQuery = useQuery((api as any).presence.getOnlineUsers, () =>
-		isAuthenticated && otherUserIds.length > 0 ? { userAuthIds: otherUserIds } : 'skip'
+	const conversationIds = $derived(conversations.map((c) => c.conversationId));
+	const onlineQuery = useQuery((api as any).presence.getOnlineUsersForConversations, () =>
+		isAuthenticated && conversationIds.length > 0 ? { conversationIds } : 'skip'
 	);
 	const onlineUsers = $derived(new Set((onlineQuery.data ?? []) as Array<string>));
 
@@ -419,6 +404,7 @@
 					} catch (error) {
 						console.error('Failed to send message:', error);
 						toast.error('Failed to send message');
+						throw error;
 					}
 				}}
 				onEditMessage={async (messageId: string, body: string) => {
@@ -430,6 +416,7 @@
 					} catch (error) {
 						console.error('Failed to edit message:', error);
 						toast.error('Failed to edit message');
+						throw error;
 					}
 				}}
 				onDeleteMessage={async (messageId: string) => {
@@ -440,6 +427,7 @@
 					} catch (error) {
 						console.error('Failed to delete message:', error);
 						toast.error('Failed to delete message');
+						throw error;
 					}
 				}}
 				onToggleReaction={async (messageId: string, emoji: string) => {

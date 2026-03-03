@@ -1,7 +1,29 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { authComponent } from './auth';
 import { rateLimiter } from './lib/rateLimits';
+
+const MAX_SCOPE_ITEMS = 200;
+
+const uniqueValues = <T>(values: Array<T>) => [...new Set(values)];
+
+const listOnlineUserIds = async (ctx: QueryCtx | MutationCtx, userAuthIds: Array<string>) => {
+	const now = Date.now();
+	const online: Array<string> = [];
+
+	for (const userAuthId of uniqueValues(userAuthIds)) {
+		const presence = await ctx.db
+			.query('user_presence')
+			.withIndex('by_userAuthId', (q) => q.eq('userAuthId', userAuthId))
+			.unique();
+
+		if (presence && presence.expiresAt > now) {
+			online.push(userAuthId);
+		}
+	}
+
+	return online;
+};
 
 export const heartbeat = mutation({
 	args: {
@@ -40,33 +62,81 @@ export const heartbeat = mutation({
 	}
 });
 
-export const getOnlineUsers = query({
+export const getOnlineUsersForConversations = query({
 	args: {
-		userAuthIds: v.array(v.string())
+		conversationIds: v.array(v.id('dm_conversations'))
 	},
 	returns: v.array(v.string()),
 	handler: async (ctx, args) => {
 		const user = await authComponent.getAuthUser(ctx);
-		if (!user) throw new Error('Not authenticated');
-		const MAX_USER_IDS = 200;
-		if (args.userAuthIds.length > MAX_USER_IDS) {
-			throw new Error(`Too many user ids. Max ${MAX_USER_IDS}`);
+		if (!user) {
+			throw new Error('Not authenticated');
 		}
 
-		const now = Date.now();
-		const online: Array<string> = [];
+		if (args.conversationIds.length > MAX_SCOPE_ITEMS) {
+			throw new Error(`Too many conversation ids. Max ${MAX_SCOPE_ITEMS}.`);
+		}
 
-		for (const userAuthId of new Set(args.userAuthIds)) {
-			const presence = await ctx.db
-				.query('user_presence')
-				.withIndex('by_userAuthId', (q) => q.eq('userAuthId', userAuthId))
+		const otherUserIds = new Set<string>();
+		for (const conversationId of uniqueValues(args.conversationIds)) {
+			const conversation = await ctx.db.get(conversationId);
+			if (!conversation) {
+				continue;
+			}
+
+			const isParticipant =
+				conversation.participant1 === user._id || conversation.participant2 === user._id;
+			if (!isParticipant) {
+				throw new Error('Forbidden presence scope.');
+			}
+
+			const otherUserAuthId =
+				conversation.participant1 === user._id
+					? conversation.participant2
+					: conversation.participant1;
+			otherUserIds.add(otherUserAuthId);
+		}
+
+		return await listOnlineUserIds(ctx, [...otherUserIds]);
+	}
+});
+
+export const getOnlineUsersForCommunity = query({
+	args: {
+		communityId: v.id('communities')
+	},
+	returns: v.array(v.string()),
+	handler: async (ctx, args) => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) {
+			throw new Error('Not authenticated');
+		}
+
+		const community = await ctx.db.get(args.communityId);
+		if (!community) {
+			throw new Error('Community not found');
+		}
+
+		if (community.visibility === 'private') {
+			const membership = await ctx.db
+				.query('community_memberships')
+				.withIndex('by_communityId_and_userAuthId', (q) =>
+					q.eq('communityId', args.communityId).eq('userAuthId', user._id)
+				)
 				.unique();
-
-			if (presence && presence.expiresAt > now) {
-				online.push(userAuthId);
+			if (!membership || membership.status !== 'active') {
+				throw new Error('Forbidden presence scope.');
 			}
 		}
 
-		return online;
+		const activeMemberships = await ctx.db
+			.query('community_memberships')
+			.withIndex('by_communityId_and_status', (q) =>
+				q.eq('communityId', args.communityId).eq('status', 'active')
+			)
+			.take(MAX_SCOPE_ITEMS);
+
+		const memberAuthIds = activeMemberships.map((membership) => membership.userAuthId);
+		return await listOnlineUserIds(ctx, memberAuthIds);
 	}
 });
