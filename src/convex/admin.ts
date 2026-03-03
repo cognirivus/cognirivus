@@ -1,34 +1,9 @@
 import { v } from 'convex/values';
 import { action, internalMutation, query } from './_generated/server';
 import { internal } from './_generated/api';
-import { authComponent } from './auth';
 import { r2 } from './lib/r2';
 import type { Id } from './_generated/dataModel';
-
-const ADMIN_ROLE_VALUES = new Set(['admin', 'system-admin', 'superadmin', 'owner']);
-
-const isAdminRole = (role: unknown): boolean => {
-	if (typeof role === 'string') {
-		return ADMIN_ROLE_VALUES.has(role.toLowerCase());
-	}
-	if (Array.isArray(role)) {
-		return role.some((entry) => isAdminRole(entry));
-	}
-	if (role && typeof role === 'object') {
-		const roleObject = role as { role?: unknown; name?: unknown };
-		const maybeRole = roleObject.role ?? roleObject.name;
-		return isAdminRole(maybeRole);
-	}
-	return false;
-};
-
-const requireAdmin = async (ctx: any) => {
-	const authUser = await authComponent.getAuthUser(ctx);
-	if (!authUser || !isAdminRole(authUser.role)) {
-		throw new Error('Admin access required.');
-	}
-	return authUser;
-};
+import { requireAdminUser } from './lib/adminAuth';
 
 const stringifyDetails = (value: unknown): string => {
 	try {
@@ -223,7 +198,7 @@ export const listDashboard = query({
 		nightlyRun: dashboardNightlyRunValidator
 	}),
 	handler: async (ctx) => {
-		await requireAdmin(ctx);
+		await requireAdminUser(ctx);
 
 		const sourceBuckets = await Promise.all(
 			sourceStatuses.map((status) =>
@@ -580,7 +555,7 @@ export const deleteSourcePermanently = action({
 		r2DeletedCount: v.number()
 	}),
 	handler: async (ctx, args): Promise<DeleteSourcePermanentlyResult> => {
-		const authUser = await requireAdmin(ctx);
+		const authUser = await requireAdminUser(ctx);
 		await logAdminAuditEvent(ctx, {
 			actorAuthId: authUser._id,
 			action: 'deleteSourcePermanently',
@@ -644,7 +619,7 @@ export const deleteSourceItemPermanently = action({
 		r2Deleted: v.boolean()
 	}),
 	handler: async (ctx, args): Promise<DeleteSourceItemPermanentlyResult> => {
-		const authUser = await requireAdmin(ctx);
+		const authUser = await requireAdminUser(ctx);
 		await logAdminAuditEvent(ctx, {
 			actorAuthId: authUser._id,
 			action: 'deleteSourceItemPermanently',
@@ -708,7 +683,7 @@ export const deletePostPermanently = action({
 		r2Deleted: v.boolean()
 	}),
 	handler: async (ctx, args): Promise<DeletePostPermanentlyResult> => {
-		const authUser = await requireAdmin(ctx);
+		const authUser = await requireAdminUser(ctx);
 		await logAdminAuditEvent(ctx, {
 			actorAuthId: authUser._id,
 			action: 'deletePostPermanently',

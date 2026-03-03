@@ -13,6 +13,7 @@ import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { rateLimiter } from './lib/rateLimits';
 import { r2 } from './lib/r2';
+import { isAdminRole } from '../lib/shared/adminRole';
 
 const SOURCE_ITEM_INLINE_LIMIT = 1000;
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
@@ -24,8 +25,6 @@ const NIGHTLY_REFRESH_BATCH_SIZE = 100;
 const MANUAL_REFRESH_DAILY_LIMIT = 3;
 const MAX_FETCH_REDIRECTS = 5;
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
-
-const ADMIN_ROLE_VALUES = new Set(['admin', 'system-admin', 'superadmin', 'owner']);
 
 const sourceTypeValidator = v.union(
 	v.literal('website'),
@@ -50,20 +49,6 @@ const sourceJobStatusValidator = v.union(
 	v.literal('done'),
 	v.literal('failed')
 );
-
-const isAdminRole = (role: unknown): boolean => {
-	if (typeof role === 'string') {
-		return ADMIN_ROLE_VALUES.has(role.toLowerCase());
-	}
-	if (Array.isArray(role)) {
-		return role.some((entry) => isAdminRole(entry));
-	}
-	if (role && typeof role === 'object') {
-		const roleObject = role as { role?: unknown; name?: unknown };
-		return isAdminRole(roleObject.role ?? roleObject.name);
-	}
-	return false;
-};
 
 const nextUtcMidnightMs = (now = Date.now()) =>
 	Math.floor(now / UTC_DAY_MS) * UTC_DAY_MS + UTC_DAY_MS;

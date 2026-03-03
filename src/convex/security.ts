@@ -1,8 +1,6 @@
 import { v } from 'convex/values';
 import { internalMutation, query } from './_generated/server';
-import { authComponent } from './auth';
-
-const ADMIN_ROLE_VALUES = new Set(['admin', 'system-admin', 'superadmin', 'owner']);
+import { requireAdminUser } from './lib/adminAuth';
 
 const securitySeverityValidator = v.union(
 	v.literal('info'),
@@ -16,28 +14,6 @@ const adminAuditStatusValidator = v.union(
 	v.literal('succeeded'),
 	v.literal('failed')
 );
-
-const isAdminRole = (role: unknown): boolean => {
-	if (typeof role === 'string') {
-		return ADMIN_ROLE_VALUES.has(role.toLowerCase());
-	}
-	if (Array.isArray(role)) {
-		return role.some((entry) => isAdminRole(entry));
-	}
-	if (role && typeof role === 'object') {
-		const roleObject = role as { role?: unknown; name?: unknown };
-		return isAdminRole(roleObject.role ?? roleObject.name);
-	}
-	return false;
-};
-
-const requireAdmin = async (ctx: any) => {
-	const authUser = await authComponent.getAuthUser(ctx);
-	if (!authUser || !isAdminRole(authUser.role)) {
-		throw new Error('Admin access required.');
-	}
-	return authUser;
-};
 
 export const logEvent = internalMutation({
 	args: {
@@ -108,7 +84,7 @@ export const listRecentEvents = query({
 	},
 	returns: v.array(securityEventRowValidator),
 	handler: async (ctx, args) => {
-		await requireAdmin(ctx);
+		await requireAdminUser(ctx);
 		const limit = Math.min(200, Math.max(1, Math.floor(args.limit ?? 50)));
 		const rows = await ctx.db
 			.query('security_events')
