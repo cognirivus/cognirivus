@@ -35,6 +35,9 @@ const SOURCE_URL_LIMIT = 2048;
 const BULK_UNSUBSCRIBE_BATCH_SIZE = 200;
 const RESUBSCRIBE_BACKFILL_BATCH_SIZE = 200;
 const NIGHTLY_REFRESH_BATCH_SIZE = 100;
+const FANOUT_BATCH_SIZE = 200;
+const FANOUT_RETRY_MAX_ATTEMPTS = 3;
+const FANOUT_RETRY_BASE_DELAY_MS = 1000;
 const MANUAL_REFRESH_DAILY_LIMIT = 3;
 const MAX_FETCH_REDIRECTS = 5;
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
@@ -452,6 +455,13 @@ const nightlySourceRowValidator = v.object({
 	sourceId: v.id('sources')
 });
 
+const fanoutBatchResultValidator = v.object({
+	deliveredCount: v.number(),
+	scannedCount: v.number(),
+	isDone: v.boolean(),
+	continueCursor: v.union(v.string(), v.null())
+});
+
 const sourceItemShareValidator = v.object({
 	postId: v.id('posts'),
 	title: v.string(),
@@ -617,41 +627,149 @@ export const ensureUserBookmarkSource = internalMutation({
 	}
 });
 
-const deliverSourceItem = async (ctx: any, sourceItemId: Id<'source_items'>) => {
-	const sourceItem = await ctx.db.get(sourceItemId);
-	if (!sourceItem) {
-		return 0;
+const deliverSourceItemFanoutBatchTx = async (
+	ctx: any,
+	args: {
+		sourceItemId: Id<'source_items'>;
+		paginationOpts: { numItems: number; cursor: string | null };
 	}
-	const subscriptions = await ctx.db
+): Promise<{
+	deliveredCount: number;
+	scannedCount: number;
+	isDone: boolean;
+	continueCursor: string | null;
+}> => {
+	const sourceItem = await ctx.db.get(args.sourceItemId);
+	if (!sourceItem) {
+		return {
+			deliveredCount: 0,
+			scannedCount: 0,
+			isDone: true,
+			continueCursor: null
+		};
+	}
+
+	const page = await ctx.db
 		.query('source_subscriptions')
 		.withIndex('by_sourceId_and_status', (q: any) =>
 			q.eq('sourceId', sourceItem.sourceId).eq('status', 'active')
 		)
-		.collect();
+		.paginate(args.paginationOpts);
 
 	let deliveredCount = 0;
-	for (const subscription of subscriptions) {
+	for (const subscription of page.page) {
 		const existing = await ctx.db
 			.query('user_source_items')
 			.withIndex('by_userAuthId_and_sourceItemId', (q: any) =>
-				q.eq('userAuthId', subscription.userAuthId).eq('sourceItemId', sourceItemId)
+				q.eq('userAuthId', subscription.userAuthId).eq('sourceItemId', args.sourceItemId)
 			)
 			.unique();
 		if (existing) {
 			continue;
 		}
+
 		await ctx.db.insert('user_source_items', {
 			userAuthId: subscription.userAuthId,
 			sourceId: sourceItem.sourceId,
-			sourceItemId,
+			sourceItemId: args.sourceItemId,
 			publishedAt: sourceItem.publishedAt,
 			deliveredAt: Date.now()
 		});
 		deliveredCount += 1;
 	}
 
-	return deliveredCount;
+	return {
+		deliveredCount,
+		scannedCount: page.page.length,
+		isDone: page.isDone,
+		continueCursor: page.continueCursor
+	};
 };
+
+export const deliverSourceItemFanoutBatch = internalMutation({
+	args: {
+		sourceItemId: v.id('source_items'),
+		paginationOpts: paginationOptsValidator
+	},
+	returns: fanoutBatchResultValidator,
+	handler: async (ctx, args) => {
+		const batch = await deliverSourceItemFanoutBatchTx(ctx, {
+			sourceItemId: args.sourceItemId,
+			paginationOpts: {
+				numItems: Math.max(1, Math.min(args.paginationOpts.numItems, FANOUT_BATCH_SIZE)),
+				cursor: args.paginationOpts.cursor
+			}
+		});
+		return batch;
+	}
+});
+
+export const runSourceItemFanoutBatch = internalAction({
+	args: {
+		sourceItemId: v.id('source_items'),
+		cursor: v.union(v.string(), v.null()),
+		attempt: v.number()
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		try {
+			const batch: {
+				deliveredCount: number;
+				scannedCount: number;
+				isDone: boolean;
+				continueCursor: string | null;
+			} = await ctx.runMutation((internal as any).sources.deliverSourceItemFanoutBatch, {
+				sourceItemId: args.sourceItemId,
+				paginationOpts: {
+					numItems: FANOUT_BATCH_SIZE,
+					cursor: args.cursor
+				}
+			});
+
+			if (!batch.isDone) {
+				await ctx.scheduler.runAfter(0, (internal as any).sources.runSourceItemFanoutBatch, {
+					sourceItemId: args.sourceItemId,
+					cursor: batch.continueCursor,
+					attempt: 0
+				});
+			}
+		} catch (error) {
+			if (args.attempt < FANOUT_RETRY_MAX_ATTEMPTS) {
+				const retryDelayMs = FANOUT_RETRY_BASE_DELAY_MS * 2 ** args.attempt;
+				await ctx.scheduler.runAfter(
+					retryDelayMs,
+					(internal as any).sources.runSourceItemFanoutBatch,
+					{
+						sourceItemId: args.sourceItemId,
+						cursor: args.cursor,
+						attempt: args.attempt + 1
+					}
+				);
+				return null;
+			}
+
+			const message = toFailureMessage(
+				JOB_FAILURE_CODE.SOURCE_FANOUT_FAILED,
+				error,
+				'Source item fanout failed.'
+			);
+			await logSecurityEvent(ctx, {
+				eventType: 'source_item_fanout_dead_letter',
+				severity: 'error',
+				surface: 'sources.runSourceItemFanoutBatch',
+				message,
+				entityType: 'source_item',
+				entityId: args.sourceItemId,
+				metadata: JSON.stringify({
+					cursor: args.cursor,
+					attempt: args.attempt
+				})
+			});
+		}
+
+		return null;
+	}
+});
 
 export const ingestSourceItemFromInput = internalMutation({
 	args: {
@@ -744,7 +862,20 @@ export const ingestSourceItemFromInput = internalMutation({
 			created = true;
 		}
 
-		const deliveredCount = await deliverSourceItem(ctx, sourceItemId);
+		const fanoutBatch = await deliverSourceItemFanoutBatchTx(ctx, {
+			sourceItemId,
+			paginationOpts: {
+				numItems: FANOUT_BATCH_SIZE,
+				cursor: null
+			}
+		});
+		if (!fanoutBatch.isDone) {
+			await ctx.scheduler.runAfter(0, (internal as any).sources.runSourceItemFanoutBatch, {
+				sourceItemId,
+				cursor: fanoutBatch.continueCursor,
+				attempt: 0
+			});
+		}
 		await ctx.db.patch(args.sourceId, {
 			updatedAt: now
 		});
@@ -752,7 +883,7 @@ export const ingestSourceItemFromInput = internalMutation({
 		return {
 			sourceItemId,
 			created,
-			deliveredCount
+			deliveredCount: fanoutBatch.deliveredCount
 		};
 	}
 });
