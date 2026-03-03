@@ -46,6 +46,26 @@
 		page.url.searchParams.get('tags')?.split(',').filter(Boolean) ?? []
 	);
 	const cursor = $derived(page.url.searchParams.get('cursor'));
+	const SCOPE_ORDER: FeedScope[] = ['you', 'public', 'community'];
+	const GUEST_SCOPE_ORDER: FeedScope[] = ['public', 'community'];
+	const scopeOptions = $derived(auth.isAuthenticated ? SCOPE_ORDER : GUEST_SCOPE_ORDER);
+	const scopeMeta: Record<FeedScope, { label: string; title: string; description: string }> = {
+		you: {
+			label: 'You',
+			title: 'My Private Feed',
+			description: 'Your link collection and private notes.'
+		},
+		public: {
+			label: 'Public',
+			title: 'Public Feed',
+			description: 'Knowledge posts ranked by new, top, and discussed.'
+		},
+		community: {
+			label: 'Community',
+			title: 'Community Feed',
+			description: 'Posts from communities you follow, tuned for discovery.'
+		}
+	};
 
 	let searchInput = $state('');
 
@@ -112,6 +132,13 @@
 		goto(target, { noScroll: true, keepFocus: true });
 	}
 
+	function selectScope(nextScope: FeedScope) {
+		if (nextScope === scope) {
+			return;
+		}
+		updateParams({ scope: nextScope, cursor: null });
+	}
+
 	async function vote(postId: string, value: 1 | -1) {
 		if (!auth.isAuthenticated) {
 			return;
@@ -124,25 +151,26 @@
 	}
 </script>
 
-<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-	<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-		<div>
-			<h1 class="text-2xl font-semibold tracking-tight">
-				{#if scope === 'you'}My Private Feed{:else if scope === 'community'}Community Feed{:else}Public
-					Feed{/if}
-			</h1>
-			<p class="text-sm text-muted-foreground">
-				{#if scope === 'you'}Your link collection and private notes.{:else}Knowledge posts ranked by
-					new, top, and discussed.{/if}
-			</p>
+<main class="mx-auto w-full max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6">
+	<div class="mb-5 flex flex-col items-center gap-3 text-center">
+		<div
+			class="inline-flex items-center gap-1 overflow-hidden rounded-lg border border-border bg-muted/30 p-1"
+		>
+			{#each scopeOptions as s (s)}
+				<Button
+					variant={scope === s ? 'secondary' : 'ghost'}
+					size="sm"
+					class="h-8 rounded-md px-3 text-xs"
+					onclick={() => selectScope(s)}
+				>
+					{scopeMeta[s].label}
+				</Button>
+			{/each}
 		</div>
-		{#if auth.isAuthenticated}
-			<Button href="/submit">Submit Post</Button>
-		{:else}
-			<Button variant="outline" href={`/signin?redirectTo=${encodeURIComponent('/feed')}`}>
-				Sign in to submit
-			</Button>
-		{/if}
+		<div>
+			<h1 class="text-2xl font-semibold tracking-tight">{scopeMeta[scope].title}</h1>
+			<p class="text-sm text-muted-foreground">{scopeMeta[scope].description}</p>
+		</div>
 	</div>
 
 	{#if !auth.isAuthenticated && scope === 'you'}
@@ -171,41 +199,23 @@
 		</Card>
 	{/if}
 
-	<div class="mb-4 flex flex-wrap items-center gap-2">
-		<div
-			class="flex items-center gap-1 overflow-hidden rounded-md border border-border bg-muted/20 p-1"
-		>
-			{#each ['you', 'public', 'community'] as s (s)}
-				{#if s !== 'you' || auth.isAuthenticated}
-					<Button
-						variant={scope === s ? 'secondary' : 'ghost'}
-						size="sm"
-						class="h-8 px-3 text-xs"
-						onclick={() => updateParams({ scope: s as FeedScope })}
-					>
-						{s.charAt(0).toUpperCase() + s.slice(1)}
-					</Button>
-				{/if}
-			{/each}
-		</div>
-
-		<div class="mx-1 h-4 w-px bg-border"></div>
+	<div class="mb-4 flex items-center gap-1.5 overflow-x-auto sm:gap-2">
 		{#each ['new', 'top', 'discussed'] as t (t)}
 			<Button
 				variant={tab === t ? 'default' : 'outline'}
 				size="sm"
-				class="h-8"
+				class="h-8 shrink-0"
 				onclick={() => updateParams({ tab: t as FeedTab, cursor: null })}
 			>
 				{t}
 			</Button>
 		{/each}
-		<div class="mx-1 h-4 w-px bg-border"></div>
+		<div class="mx-0.5 h-4 w-px shrink-0 bg-border sm:mx-1"></div>
 		{#each ['all', '24h', '7d', '30d'] as w (w)}
 			<Button
 				variant={windowBucket === w ? 'secondary' : 'ghost'}
 				size="sm"
-				class="h-8"
+				class="h-8 shrink-0"
 				onclick={() => updateParams({ window: w as FeedWindow, cursor: null })}
 			>
 				{w === 'all' ? 'All' : w}
@@ -331,7 +341,7 @@
 										</Badge>
 									{/if}
 									{#if (post.tags?.length ?? 0) > 0}
-										{#each post.tags as tag}
+										{#each post.tags as tag (tag)}
 											<Badge variant="secondary" class="gap-1 bg-secondary/50">
 												<Tag class="size-3" />
 												{tag}
@@ -368,7 +378,7 @@
 									size="icon-sm"
 									variant={post.userVote === 1 ? 'secondary' : 'outline'}
 									class={post.userVote === 1
-										? 'border-primary/40 text-primary [&_svg_path]:!fill-current'
+										? 'border-primary/40 text-primary [&_svg_path]:fill-current!'
 										: ''}
 									disabled={!auth.isAuthenticated}
 									onclick={() => vote(post._id, 1)}
@@ -380,7 +390,7 @@
 									size="icon-sm"
 									variant={post.userVote === -1 ? 'secondary' : 'outline'}
 									class={post.userVote === -1
-										? 'border-destructive/40 text-destructive [&_svg_path]:!fill-current'
+										? 'border-destructive/40 text-destructive [&_svg_path]:fill-current!'
 										: ''}
 									disabled={!auth.isAuthenticated}
 									onclick={() => vote(post._id, -1)}

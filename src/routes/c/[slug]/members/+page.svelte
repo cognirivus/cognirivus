@@ -1,12 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { useConvexClient, useQuery } from 'convex-svelte';
-	import { Crown, Shield, User, Users } from '@lucide/svelte';
+	import { Crown, Loader2, Shield, User, Users } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
-	import { Card, CardContent } from '$lib/components/ui/card';
-	import * as Table from '$lib/components/ui/table';
+	import CommunitySubpageHeader from '$lib/components/community/CommunitySubpageHeader.svelte';
 	import { toast } from 'svelte-sonner';
 
 	type MemberItem = {
@@ -83,92 +82,129 @@
 		admin: 'Admin',
 		member: 'Member'
 	} as const;
+
+	const AVATAR_COLORS = [
+		'bg-rose-500',
+		'bg-blue-500',
+		'bg-emerald-500',
+		'bg-amber-500',
+		'bg-violet-500',
+		'bg-cyan-500',
+		'bg-pink-500',
+		'bg-indigo-500'
+	];
+
+	function nameToColor(name: string): string {
+		let hash = 0;
+		for (let i = 0; i < name.length; i++) {
+			hash = name.charCodeAt(i) + ((hash << 5) - hash);
+		}
+		return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+	}
+
+	function roleBadgeVariant(role: 'owner' | 'admin' | 'member') {
+		if (role === 'owner') return 'default' as const;
+		if (role === 'admin') return 'secondary' as const;
+		return 'outline' as const;
+	}
 </script>
 
-<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
-	<div class="mx-auto w-full max-w-4xl">
-		{#if communityQuery.isLoading}
-			<p class="text-sm text-muted-foreground">Loading community...</p>
-		{:else if !communityQuery.data}
-			<p class="text-sm text-destructive">Community not found.</p>
-		{:else}
-			<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+<main class="mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-6 sm:px-6">
+	{#if communityQuery.isLoading}
+		<div class="flex flex-col items-center justify-center py-20">
+			<Loader2 class="size-6 animate-spin text-muted-foreground" />
+			<p class="mt-3 text-sm text-muted-foreground">Loading community…</p>
+		</div>
+	{:else if !communityQuery.data}
+		<div class="flex flex-col items-center justify-center py-20">
+			<Users class="size-8 text-muted-foreground/50" />
+			<p class="mt-3 text-sm text-destructive">Community not found.</p>
+		</div>
+	{:else}
+		<CommunitySubpageHeader communityData={communityQuery.data} activeNav="members" />
+
+		<div class="mt-6">
+			<!-- Section header -->
+			<div class="mb-4 flex items-center justify-between">
 				<div>
-					<h1 class="text-2xl font-semibold tracking-tight">Members</h1>
+					<h2 class="text-lg font-semibold tracking-tight">Members</h2>
 					<p class="text-sm text-muted-foreground">
-						{communityQuery.data.community.memberCount} members in c/{communityQuery.data.community
-							.slug}
+						{allMembers.length} of {communityQuery.data.community.memberCount} members
 					</p>
 				</div>
-				<Button variant="outline" href="/c/{slug}">Back to Community</Button>
 			</div>
 
 			{#if !initialized && loading}
-				<p class="text-sm text-muted-foreground">Loading members...</p>
+				<div class="flex items-center justify-center py-12">
+					<Loader2 class="size-5 animate-spin text-muted-foreground" />
+					<span class="ml-2 text-sm text-muted-foreground">Loading members…</span>
+				</div>
 			{:else if initialized && allMembers.length === 0}
-				<Card class="gap-0 py-4">
-					<CardContent class="text-sm text-muted-foreground">No members yet.</CardContent>
-				</Card>
+				<div class="flex flex-col items-center justify-center rounded-lg border bg-card py-12">
+					<Users class="size-8 text-muted-foreground/40" />
+					<p class="mt-3 text-sm text-muted-foreground">No members yet</p>
+				</div>
 			{:else if allMembers.length > 0}
-				<Card class="gap-0 overflow-hidden py-0">
-					<Table.Root>
-						<Table.Header>
-							<Table.Row>
-								<Table.Head>User</Table.Head>
-								<Table.Head>Name</Table.Head>
-								<Table.Head>Role</Table.Head>
-								<Table.Head class="hidden sm:table-cell">Joined</Table.Head>
-							</Table.Row>
-						</Table.Header>
-						<Table.Body>
-							{#each allMembers as member (member.userAuthId)}
-								<Table.Row>
-									<Table.Cell class="font-medium">
-										{#if member.username}
-											<a
-												class="inline-flex items-center gap-1 hover:underline"
-												href="/u/{member.username}"
-											>
-												<Users class="size-3.5" />
-												u/{member.username}
-											</a>
-										{:else}
-											<span class="text-muted-foreground">—</span>
-										{/if}
-									</Table.Cell>
-									<Table.Cell class="text-muted-foreground">{member.name}</Table.Cell>
-									<Table.Cell>
-										{@const RoleIcon = roleIcon[member.role]}
-										<Badge variant="outline" class="gap-1 text-xs">
-											<RoleIcon class="size-3" />
-											{roleLabel[member.role]}
-										</Badge>
-									</Table.Cell>
-									<Table.Cell class="hidden text-muted-foreground sm:table-cell">
-										{new Date(member.joinedAt).toLocaleDateString()}
-									</Table.Cell>
-								</Table.Row>
-							{/each}
-						</Table.Body>
-					</Table.Root>
-				</Card>
+				<div class="space-y-2">
+					{#each allMembers as member (member.userAuthId)}
+						{@const displayName = member.username ?? member.name}
+						{@const avatarLetter = displayName.charAt(0).toUpperCase()}
+						{@const RoleIcon = roleIcon[member.role]}
+						<div class="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
+							<!-- Avatar -->
+							<div
+								class="{nameToColor(displayName)} flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+							>
+								{avatarLetter}
+							</div>
 
-				<div class="mt-3 flex items-center justify-between">
-					<p class="text-xs text-muted-foreground">
-						Showing {allMembers.length} of {communityQuery.data.community.memberCount} members
-					</p>
-					{#if !isDone}
+							<!-- Name + role -->
+							<div class="min-w-0 flex-1">
+								<div class="flex flex-wrap items-center gap-2">
+									{#if member.username}
+										<a
+											href="/u/{member.username}"
+											class="text-sm font-medium hover:underline"
+										>
+											u/{member.username}
+										</a>
+									{:else}
+										<span class="text-sm font-medium">{member.name}</span>
+									{/if}
+									<Badge variant={roleBadgeVariant(member.role)} class="gap-1 text-[11px]">
+										<RoleIcon class="size-3" />
+										{roleLabel[member.role]}
+									</Badge>
+								</div>
+							</div>
+
+							<!-- Joined date -->
+							<span class="hidden shrink-0 text-xs text-muted-foreground sm:block">
+								Joined {new Date(member.joinedAt).toLocaleDateString()}
+							</span>
+						</div>
+					{/each}
+				</div>
+
+				<!-- Load more -->
+				{#if !isDone}
+					<div class="mt-4 flex justify-center">
 						<Button
 							variant="outline"
 							size="sm"
 							disabled={loading}
 							onclick={() => loadPage(continueCursor)}
 						>
-							{loading ? 'Loading...' : 'Load More'}
+							{#if loading}
+								<Loader2 class="mr-2 size-4 animate-spin" />
+								Loading…
+							{:else}
+								Load More
+							{/if}
 						</Button>
-					{/if}
-				</div>
+					</div>
+				{/if}
 			{/if}
-		{/if}
-	</div>
+		</div>
+	{/if}
 </main>

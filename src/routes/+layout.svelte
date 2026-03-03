@@ -130,8 +130,8 @@
 				<ThemeToggle />
 			</div>
 		</header>
-		<div class="flex min-h-0 flex-1">
-			<div class="flex min-h-0 flex-1 flex-col">
+		<div class="flex min-h-0 flex-1 overflow-hidden">
+			<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
 				{@render children()}
 			</div>
 			{#if !isAuthPage}

@@ -1,149 +1,225 @@
 <script lang="ts">
-	import { page } from '$app/state';
-	import { useConvexClient, useQuery } from 'convex-svelte';
-	import { api } from '$convex/_generated/api';
-	import { Button } from '$lib/components/ui/button';
-	import { toast } from 'svelte-sonner';
+	import { page } from '$app/state'
+	import { useConvexClient, useQuery } from 'convex-svelte'
+	import { api } from '$convex/_generated/api'
+	import { Button } from '$lib/components/ui/button'
+	import { Badge } from '$lib/components/ui/badge'
+	import { Separator } from '$lib/components/ui/separator'
+	import { toast } from 'svelte-sonner'
+	import CommunitySubpageHeader from '$lib/components/community/CommunitySubpageHeader.svelte'
+	import { RefreshCw, Check, X, Clock, UserCheck, Loader2, ShieldAlert } from '@lucide/svelte'
 
-	const client = useConvexClient();
-	const slug = $derived(page.params.slug);
+	const client = useConvexClient()
+	const slug = $derived(page.params.slug)
 
-	const communityQuery = useQuery((api as any).communities.getBySlug, () => ({ slug }));
+	const communityQuery = useQuery((api as any).communities.getBySlug, () => ({ slug }))
 
 	type PendingRequest = {
-		membershipId: string;
-		userAuthId: string;
-		requestedAt: number;
-		requesterName: string;
-		requesterEmail: string;
-		requesterUsername: string | null;
-	};
+		membershipId: string
+		userAuthId: string
+		requestedAt: number
+		requesterName: string
+		requesterEmail: string
+		requesterUsername: string | null
+	}
 
-	let pendingRequests = $state<Array<PendingRequest>>([]);
-	let loadingRequests = $state(false);
-	let initialized = $state(false);
+	let pendingRequests = $state<Array<PendingRequest>>([])
+	let loadingRequests = $state(false)
+	let initialized = $state(false)
 
 	function resetPendingRequestsState() {
-		initialized = false;
-		pendingRequests = [];
+		initialized = false
+		pendingRequests = []
 	}
 
 	$effect(() => {
-		const slugKey = slug;
-		resetPendingRequestsState();
-		if (!slugKey) return;
-	});
+		const slugKey = slug
+		resetPendingRequestsState()
+		if (!slugKey) return
+	})
 
 	async function refreshPendingRequests() {
 		if (!communityQuery.data?.isManager) {
-			pendingRequests = [];
-			initialized = true;
-			return;
+			pendingRequests = []
+			initialized = true
+			return
 		}
 
-		loadingRequests = true;
+		loadingRequests = true
 		try {
 			const rows = await client.query((api as any).communities.listPendingRequests, {
 				communityId: communityQuery.data.community._id
-			});
-			pendingRequests = rows as Array<PendingRequest>;
+			})
+			pendingRequests = rows as Array<PendingRequest>
 		} catch (error: any) {
-			toast.error(error?.message ?? 'Failed to load pending requests');
+			toast.error(error?.message ?? 'Failed to load pending requests')
 		} finally {
-			loadingRequests = false;
-			initialized = true;
+			loadingRequests = false
+			initialized = true
 		}
 	}
 
 	$effect(() => {
 		if (!communityQuery.isLoading && communityQuery.data && !initialized) {
-			refreshPendingRequests();
+			refreshPendingRequests()
 		}
-	});
+	})
 
 	async function approve(membershipId: string) {
 		try {
-			await client.mutation((api as any).communities.approveJoin, { membershipId });
-			toast.success('Join request approved');
-			await refreshPendingRequests();
+			await client.mutation((api as any).communities.approveJoin, { membershipId })
+			toast.success('Join request approved')
+			await refreshPendingRequests()
 		} catch (error: any) {
-			toast.error(error?.message ?? 'Approve failed');
+			toast.error(error?.message ?? 'Approve failed')
 		}
 	}
 
 	async function reject(membershipId: string) {
 		try {
-			await client.mutation((api as any).communities.rejectJoin, { membershipId });
-			toast.success('Join request rejected');
-			await refreshPendingRequests();
+			await client.mutation((api as any).communities.rejectJoin, { membershipId })
+			toast.success('Join request rejected')
+			await refreshPendingRequests()
 		} catch (error: any) {
-			toast.error(error?.message ?? 'Reject failed');
+			toast.error(error?.message ?? 'Reject failed')
 		}
+	}
+
+	function timeAgo(ts: number): string {
+		const seconds = Math.floor((Date.now() - ts) / 1000)
+		if (seconds < 60) return 'just now'
+		const minutes = Math.floor(seconds / 60)
+		if (minutes < 60) return `${minutes}m ago`
+		const hours = Math.floor(minutes / 60)
+		if (hours < 24) return `${hours}h ago`
+		const days = Math.floor(hours / 24)
+		if (days < 30) return `${days}d ago`
+		return new Date(ts).toLocaleDateString()
 	}
 </script>
 
-<main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+<main class="mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-6 sm:px-6">
 	{#if communityQuery.isLoading}
-		<p class="text-sm text-muted-foreground">Loading community...</p>
+		<div class="flex flex-col items-center justify-center py-24 text-muted-foreground">
+			<Loader2 class="size-8 animate-spin" />
+			<p class="mt-3 text-sm">Loading community…</p>
+		</div>
 	{:else if !communityQuery.data}
-		<p class="text-sm text-destructive">Community not found.</p>
+		<div class="flex flex-col items-center justify-center py-24 text-muted-foreground">
+			<ShieldAlert class="size-8" />
+			<p class="mt-3 text-sm font-medium text-foreground">Community not found</p>
+			<p class="mt-1 text-xs">The community you're looking for doesn't exist or was removed.</p>
+		</div>
 	{:else if !communityQuery.data.isManager}
-		<div class="rounded-md border border-border bg-card p-4">
-			<p class="text-sm text-destructive">Manager access required.</p>
-			<div class="mt-3">
-				<Button variant="outline" href={`/c/${slug}`}>Back to Community</Button>
-			</div>
+		<div class="flex flex-col items-center justify-center py-24 text-muted-foreground">
+			<ShieldAlert class="size-8" />
+			<p class="mt-3 text-sm font-medium text-foreground">Manager access required</p>
+			<p class="mt-1 text-xs">You don't have permission to manage this community.</p>
+			<Button variant="outline" href={`/c/${slug}`} class="mt-4">Back to Community</Button>
 		</div>
 	{:else}
-		<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-			<div>
-				<h1 class="text-2xl font-semibold tracking-tight">
-					Manage c/{communityQuery.data.community.slug}
-				</h1>
-				<p class="text-sm text-muted-foreground">Review and process pending join requests.</p>
-			</div>
-			<div class="flex gap-2">
-				<Button variant="outline" href={`/c/${slug}`}>View Community</Button>
-				<Button variant="outline" onclick={refreshPendingRequests} disabled={loadingRequests}>
-					Refresh
+		<CommunitySubpageHeader communityData={communityQuery.data} activeNav="manage" />
+
+		<div class="mt-6 space-y-4">
+			<!-- Section header -->
+			<div class="flex items-center justify-between">
+				<div class="flex items-center gap-2.5">
+					<h2 class="text-lg font-semibold tracking-tight">Pending Requests</h2>
+					<Badge variant="secondary" class="text-xs">
+						{pendingRequests.length}
+					</Badge>
+				</div>
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={refreshPendingRequests}
+					disabled={loadingRequests}
+					class="gap-1.5"
+				>
+					<RefreshCw class="size-3.5 {loadingRequests ? 'animate-spin' : ''}" />
+					<span class="hidden sm:inline">Refresh</span>
 				</Button>
 			</div>
-		</div>
 
-		{#if loadingRequests && pendingRequests.length === 0}
-			<p class="text-sm text-muted-foreground">Loading pending requests...</p>
-		{:else if pendingRequests.length === 0}
-			<p class="text-sm text-muted-foreground">No pending join requests.</p>
-		{:else}
-			<div class="space-y-3">
-				{#each pendingRequests as request (request.membershipId)}
-					<article class="rounded-lg border border-border bg-card p-4">
-						<div class="flex flex-wrap items-start justify-between gap-3">
-							<div>
-								<p class="text-sm font-medium">
-									{#if request.requesterUsername}
-										<a class="hover:underline" href="/u/{request.requesterUsername}">
-											u/{request.requesterUsername}
-										</a>
-									{:else}
-										{request.requesterName}
-									{/if}
-								</p>
-								<p class="text-xs text-muted-foreground">{request.requesterEmail}</p>
-								<p class="mt-1 text-xs text-muted-foreground">
-									Requested at {new Date(request.requestedAt).toLocaleString()}
-								</p>
+			<Separator />
+
+			<!-- Content -->
+			{#if loadingRequests && pendingRequests.length === 0}
+				<div class="flex flex-col items-center justify-center py-16 text-muted-foreground">
+					<Loader2 class="size-6 animate-spin" />
+					<p class="mt-3 text-sm">Loading pending requests…</p>
+				</div>
+			{:else if pendingRequests.length === 0}
+				<div
+					class="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-muted-foreground"
+				>
+					<UserCheck class="size-8" />
+					<p class="mt-3 text-sm font-medium text-foreground">No pending requests</p>
+					<p class="mt-1 text-xs">All join requests have been reviewed.</p>
+				</div>
+			{:else}
+				<div class="space-y-3">
+					{#each pendingRequests as request (request.membershipId)}
+						<article class="rounded-lg border bg-card p-4">
+							<div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+								<div class="flex items-center gap-3 min-w-0">
+									<!-- Avatar -->
+									<div
+										class="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
+									>
+										{(request.requesterName ?? '?').charAt(0).toUpperCase()}
+									</div>
+									<!-- Info -->
+									<div class="min-w-0">
+										<p class="text-sm font-medium truncate">
+											{#if request.requesterUsername}
+												<a
+													class="hover:underline"
+													href="/u/{request.requesterUsername}"
+												>
+													u/{request.requesterUsername}
+												</a>
+											{:else}
+												{request.requesterName}
+											{/if}
+										</p>
+										<p class="text-xs text-muted-foreground truncate">
+											{request.requesterEmail}
+										</p>
+										<div
+											class="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
+										>
+											<Clock class="size-3" />
+											Requested {timeAgo(request.requestedAt)}
+										</div>
+									</div>
+								</div>
+
+								<!-- Actions -->
+								<div class="flex gap-2 self-start">
+									<Button
+										size="sm"
+										class="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"
+										onclick={() => approve(request.membershipId)}
+									>
+										<Check class="size-3.5" />
+										Approve
+									</Button>
+									<Button
+										size="sm"
+										variant="outline"
+										class="gap-1.5"
+										onclick={() => reject(request.membershipId)}
+									>
+										<X class="size-3.5" />
+										Reject
+									</Button>
+								</div>
 							</div>
-							<div class="flex gap-2">
-								<Button size="sm" onclick={() => approve(request.membershipId)}>Approve</Button>
-								<Button size="sm" variant="outline" onclick={() => reject(request.membershipId)}>
-									Reject
-								</Button>
-							</div>
-						</div>
-					</article>
-				{/each}
-			</div>
-		{/if}
+						</article>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	{/if}
 </main>

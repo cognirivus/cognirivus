@@ -6,8 +6,20 @@
 	import { api } from '$convex/_generated/api';
 	import ChatInterface from '$lib/components/chat/ChatInterface.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { LoaderCircle } from '@lucide/svelte';
+	import { ArrowLeft, LoaderCircle, MessageSquare, Settings, Users } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
+
+	const AVATAR_COLORS = [
+		'bg-rose-500', 'bg-blue-500', 'bg-emerald-500', 'bg-amber-500',
+		'bg-violet-500', 'bg-cyan-500', 'bg-pink-500', 'bg-indigo-500'
+	];
+	function avatarColor(s: string): string {
+		let hash = 0;
+		for (let i = 0; i < s.length; i++) {
+			hash = s.charCodeAt(i) + ((hash << 5) - hash);
+		}
+		return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+	}
 
 	type ChatStatus = 'loading' | 'ready' | 'error';
 
@@ -338,25 +350,52 @@
 			}}
 		>
 			{#snippet header()}
-				<section
-					class="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3 sm:px-6"
-				>
-					<div class="min-w-0">
-						<h1
-							class="truncate text-sm font-semibold tracking-[0.25em] text-muted-foreground/80 uppercase"
+				{@const navItems = [
+					{ value: 'feed', label: 'Feed', href: `/c/${communityResult.community.slug}`, icon: ArrowLeft },
+					{ value: 'members', label: 'Members', href: `/c/${communityResult.community.slug}/members`, icon: Users },
+					{ value: 'chat', label: 'Chat', href: `/c/${communityResult.community.slug}/chat`, icon: MessageSquare },
+					...(communityResult.isManager
+						? [{ value: 'manage', label: 'Manage', href: `/c/${communityResult.community.slug}/manage`, icon: Settings }]
+						: [])
+				]}
+				<nav class="flex items-center gap-2 border-b border-border/60 px-3 py-1.5 sm:px-4">
+					<a href="/c/{communityResult.community.slug}" class="flex shrink-0 items-center gap-2">
+						<div
+							class="{avatarColor(communityResult.community.slug)} flex size-6 items-center justify-center rounded-full text-[10px] font-bold text-white"
 						>
-							Community Chat
-						</h1>
-						<p class="mt-0.5 truncate text-sm text-muted-foreground">
-							c/{communityResult.community.slug} · {communityResult.community.memberCount} members
-						</p>
+							{communityResult.community.slug.charAt(0).toUpperCase()}
+						</div>
+						<span class="text-xs font-semibold hover:underline">
+							c/{communityResult.community.slug}
+						</span>
+					</a>
+
+					<div class="mx-1 h-4 w-px bg-border/60"></div>
+
+					<div class="flex items-center gap-0.5 overflow-x-auto">
+						{#each navItems as item (item.value)}
+							{@const isActive = item.value === 'chat'}
+							<a
+								href={item.href}
+								class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors
+									{isActive
+									? 'bg-muted text-foreground'
+									: 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
+							>
+								<item.icon class="size-3.5" />
+								{item.label}
+							</a>
+						{/each}
 					</div>
+
 					{#if !isMember}
-						<Button size="sm" variant="outline" onclick={requestJoin} disabled={!isAuthenticated}>
-							{communityResult.membershipStatus === 'pending' ? 'Request pending' : 'Join to chat'}
-						</Button>
+						<div class="ml-auto shrink-0">
+							<Button size="sm" variant="outline" class="h-7 text-xs" onclick={requestJoin} disabled={!isAuthenticated}>
+								{communityResult.membershipStatus === 'pending' ? 'Request pending' : 'Join to chat'}
+							</Button>
+						</div>
 					{/if}
-				</section>
+				</nav>
 			{/snippet}
 		</ChatInterface>
 	{/if}
