@@ -9,7 +9,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Textarea } from '$lib/components/ui/textarea';
-	import { decodeHtmlEntities } from '$lib/utils';
+	import { decodeHtmlEntities, sanitizeDisplayText } from '$lib/utils';
 	import { ArrowLeft, ExternalLink, Globe, Loader2, Lock, Trash2, Users } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
@@ -39,7 +39,7 @@
 		loadingBody = true;
 		try {
 			const response = await fetch(detailsQuery.data.bodyUrl);
-			fullBody = decodeHtmlEntities(await response.text());
+			fullBody = sanitizeDisplayText(decodeHtmlEntities(await response.text()));
 		} catch {
 			toast.error('Failed to load full content');
 		} finally {

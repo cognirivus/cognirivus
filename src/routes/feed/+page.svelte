@@ -25,7 +25,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { toast } from 'svelte-sonner';
 	import TagMultiSelect from '$lib/components/TagMultiSelect.svelte';
-	import { decodeHtmlEntities } from '$lib/utils';
+	import { decodeHtmlEntities, sanitizeDisplayText } from '$lib/utils';
 
 	type FeedTab = 'new' | 'top' | 'discussed';
 	type FeedWindow = 'all' | '24h' | '7d' | '30d';
@@ -314,7 +314,7 @@
 												href="/post/{item._id}"
 												class="line-clamp-2 text-base font-medium hover:underline"
 											>
-												{item.title}
+												{sanitizeDisplayText(item.title)}
 											</a>
 											{#if item.visibility === 'private'}
 												<Lock class="size-3.5 text-muted-foreground" />
@@ -337,7 +337,9 @@
 											{new Date(item.createdAt).toLocaleString()}
 										</span>
 									</div>
-									<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.snippet}</p>
+									<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">
+										{sanitizeDisplayText(item.snippet)}
+									</p>
 									<span
 										class="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:hidden"
 									>
