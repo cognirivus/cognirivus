@@ -126,7 +126,8 @@ const schema = defineSchema({
 			'sourceItemId',
 			'createdAt'
 		])
-		.index('by_sourceItemId_and_createdAt', ['sourceItemId', 'createdAt']),
+		.index('by_sourceItemId_and_createdAt', ['sourceItemId', 'createdAt'])
+		.index('by_r2Key_and_createdAt', ['r2Key', 'createdAt']),
 	sources: defineTable({
 		type: v.union(
 			v.literal('website'),
@@ -182,6 +183,7 @@ const schema = defineSchema({
 		.index('by_sourceId_and_publishedAt', ['sourceId', 'publishedAt'])
 		.index('by_sourceId_and_externalId', ['sourceId', 'externalId'])
 		.index('by_sourceId_and_urlHash', ['sourceId', 'urlHash'])
+		.index('by_r2Key_and_publishedAt', ['r2Key', 'publishedAt'])
 		.index('by_publishedAt', ['publishedAt']),
 	user_source_items: defineTable({
 		userAuthId: v.string(),

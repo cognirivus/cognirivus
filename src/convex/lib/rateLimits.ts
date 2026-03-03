@@ -20,6 +20,8 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
 		capacity: 3,
 		start: 0
 	},
+	addSourcePerSession: { kind: 'token bucket', rate: 40, period: HOUR, capacity: 10 },
+	addSourcePerIp: { kind: 'token bucket', rate: 120, period: HOUR, capacity: 30 },
 	addSourceNewAccount: {
 		kind: 'fixed window',
 		rate: 10,
@@ -39,6 +41,20 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
 		rate: 2,
 		period: DAY,
 		capacity: 2,
+		start: 0
+	},
+	manualSourceRefreshPerSession: {
+		kind: 'fixed window',
+		rate: 3,
+		period: DAY,
+		capacity: 3,
+		start: 0
+	},
+	manualSourceRefreshPerIp: {
+		kind: 'fixed window',
+		rate: 20,
+		period: DAY,
+		capacity: 20,
 		start: 0
 	},
 	manualSourceRefreshNewAccount: {

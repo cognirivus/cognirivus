@@ -1344,8 +1344,10 @@ export const getSourceForSync = internalQuery({
 		v.object({
 			_id: v.id('sources'),
 			type: sourceTypeValidator,
+			status: sourceStatusValidator,
 			title: v.string(),
-			canonicalUrl: v.string()
+			canonicalUrl: v.string(),
+			hasActiveSubscriptions: v.boolean()
 		})
 	),
 	handler: async (ctx, args) => {
@@ -1353,11 +1355,22 @@ export const getSourceForSync = internalQuery({
 		if (!source) {
 			return null;
 		}
+		const hasActiveSubscriptions =
+			(
+				await ctx.db
+					.query('source_subscriptions')
+					.withIndex('by_sourceId_and_status', (q) =>
+						q.eq('sourceId', source._id).eq('status', 'active')
+					)
+					.take(1)
+			).length > 0;
 		return {
 			_id: source._id,
 			type: source.type,
+			status: source.status,
 			title: source.title,
-			canonicalUrl: source.canonicalUrl
+			canonicalUrl: source.canonicalUrl,
+			hasActiveSubscriptions
 		};
 	}
 });
@@ -1544,6 +1557,32 @@ export const getUserProfileCreatedAt = internalQuery({
 	}
 });
 
+export const getSessionRateLimitSignals = internalQuery({
+	args: {
+		sessionId: v.union(v.string(), v.null())
+	},
+	returns: v.union(
+		v.null(),
+		v.object({
+			sessionId: v.string(),
+			ipAddress: v.optional(v.string())
+		})
+	),
+	handler: async (ctx, args) => {
+		if (!args.sessionId) {
+			return null;
+		}
+		const session = await ctx.db.get('session', args.sessionId as any);
+		if (!session) {
+			return null;
+		}
+		return {
+			sessionId: args.sessionId,
+			ipAddress: typeof session.ipAddress === 'string' ? session.ipAddress : undefined
+		};
+	}
+});
+
 export const addSource = action({
 	args: {
 		type: sourceTypeValidator,
@@ -1560,12 +1599,35 @@ export const addSource = action({
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
+		const identity = await ctx.auth.getUserIdentity();
+		const rawSessionId = (identity as { sessionId?: unknown } | null)?.sessionId;
+		const sessionSignals: {
+			sessionId: string;
+			ipAddress?: string;
+		} | null = await ctx.runQuery((internal as any).sources.getSessionRateLimitSignals, {
+			sessionId: typeof rawSessionId === 'string' ? rawSessionId : null
+		});
+		const sessionRateLimitKey = sessionSignals?.sessionId ?? `sessionless:${authUser._id}`;
+		const ipRateLimitKey = sessionSignals?.ipAddress
+			? await sha256Hex(sessionSignals.ipAddress)
+			: null;
+
 		const normalizedInput = normalizeSourceInput(args.type, args.inputUrlOrId);
 		await rateLimiter.limit(ctx, 'addSource', { key: authUser._id, throws: true });
 		await rateLimiter.limit(ctx, 'addSourcePerNormalizedKey', {
 			key: `${authUser._id}:${normalizedInput.normalizedKey}`,
 			throws: true
 		});
+		await rateLimiter.limit(ctx, 'addSourcePerSession', {
+			key: sessionRateLimitKey,
+			throws: true
+		});
+		if (ipRateLimitKey) {
+			await rateLimiter.limit(ctx, 'addSourcePerIp', {
+				key: ipRateLimitKey,
+				throws: true
+			});
+		}
 		const profileCreatedAt: number | null = await ctx.runQuery(
 			(internal as any).sources.getUserProfileCreatedAt,
 			{
@@ -1645,13 +1707,25 @@ export const runSourceSync = internalAction({
 			const source: {
 				_id: Id<'sources'>;
 				type: 'website' | 'rss' | 'youtube' | 'bookmarks';
+				status: 'active' | 'paused' | 'error' | 'deleting';
 				title: string;
 				canonicalUrl: string;
+				hasActiveSubscriptions: boolean;
 			} | null = await ctx.runQuery((internal as any).sources.getSourceForSync, {
 				sourceId: args.sourceId
 			});
 			if (!source) {
 				throw new Error('Source not found.');
+			}
+			if (
+				source.status === 'deleting' ||
+				source.status === 'paused' ||
+				!source.hasActiveSubscriptions
+			) {
+				await ctx.runMutation((internal as any).sources.completeJob, {
+					jobId: args.jobId
+				});
+				return null;
 			}
 
 			const parsedSourceUrl = normalizeHttpUrl(source.canonicalUrl);
@@ -1739,6 +1813,19 @@ export const refreshSource = action({
 			throw new Error('Unauthorized');
 		}
 		if (!isAdminRole(authUser.role)) {
+			const identity = await ctx.auth.getUserIdentity();
+			const rawSessionId = (identity as { sessionId?: unknown } | null)?.sessionId;
+			const sessionSignals: {
+				sessionId: string;
+				ipAddress?: string;
+			} | null = await ctx.runQuery((internal as any).sources.getSessionRateLimitSignals, {
+				sessionId: typeof rawSessionId === 'string' ? rawSessionId : null
+			});
+			const sessionRateLimitKey = sessionSignals?.sessionId ?? `sessionless:${authUser._id}`;
+			const ipRateLimitKey = sessionSignals?.ipAddress
+				? await sha256Hex(sessionSignals.ipAddress)
+				: null;
+
 			await rateLimiter.limit(ctx, 'manualSourceRefresh', {
 				key: authUser._id,
 				throws: true
@@ -1747,6 +1834,16 @@ export const refreshSource = action({
 				key: `${authUser._id}:${args.sourceId}`,
 				throws: true
 			});
+			await rateLimiter.limit(ctx, 'manualSourceRefreshPerSession', {
+				key: sessionRateLimitKey,
+				throws: true
+			});
+			if (ipRateLimitKey) {
+				await rateLimiter.limit(ctx, 'manualSourceRefreshPerIp', {
+					key: ipRateLimitKey,
+					throws: true
+				});
+			}
 			const profileCreatedAt: number | null = await ctx.runQuery(
 				(internal as any).sources.getUserProfileCreatedAt,
 				{
@@ -2083,11 +2180,43 @@ export const resumeSource = mutation({
 	}
 });
 
+export const markSubscriptionsForUnsubscribe = internalMutation({
+	args: {
+		userAuthId: v.string(),
+		sourceIds: v.array(v.id('sources'))
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const now = Date.now();
+		for (const sourceId of args.sourceIds) {
+			const subscription = await ctx.db
+				.query('source_subscriptions')
+				.withIndex('by_userAuthId_and_sourceId', (q) =>
+					q.eq('userAuthId', args.userAuthId).eq('sourceId', sourceId)
+				)
+				.unique();
+			if (!subscription) {
+				continue;
+			}
+			await ctx.db.patch(subscription._id, {
+				status: 'paused',
+				unsubscribedAt: now,
+				updatedAt: now
+			});
+		}
+		return null;
+	}
+});
+
 const enqueueBulkUnsubscribeJob = async (
 	ctx: any,
 	userAuthId: string,
 	sourceIds: Array<Id<'sources'>>
 ): Promise<Id<'source_jobs'>> => {
+	await ctx.runMutation((internal as any).sources.markSubscriptionsForUnsubscribe, {
+		userAuthId,
+		sourceIds
+	});
 	const jobId: Id<'source_jobs'> = await ctx.runMutation((internal as any).sources.createJob, {
 		jobType: 'bulk_unsubscribe',
 		userAuthId
@@ -2190,7 +2319,7 @@ export const cleanupUnsubscribeBatch = internalMutation({
 					q.eq('userAuthId', args.userAuthId).eq('sourceId', args.sourceId)
 				)
 				.unique();
-			if (subscription) {
+			if (subscription && subscription.status !== 'active') {
 				await ctx.db.delete(subscription._id);
 				subscriptionRemoved = true;
 			}

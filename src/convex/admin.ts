@@ -217,7 +217,11 @@ const r2RetryStatusValidator = v.union(
 	v.literal('failed')
 );
 
-const r2OrphanSweeperPhaseValidator = v.union(v.literal('source_items'), v.literal('posts'));
+const r2OrphanSweeperPhaseValidator = v.union(
+	v.literal('source_items'),
+	v.literal('posts'),
+	v.literal('r2_metadata')
+);
 
 const sourceItemR2RefRowValidator = v.object({
 	_id: v.id('source_items'),
@@ -669,7 +673,9 @@ export const runR2OrphanSweeper = internalAction({
 		sourceItemsScanned: v.number(),
 		sourceItemsMissing: v.number(),
 		postsScanned: v.number(),
-		postsMissing: v.number()
+		postsMissing: v.number(),
+		metadataScanned: v.number(),
+		metadataOrphansDeleted: v.number()
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
@@ -711,7 +717,9 @@ export const runR2OrphanSweeper = internalAction({
 						sourceItemsScanned,
 						sourceItemsMissing,
 						postsScanned: args.postsScanned,
-						postsMissing: args.postsMissing
+						postsMissing: args.postsMissing,
+						metadataScanned: args.metadataScanned,
+						metadataOrphansDeleted: args.metadataOrphansDeleted
 					});
 					return null;
 				}
@@ -722,48 +730,107 @@ export const runR2OrphanSweeper = internalAction({
 					sourceItemsScanned,
 					sourceItemsMissing,
 					postsScanned: args.postsScanned,
-					postsMissing: args.postsMissing
+					postsMissing: args.postsMissing,
+					metadataScanned: args.metadataScanned,
+					metadataOrphansDeleted: args.metadataOrphansDeleted
 				});
 				return null;
 			}
 
-			const batch: {
-				page: Array<{ _id: Id<'posts'>; r2Key?: string }>;
-				isDone: boolean;
-				continueCursor: string | null;
-			} = await ctx.runQuery((internal as any).admin.listPostR2RefsBatch, {
-				paginationOpts: {
-					numItems: R2_ORPHAN_SWEEPER_BATCH_SIZE,
-					cursor: args.cursor
-				}
-			});
-
-			const missingIds: Array<Id<'posts'>> = [];
-			for (const row of batch.page) {
-				if (!row.r2Key) {
-					continue;
-				}
-				const url = await r2.getUrl(row.r2Key);
-				if (!url) {
-					missingIds.push(row._id);
-				}
-			}
-			if (missingIds.length > 0) {
-				await ctx.runMutation((internal as any).admin.quarantineMissingPostR2Refs, {
-					postIds: missingIds
+			if (args.phase === 'posts') {
+				const batch: {
+					page: Array<{ _id: Id<'posts'>; r2Key?: string }>;
+					isDone: boolean;
+					continueCursor: string | null;
+				} = await ctx.runQuery((internal as any).admin.listPostR2RefsBatch, {
+					paginationOpts: {
+						numItems: R2_ORPHAN_SWEEPER_BATCH_SIZE,
+						cursor: args.cursor
+					}
 				});
-			}
 
-			const postsScanned = args.postsScanned + batch.page.length;
-			const postsMissing = args.postsMissing + missingIds.length;
-			if (!batch.isDone) {
+				const missingIds: Array<Id<'posts'>> = [];
+				for (const row of batch.page) {
+					if (!row.r2Key) {
+						continue;
+					}
+					const url = await r2.getUrl(row.r2Key);
+					if (!url) {
+						missingIds.push(row._id);
+					}
+				}
+				if (missingIds.length > 0) {
+					await ctx.runMutation((internal as any).admin.quarantineMissingPostR2Refs, {
+						postIds: missingIds
+					});
+				}
+
+				const postsScanned = args.postsScanned + batch.page.length;
+				const postsMissing = args.postsMissing + missingIds.length;
+				if (!batch.isDone) {
+					await ctx.scheduler.runAfter(0, (internal as any).admin.runR2OrphanSweeper, {
+						phase: 'posts',
+						cursor: batch.continueCursor,
+						sourceItemsScanned: args.sourceItemsScanned,
+						sourceItemsMissing: args.sourceItemsMissing,
+						postsScanned,
+						postsMissing,
+						metadataScanned: args.metadataScanned,
+						metadataOrphansDeleted: args.metadataOrphansDeleted
+					});
+					return null;
+				}
+
 				await ctx.scheduler.runAfter(0, (internal as any).admin.runR2OrphanSweeper, {
-					phase: 'posts',
-					cursor: batch.continueCursor,
+					phase: 'r2_metadata',
+					cursor: null,
 					sourceItemsScanned: args.sourceItemsScanned,
 					sourceItemsMissing: args.sourceItemsMissing,
 					postsScanned,
-					postsMissing
+					postsMissing,
+					metadataScanned: args.metadataScanned,
+					metadataOrphansDeleted: args.metadataOrphansDeleted
+				});
+				return null;
+			}
+
+			const metadataBatch = await r2.listMetadata(ctx, R2_ORPHAN_SWEEPER_BATCH_SIZE, args.cursor);
+			let orphanDeletedDelta = 0;
+			for (const metadata of metadataBatch.page) {
+				const [hasSourceItemRef, hasPostRef] = await Promise.all([
+					ctx.runQuery((internal as any).admin.hasSourceItemForR2Key, {
+						r2Key: metadata.key
+					}),
+					ctx.runQuery((internal as any).admin.hasPostForR2Key, {
+						r2Key: metadata.key
+					})
+				]);
+				if (hasSourceItemRef || hasPostRef) {
+					continue;
+				}
+
+				const deleted = await runRetriedR2Delete(ctx, {
+					entityType: 'orphan_sweeper',
+					entityId: metadata.key,
+					r2Key: metadata.key
+				});
+				if (deleted) {
+					orphanDeletedDelta += 1;
+				}
+			}
+
+			const metadataScanned = args.metadataScanned + metadataBatch.page.length;
+			const metadataOrphansDeleted = args.metadataOrphansDeleted + orphanDeletedDelta;
+			if (!metadataBatch.isDone) {
+				await ctx.scheduler.runAfter(0, (internal as any).admin.runR2OrphanSweeper, {
+					phase: 'r2_metadata',
+					cursor: metadataBatch.continueCursor,
+					sourceItemsScanned: args.sourceItemsScanned,
+					sourceItemsMissing: args.sourceItemsMissing,
+					postsScanned: args.postsScanned,
+					postsMissing: args.postsMissing,
+					metadataScanned,
+					metadataOrphansDeleted
 				});
 				return null;
 			}
@@ -776,8 +843,10 @@ export const runR2OrphanSweeper = internalAction({
 				metadata: stringifyDetails({
 					sourceItemsScanned: args.sourceItemsScanned,
 					sourceItemsMissing: args.sourceItemsMissing,
-					postsScanned,
-					postsMissing
+					postsScanned: args.postsScanned,
+					postsMissing: args.postsMissing,
+					metadataScanned,
+					metadataOrphansDeleted
 				})
 			});
 		} catch (error) {
@@ -796,7 +865,9 @@ export const runR2OrphanSweeper = internalAction({
 					sourceItemsScanned: args.sourceItemsScanned,
 					sourceItemsMissing: args.sourceItemsMissing,
 					postsScanned: args.postsScanned,
-					postsMissing: args.postsMissing
+					postsMissing: args.postsMissing,
+					metadataScanned: args.metadataScanned,
+					metadataOrphansDeleted: args.metadataOrphansDeleted
 				})
 			});
 		}
@@ -839,6 +910,32 @@ export const countSourceItemsRaw = internalQuery({
 			.withIndex('by_sourceId_and_publishedAt', (q) => q.eq('sourceId', args.sourceId))
 			.collect();
 		return rows.length;
+	}
+});
+
+export const hasSourceItemForR2Key = internalQuery({
+	args: {
+		r2Key: v.string()
+	},
+	returns: v.boolean(),
+	handler: async (ctx, args) => {
+		const rows = await (ctx.db.query('source_items') as any)
+			.withIndex('by_r2Key_and_publishedAt', (q: any) => q.eq('r2Key', args.r2Key))
+			.take(1);
+		return rows.length > 0;
+	}
+});
+
+export const hasPostForR2Key = internalQuery({
+	args: {
+		r2Key: v.string()
+	},
+	returns: v.boolean(),
+	handler: async (ctx, args) => {
+		const rows = await (ctx.db.query('posts') as any)
+			.withIndex('by_r2Key_and_createdAt', (q: any) => q.eq('r2Key', args.r2Key))
+			.take(1);
+		return rows.length > 0;
 	}
 });
 
