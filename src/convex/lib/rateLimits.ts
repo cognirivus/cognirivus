@@ -1,4 +1,4 @@
-import { HOUR, MINUTE, RateLimiter } from '@convex-dev/rate-limiter';
+import { DAY, HOUR, MINUTE, RateLimiter } from '@convex-dev/rate-limiter';
 import { components } from '../_generated/api';
 
 export const rateLimiter = new RateLimiter(components.rateLimiter, {
@@ -13,6 +13,13 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
 	voteComment: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 },
 	bookmarkImport: { kind: 'token bucket', rate: 40, period: HOUR, capacity: 5 },
 	addSource: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
+	manualSourceRefresh: {
+		kind: 'fixed window',
+		rate: 3,
+		period: DAY,
+		capacity: 3,
+		start: 0
+	},
 	unsubscribeSource: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
 	followUser: { kind: 'token bucket', rate: 120, period: HOUR, capacity: 30 },
 	followCommunity: { kind: 'token bucket', rate: 120, period: HOUR, capacity: 30 },

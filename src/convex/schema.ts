@@ -214,6 +214,20 @@ const schema = defineSchema({
 		.index('by_status_and_updatedAt', ['status', 'updatedAt'])
 		.index('by_userAuthId_and_createdAt', ['userAuthId', 'createdAt'])
 		.index('by_sourceId_and_createdAt', ['sourceId', 'createdAt']),
+	source_nightly_runs: defineTable({
+		runDate: v.string(),
+		status: v.union(v.literal('running'), v.literal('done'), v.literal('failed')),
+		startedAt: v.number(),
+		finishedAt: v.optional(v.number()),
+		processedSources: v.number(),
+		queuedJobs: v.number(),
+		cursor: v.optional(v.string()),
+		error: v.optional(v.string()),
+		updatedAt: v.number()
+	})
+		.index('by_runDate', ['runDate'])
+		.index('by_startedAt', ['startedAt'])
+		.index('by_status_and_updatedAt', ['status', 'updatedAt']),
 	post_tags: defineTable({
 		postId: v.id('posts'),
 		tagLower: v.string(),

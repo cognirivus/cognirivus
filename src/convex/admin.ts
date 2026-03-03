@@ -69,6 +69,20 @@ const dashboardPostValidator = v.object({
 	url: v.optional(v.string())
 });
 
+const dashboardNightlyRunValidator = v.union(
+	v.null(),
+	v.object({
+		_id: v.id('source_nightly_runs'),
+		runDate: v.string(),
+		status: v.union(v.literal('running'), v.literal('done'), v.literal('failed')),
+		startedAt: v.number(),
+		finishedAt: v.optional(v.number()),
+		processedSources: v.number(),
+		queuedJobs: v.number(),
+		error: v.optional(v.string())
+	})
+);
+
 const deleteSourceDbResultValidator = v.object({
 	deleted: v.boolean(),
 	sourceId: v.id('sources'),
@@ -169,7 +183,8 @@ export const listDashboard = query({
 	returns: v.object({
 		sources: v.array(dashboardSourceValidator),
 		sourceItems: v.array(dashboardSourceItemValidator),
-		posts: v.array(dashboardPostValidator)
+		posts: v.array(dashboardPostValidator),
+		nightlyRun: dashboardNightlyRunValidator
 	}),
 	handler: async (ctx) => {
 		await requireAdmin(ctx);
@@ -245,7 +260,26 @@ export const listDashboard = query({
 			url: post.url
 		}));
 
-		return { sources, sourceItems, posts };
+		const latestNightlyRuns = await ctx.db
+			.query('source_nightly_runs')
+			.withIndex('by_startedAt')
+			.order('desc')
+			.take(1);
+		const nightlyRun =
+			latestNightlyRuns[0] == null
+				? null
+				: {
+						_id: latestNightlyRuns[0]._id,
+						runDate: latestNightlyRuns[0].runDate,
+						status: latestNightlyRuns[0].status,
+						startedAt: latestNightlyRuns[0].startedAt,
+						finishedAt: latestNightlyRuns[0].finishedAt,
+						processedSources: latestNightlyRuns[0].processedSources,
+						queuedJobs: latestNightlyRuns[0].queuedJobs,
+						error: latestNightlyRuns[0].error
+					};
+
+		return { sources, sourceItems, posts, nightlyRun };
 	}
 });
 

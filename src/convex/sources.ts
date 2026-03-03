@@ -20,6 +20,11 @@ const SOURCE_TITLE_LIMIT = 220;
 const SOURCE_URL_LIMIT = 2048;
 const BULK_UNSUBSCRIBE_BATCH_SIZE = 200;
 const RESUBSCRIBE_BACKFILL_BATCH_SIZE = 200;
+const NIGHTLY_REFRESH_BATCH_SIZE = 100;
+const MANUAL_REFRESH_DAILY_LIMIT = 3;
+const UTC_DAY_MS = 24 * 60 * 60 * 1000;
+
+const ADMIN_ROLE_VALUES = new Set(['admin', 'system-admin', 'superadmin', 'owner']);
 
 const sourceTypeValidator = v.union(
 	v.literal('website'),
@@ -39,6 +44,24 @@ const sourceJobStatusValidator = v.union(
 	v.literal('done'),
 	v.literal('failed')
 );
+
+const isAdminRole = (role: unknown): boolean => {
+	if (typeof role === 'string') {
+		return ADMIN_ROLE_VALUES.has(role.toLowerCase());
+	}
+	if (Array.isArray(role)) {
+		return role.some((entry) => isAdminRole(entry));
+	}
+	if (role && typeof role === 'object') {
+		const roleObject = role as { role?: unknown; name?: unknown };
+		return isAdminRole(roleObject.role ?? roleObject.name);
+	}
+	return false;
+};
+
+const nextUtcMidnightMs = (now = Date.now()) =>
+	Math.floor(now / UTC_DAY_MS) * UTC_DAY_MS + UTC_DAY_MS;
+const utcRunDateKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
 const createSnippet = (value: string) =>
 	value.trim().replace(/\s+/g, ' ').slice(0, SOURCE_ITEM_SNIPPET_LIMIT);
@@ -297,6 +320,19 @@ const sourceJobValidator = v.object({
 	createdAt: v.number(),
 	updatedAt: v.number(),
 	finishedAt: v.optional(v.number())
+});
+
+const refreshQuotaValidator = v.object({
+	isUnlimited: v.boolean(),
+	dailyLimit: v.union(v.number(), v.null()),
+	remaining: v.union(v.number(), v.null()),
+	used: v.union(v.number(), v.null()),
+	retryAfterMs: v.optional(v.number()),
+	resetsAt: v.number()
+});
+
+const nightlySourceRowValidator = v.object({
+	sourceId: v.id('sources')
 });
 
 const sourceItemShareValidator = v.object({
@@ -644,6 +680,170 @@ export const enqueueSourceSyncForUser = internalMutation({
 			createdAt: now,
 			updatedAt: now
 		});
+	}
+});
+
+export const listNightlyRefreshSources = internalQuery({
+	args: {
+		paginationOpts: paginationOptsValidator
+	},
+	returns: v.object({
+		page: v.array(nightlySourceRowValidator),
+		isDone: v.boolean(),
+		continueCursor: v.union(v.string(), v.null())
+	}),
+	handler: async (ctx, args) => {
+		const sourcePage = await ctx.db
+			.query('sources')
+			.withIndex('by_status_and_updatedAt', (q) => q.eq('status', 'active'))
+			.order('asc')
+			.paginate(args.paginationOpts);
+
+		return {
+			page: sourcePage.page.map((source) => ({
+				sourceId: source._id
+			})),
+			isDone: sourcePage.isDone,
+			continueCursor: sourcePage.continueCursor
+		};
+	}
+});
+
+export const enqueueNightlySourceSyncIfNeeded = internalMutation({
+	args: {
+		sourceId: v.id('sources')
+	},
+	returns: v.union(v.id('source_jobs'), v.null()),
+	handler: async (ctx, args) => {
+		const source = await ctx.db.get(args.sourceId);
+		if (!source || source.status !== 'active') {
+			return null;
+		}
+
+		const hasActiveSubscribers =
+			(
+				await ctx.db
+					.query('source_subscriptions')
+					.withIndex('by_sourceId_and_status', (q) =>
+						q.eq('sourceId', args.sourceId).eq('status', 'active')
+					)
+					.take(1)
+			).length > 0;
+		if (!hasActiveSubscribers) {
+			return null;
+		}
+
+		const recentJobs = await ctx.db
+			.query('source_jobs')
+			.withIndex('by_sourceId_and_createdAt', (q) => q.eq('sourceId', args.sourceId))
+			.order('desc')
+			.take(20);
+		const hasInFlightJob = recentJobs.some(
+			(job) =>
+				job.jobType === 'sync_source' && (job.status === 'queued' || job.status === 'running')
+		);
+		if (hasInFlightJob) {
+			return null;
+		}
+
+		const now = Date.now();
+		return await ctx.db.insert('source_jobs', {
+			jobType: 'sync_source',
+			sourceId: args.sourceId,
+			status: 'queued',
+			processed: 0,
+			createdAt: now,
+			updatedAt: now
+		});
+	}
+});
+
+export const initializeNightlyRun = internalMutation({
+	args: {
+		runDate: v.string()
+	},
+	returns: v.object({
+		runId: v.id('source_nightly_runs'),
+		shouldStart: v.boolean()
+	}),
+	handler: async (ctx, args) => {
+		const existing = await ctx.db
+			.query('source_nightly_runs')
+			.withIndex('by_runDate', (q) => q.eq('runDate', args.runDate))
+			.unique();
+		if (existing) {
+			if (existing.status === 'running') {
+				return { runId: existing._id, shouldStart: true };
+			}
+			return { runId: existing._id, shouldStart: false };
+		}
+
+		const now = Date.now();
+		const runId: Id<'source_nightly_runs'> = await ctx.db.insert('source_nightly_runs', {
+			runDate: args.runDate,
+			status: 'running',
+			startedAt: now,
+			processedSources: 0,
+			queuedJobs: 0,
+			updatedAt: now
+		});
+		return { runId, shouldStart: true };
+	}
+});
+
+export const updateNightlyRunProgress = internalMutation({
+	args: {
+		runId: v.id('source_nightly_runs'),
+		processedDelta: v.number(),
+		queuedDelta: v.number(),
+		cursor: v.optional(v.union(v.string(), v.null()))
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const run = await ctx.db.get(args.runId);
+		if (!run) {
+			return null;
+		}
+		await ctx.db.patch(args.runId, {
+			processedSources: run.processedSources + args.processedDelta,
+			queuedJobs: run.queuedJobs + args.queuedDelta,
+			cursor: args.cursor ?? undefined,
+			updatedAt: Date.now()
+		});
+		return null;
+	}
+});
+
+export const completeNightlyRun = internalMutation({
+	args: {
+		runId: v.id('source_nightly_runs')
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.runId, {
+			status: 'done',
+			finishedAt: Date.now(),
+			cursor: undefined,
+			updatedAt: Date.now()
+		});
+		return null;
+	}
+});
+
+export const failNightlyRun = internalMutation({
+	args: {
+		runId: v.id('source_nightly_runs'),
+		error: v.string()
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.runId, {
+			status: 'failed',
+			error: args.error.slice(0, 1000),
+			finishedAt: Date.now(),
+			updatedAt: Date.now()
+		});
+		return null;
 	}
 });
 
@@ -1073,7 +1273,12 @@ export const refreshSource = action({
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
-		await rateLimiter.limit(ctx, 'addSource', { key: authUser._id, throws: true });
+		if (!isAdminRole(authUser.role)) {
+			await rateLimiter.limit(ctx, 'manualSourceRefresh', {
+				key: authUser._id,
+				throws: true
+			});
+		}
 		const jobId: Id<'source_jobs'> = await ctx.runMutation(
 			(internal as any).sources.enqueueSourceSyncForUser,
 			{
@@ -1086,6 +1291,124 @@ export const refreshSource = action({
 			sourceId: args.sourceId
 		});
 		return jobId;
+	}
+});
+
+export const getMyRefreshQuota = query({
+	args: {},
+	returns: refreshQuotaValidator,
+	handler: async (ctx) => {
+		const authUser = await authComponent.getAuthUser(ctx);
+		if (!authUser) {
+			throw new Error('Unauthorized');
+		}
+
+		if (isAdminRole(authUser.role)) {
+			return {
+				isUnlimited: true,
+				dailyLimit: null,
+				remaining: null,
+				used: null,
+				resetsAt: nextUtcMidnightMs()
+			};
+		}
+
+		const [status, currentValue] = await Promise.all([
+			rateLimiter.check(ctx, 'manualSourceRefresh', { key: authUser._id }),
+			rateLimiter.getValue(ctx, 'manualSourceRefresh', { key: authUser._id })
+		]);
+
+		const remaining = Math.max(0, Math.floor(currentValue.value));
+		return {
+			isUnlimited: false,
+			dailyLimit: MANUAL_REFRESH_DAILY_LIMIT,
+			remaining,
+			used: Math.max(0, MANUAL_REFRESH_DAILY_LIMIT - remaining),
+			retryAfterMs: status.ok ? undefined : status.retryAfter,
+			resetsAt: nextUtcMidnightMs()
+		};
+	}
+});
+
+export const runNightlySourceRefreshBatch = internalAction({
+	args: {
+		cursor: v.union(v.string(), v.null()),
+		runId: v.optional(v.id('source_nightly_runs'))
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		let runId: Id<'source_nightly_runs'> | null = args.runId ?? null;
+		try {
+			if (!runId) {
+				const initialized: {
+					runId: Id<'source_nightly_runs'>;
+					shouldStart: boolean;
+				} = await ctx.runMutation((internal as any).sources.initializeNightlyRun, {
+					runDate: utcRunDateKey()
+				});
+				if (!initialized.shouldStart) {
+					return null;
+				}
+				runId = initialized.runId;
+			}
+
+			const sourceBatch: {
+				page: Array<{ sourceId: Id<'sources'> }>;
+				isDone: boolean;
+				continueCursor: string | null;
+			} = await ctx.runQuery((internal as any).sources.listNightlyRefreshSources, {
+				paginationOpts: {
+					numItems: NIGHTLY_REFRESH_BATCH_SIZE,
+					cursor: args.cursor
+				}
+			});
+
+			let queuedJobs = 0;
+			for (const [index, source] of sourceBatch.page.entries()) {
+				const jobId: Id<'source_jobs'> | null = await ctx.runMutation(
+					(internal as any).sources.enqueueNightlySourceSyncIfNeeded,
+					{
+						sourceId: source.sourceId
+					}
+				);
+				if (!jobId) {
+					continue;
+				}
+				queuedJobs += 1;
+				await ctx.scheduler.runAfter(index * 25, (internal as any).sources.runSourceSync, {
+					jobId,
+					sourceId: source.sourceId
+				});
+			}
+
+			await ctx.runMutation((internal as any).sources.updateNightlyRunProgress, {
+				runId,
+				processedDelta: sourceBatch.page.length,
+				queuedDelta: queuedJobs,
+				cursor: sourceBatch.continueCursor
+			});
+
+			if (!sourceBatch.isDone) {
+				await ctx.scheduler.runAfter(0, (internal as any).sources.runNightlySourceRefreshBatch, {
+					cursor: sourceBatch.continueCursor,
+					runId
+				});
+				return null;
+			}
+
+			await ctx.runMutation((internal as any).sources.completeNightlyRun, {
+				runId
+			});
+		} catch (error) {
+			if (runId) {
+				await ctx.runMutation((internal as any).sources.failNightlyRun, {
+					runId,
+					error: error instanceof Error ? error.message : 'Nightly refresh failed.'
+				});
+			}
+		}
+
+		return null;
 	}
 });
 

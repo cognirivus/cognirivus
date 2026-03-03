@@ -31,6 +31,9 @@
 	const sourcesQuery = useQuery((api as any).sources.listMySources, () =>
 		isAuthorized ? { paginationOpts: { numItems: 200, cursor: null } } : 'skip'
 	);
+	const refreshQuotaQuery = useQuery((api as any).sources.getMyRefreshQuota, () =>
+		isAuthorized ? {} : 'skip'
+	);
 
 	let selectedSourceIds = $state<Array<string>>([]);
 	let runningJobId = $state<Id<'source_jobs'> | null>(null);
@@ -58,6 +61,21 @@
 			pageItems.length > 0 &&
 			pageItems.every((row: any) => selectedSourceIds.includes(row.sourceId))
 		);
+	});
+
+	const isRefreshLimited = $derived.by(() => {
+		if (!refreshQuotaQuery.data || refreshQuotaQuery.data.isUnlimited) {
+			return false;
+		}
+		return (refreshQuotaQuery.data.remaining ?? 0) <= 0;
+	});
+
+	const refreshResetsAtUtc = $derived.by(() => {
+		const resetsAt = refreshQuotaQuery.data?.resetsAt;
+		if (!resetsAt) {
+			return null;
+		}
+		return new Date(resetsAt).toLocaleString('en-US', { timeZone: 'UTC' });
 	});
 
 	function toggleSelect(sourceId: string, checked: boolean) {
@@ -96,6 +114,14 @@
 	}
 
 	async function refreshSource(sourceId: Id<'sources'>) {
+		if (isRefreshLimited) {
+			toast.error(
+				refreshResetsAtUtc
+					? `Daily refresh limit reached. Resets at ${refreshResetsAtUtc} UTC.`
+					: 'Daily refresh limit reached.'
+			);
+			return;
+		}
 		busySourceId = sourceId;
 		try {
 			await client.action((api as any).sources.refreshSource, { sourceId });
@@ -151,6 +177,19 @@
 					<p class="text-sm text-muted-foreground">
 						Pause, refresh, and bulk-unsubscribe your sources.
 					</p>
+					{#if refreshQuotaQuery.data}
+						{#if refreshQuotaQuery.data.isUnlimited}
+							<p class="mt-1 text-xs text-muted-foreground">Manual refreshes: Unlimited</p>
+						{:else}
+							<p class="mt-1 text-xs text-muted-foreground">
+								Manual refreshes left today: {refreshQuotaQuery.data.remaining ??
+									0}/{refreshQuotaQuery.data.dailyLimit ?? 3}
+								{#if refreshResetsAtUtc}
+									• resets {refreshResetsAtUtc} UTC
+								{/if}
+							</p>
+						{/if}
+					{/if}
 				</div>
 			</div>
 			<Button
@@ -277,9 +316,13 @@
 										<Button
 											variant="outline"
 											size="icon-sm"
-											disabled={busySourceId === row.sourceId}
+											disabled={busySourceId === row.sourceId || isRefreshLimited}
 											onclick={() => refreshSource(row.sourceId)}
-											title="Refresh now"
+											title={isRefreshLimited
+												? refreshResetsAtUtc
+													? `Daily limit reached. Resets ${refreshResetsAtUtc} UTC`
+													: 'Daily limit reached'
+												: 'Refresh now'}
 										>
 											<RefreshCw class="size-3.5" />
 										</Button>

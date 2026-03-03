@@ -108,6 +108,65 @@
 		<div class="space-y-6">
 			<Card>
 				<CardHeader>
+					<CardTitle>Debug</CardTitle>
+				</CardHeader>
+				<CardContent>
+					{#if dashboardQuery.data?.nightlyRun}
+						<div class="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+							<div class="rounded-md border p-3">
+								<p class="text-xs text-muted-foreground">Last Nightly Run</p>
+								<div class="mt-1">
+									<Badge
+										variant={dashboardQuery.data.nightlyRun.status === 'failed'
+											? 'destructive'
+											: dashboardQuery.data.nightlyRun.status === 'running'
+												? 'secondary'
+												: 'default'}
+									>
+										{dashboardQuery.data.nightlyRun.status}
+									</Badge>
+								</div>
+							</div>
+							<div class="rounded-md border p-3">
+								<p class="text-xs text-muted-foreground">Run Date (UTC)</p>
+								<p class="mt-1 font-medium">{dashboardQuery.data.nightlyRun.runDate}</p>
+							</div>
+							<div class="rounded-md border p-3">
+								<p class="text-xs text-muted-foreground">Queued Sync Jobs</p>
+								<p class="mt-1 font-medium">{dashboardQuery.data.nightlyRun.queuedJobs}</p>
+							</div>
+							<div class="rounded-md border p-3">
+								<p class="text-xs text-muted-foreground">Processed Sources</p>
+								<p class="mt-1 font-medium">{dashboardQuery.data.nightlyRun.processedSources}</p>
+							</div>
+							<div class="rounded-md border p-3">
+								<p class="text-xs text-muted-foreground">Started</p>
+								<p class="mt-1 font-medium">
+									{new Date(dashboardQuery.data.nightlyRun.startedAt).toLocaleString()}
+								</p>
+							</div>
+							<div class="rounded-md border p-3">
+								<p class="text-xs text-muted-foreground">Finished</p>
+								<p class="mt-1 font-medium">
+									{dashboardQuery.data.nightlyRun.finishedAt
+										? new Date(dashboardQuery.data.nightlyRun.finishedAt).toLocaleString()
+										: 'In progress'}
+								</p>
+							</div>
+						</div>
+						{#if dashboardQuery.data.nightlyRun.error}
+							<p class="mt-3 text-sm text-destructive">{dashboardQuery.data.nightlyRun.error}</p>
+						{/if}
+					{:else}
+						<p class="text-sm text-muted-foreground">
+							No nightly refresh run has been recorded yet.
+						</p>
+					{/if}
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader>
 					<CardTitle>Sources</CardTitle>
 				</CardHeader>
 				<CardContent>
