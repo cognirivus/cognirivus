@@ -2,10 +2,11 @@
 	import { page } from '$app/state';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
+	import type { Id } from '$convex/_generated/dataModel';
 	import { api } from '$convex/_generated/api';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
-	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import { Card, CardContent } from '$lib/components/ui/card';
 	import {
 		Lock,
 		Globe,
@@ -38,7 +39,7 @@
 			: 'skip'
 	);
 
-	async function deletePost(postId: any) {
+	async function deletePost(postId: Id<'posts'>) {
 		if (!confirm('Are you sure you want to delete this post? This action cannot be undone.'))
 			return;
 		try {

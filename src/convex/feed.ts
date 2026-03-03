@@ -1,8 +1,14 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
-import { query } from './_generated/server';
+import { query, type QueryCtx } from './_generated/server';
+import type { Doc, Id } from './_generated/dataModel';
 import { authComponent } from './auth';
-import { applyFeedRanking, paginateByCursor, windowStartFromBucket } from './lib/feedRanking';
+import {
+	applyFeedRanking,
+	paginateByCursor,
+	windowStartFromBucket,
+	type FeedTab
+} from './lib/feedRanking';
 
 const tabValidator = v.union(v.literal('new'), v.literal('top'), v.literal('discussed'));
 const windowValidator = v.union(
@@ -12,13 +18,14 @@ const windowValidator = v.union(
 	v.literal('30d')
 );
 
-const getOptionalAuthUser = async (ctx: any) => {
-	try {
-		return await authComponent.getAuthUser(ctx);
-	} catch {
-		return null;
-	}
-};
+const MAX_CANDIDATE_LIMIT = 2000;
+const MIN_CANDIDATE_LIMIT = 300;
+const CANDIDATE_MULTIPLIER = 20;
+const TAG_SCAN_LIMIT = 350;
+const MAX_FILTER_TAGS = 10;
+
+type GlobalScope = 'all' | 'public' | 'community' | 'you' | 'me';
+type ViewerAuthId = string | null;
 
 const feedPostValidator = v.object({
 	_id: v.id('posts'),
@@ -51,74 +58,183 @@ const pagedFeedValidator = v.object({
 	continueCursor: v.union(v.string(), v.null())
 });
 
-const mapFeedPosts = async (ctx: any, posts: Array<any>, viewerAuthId: string | null) => {
-	return await Promise.all(
-		posts.map(async (post) => {
-			const [profile, community, vote] = await Promise.all([
-				ctx.db
-					.query('users_profile')
-					.withIndex('by_authId', (q: any) => q.eq('authId', post.authorAuthId))
-					.unique(),
-				post.communityId ? ctx.db.get(post.communityId) : null,
-				viewerAuthId
-					? ctx.db
-							.query('post_votes')
-							.withIndex('by_postId_and_userAuthId', (q: any) =>
-								q.eq('postId', post._id).eq('userAuthId', viewerAuthId)
-							)
-							.unique()
-					: Promise.resolve(null)
-			]);
+const getOptionalAuthUser = async (ctx: QueryCtx) => {
+	try {
+		return await authComponent.getAuthUser(ctx);
+	} catch {
+		return null;
+	}
+};
 
-			return {
-				_id: post._id,
-				title: post.title,
-				type: post.type,
-				snippet: post.snippet,
-				url: post.url,
-				authorAuthId: post.authorAuthId,
-				authorName: profile?.name ?? 'Unknown',
-				authorUsername: profile?.username ?? null,
-				communityId: post.communityId,
-				communitySlug: community?.slug,
-				communityName: community?.name,
-				visibility: post.visibility,
-				score: post.score,
-				likes: post.likes,
-				dislikes: post.dislikes,
-				commentCount: post.commentCount,
-				tags: post.tags,
-				sourceType: post.sourceType,
-				createdAt: post.createdAt,
-				updatedAt: post.updatedAt,
-				userVote: (vote?.value ?? null) as -1 | 1 | null,
-				canDelete: viewerAuthId === post.authorAuthId
-			};
-		})
+const normalizeSearch = (value?: string) => {
+	const normalizedValue = value?.trim().toLowerCase() ?? '';
+	return normalizedValue.length > 0 ? normalizedValue : undefined;
+};
+
+const normalizeTags = (tags?: Array<string>) => {
+	if (!tags || tags.length === 0) {
+		return undefined;
+	}
+	const uniqueTags = [...new Set(tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean))];
+	if (uniqueTags.length === 0) {
+		return undefined;
+	}
+	if (uniqueTags.length > MAX_FILTER_TAGS) {
+		throw new Error(`At most ${MAX_FILTER_TAGS} tags can be used for feed filtering.`);
+	}
+	return uniqueTags;
+};
+
+const candidateLimitFor = (numItems: number) =>
+	Math.min(Math.max(numItems * CANDIDATE_MULTIPLIER, MIN_CANDIDATE_LIMIT), MAX_CANDIDATE_LIMIT);
+
+const dedupePosts = (posts: Array<Doc<'posts'>>) => {
+	const seen = new Set<Id<'posts'>>();
+	const deduped: Array<Doc<'posts'>> = [];
+	for (const post of posts) {
+		if (seen.has(post._id)) {
+			continue;
+		}
+		seen.add(post._id);
+		deduped.push(post);
+	}
+	return deduped;
+};
+
+const queryPostsByVisibilityScope = async (
+	ctx: QueryCtx,
+	visibilityScope: 'public_global' | 'public_community',
+	tab: FeedTab,
+	limit: number
+) => {
+	if (tab === 'top') {
+		return await ctx.db
+			.query('posts')
+			.withIndex('by_visibilityScope_and_score_and_createdAt', (q) =>
+				q.eq('visibilityScope', visibilityScope)
+			)
+			.order('desc')
+			.take(limit);
+	}
+	if (tab === 'discussed') {
+		return await ctx.db
+			.query('posts')
+			.withIndex('by_visibilityScope_and_commentCount_and_createdAt', (q) =>
+				q.eq('visibilityScope', visibilityScope)
+			)
+			.order('desc')
+			.take(limit);
+	}
+	return await ctx.db
+		.query('posts')
+		.withIndex('by_visibilityScope_and_createdAt', (q) => q.eq('visibilityScope', visibilityScope))
+		.order('desc')
+		.take(limit);
+};
+
+const queryPostsByCommunity = async (
+	ctx: QueryCtx,
+	communityId: Id<'communities'>,
+	tab: FeedTab,
+	limit: number
+) => {
+	if (tab === 'top') {
+		return await ctx.db
+			.query('posts')
+			.withIndex('by_communityId_and_visibility_and_score_and_createdAt', (q) =>
+				q.eq('communityId', communityId).eq('visibility', 'public')
+			)
+			.order('desc')
+			.take(limit);
+	}
+	if (tab === 'discussed') {
+		return await ctx.db
+			.query('posts')
+			.withIndex('by_communityId_and_visibility_and_commentCount_and_createdAt', (q) =>
+				q.eq('communityId', communityId).eq('visibility', 'public')
+			)
+			.order('desc')
+			.take(limit);
+	}
+	return await ctx.db
+		.query('posts')
+		.withIndex('by_communityId_and_visibility_and_createdAt', (q) =>
+			q.eq('communityId', communityId).eq('visibility', 'public')
+		)
+		.order('desc')
+		.take(limit);
+};
+
+const queryPostsByAuthor = async (
+	ctx: QueryCtx,
+	authorAuthId: string,
+	tab: FeedTab,
+	limit: number,
+	visibility?: 'public' | 'private'
+) => {
+	if (visibility === undefined) {
+		return await ctx.db
+			.query('posts')
+			.withIndex('by_authorAuthId_and_createdAt', (q) => q.eq('authorAuthId', authorAuthId))
+			.order('desc')
+			.take(limit);
+	}
+
+	if (tab === 'top') {
+		return await ctx.db
+			.query('posts')
+			.withIndex('by_authorAuthId_and_visibility_and_score_and_createdAt', (q) =>
+				q.eq('authorAuthId', authorAuthId).eq('visibility', visibility)
+			)
+			.order('desc')
+			.take(limit);
+	}
+	if (tab === 'discussed') {
+		return await ctx.db
+			.query('posts')
+			.withIndex('by_authorAuthId_and_visibility_and_commentCount_and_createdAt', (q) =>
+				q.eq('authorAuthId', authorAuthId).eq('visibility', visibility)
+			)
+			.order('desc')
+			.take(limit);
+	}
+
+	return await ctx.db
+		.query('posts')
+		.withIndex('by_authorAuthId_and_visibility_and_createdAt', (q) =>
+			q.eq('authorAuthId', authorAuthId).eq('visibility', visibility)
+		)
+		.order('desc')
+		.take(limit);
+};
+
+const loadTaggedCandidates = async (ctx: QueryCtx, tags: Array<string>) => {
+	const tagMatches = await Promise.all(
+		tags.map((tag) =>
+			ctx.db
+				.query('post_tags')
+				.withIndex('by_tagLower_and_createdAt', (q) => q.eq('tagLower', tag))
+				.order('desc')
+				.take(TAG_SCAN_LIMIT)
+		)
 	);
+
+	const postIds = [...new Set(tagMatches.flat().map((match) => match.postId))];
+	const posts = await Promise.all(postIds.map((postId) => ctx.db.get(postId)));
+	return posts.filter((post): post is Doc<'posts'> => !!post);
 };
 
-const getWindowMetrics = async (ctx: any, postId: any, windowStart: number) => {
-	const [votes, comments] = await Promise.all([
-		ctx.db
-			.query('post_votes')
-			.withIndex('by_postId_and_createdAt', (q: any) =>
-				q.eq('postId', postId).gte('createdAt', windowStart)
-			)
-			.collect(),
-		ctx.db
-			.query('post_comments')
-			.withIndex('by_postId_and_createdAt', (q: any) =>
-				q.eq('postId', postId).gte('createdAt', windowStart)
-			)
-			.collect()
-	]);
-
-	const score = votes.reduce((total: number, vote: any) => total + vote.value, 0);
-	return { score, commentCount: comments.length };
+type VisibilityCache = {
+	communityById: Map<Id<'communities'>, Doc<'communities'> | null>;
+	membershipByCommunityId: Map<Id<'communities'>, boolean>;
 };
 
-const isVisibleToViewer = async (ctx: any, post: any, viewerAuthId: string | null) => {
+const canViewerReadPost = async (
+	ctx: QueryCtx,
+	post: Doc<'posts'>,
+	viewerAuthId: ViewerAuthId,
+	cache: VisibilityCache
+) => {
 	if (viewerAuthId === post.authorAuthId) {
 		return true;
 	}
@@ -128,80 +244,149 @@ const isVisibleToViewer = async (ctx: any, post: any, viewerAuthId: string | nul
 	if (!post.communityId) {
 		return true;
 	}
-	const community = await ctx.db.get(post.communityId);
+
+	let community = cache.communityById.get(post.communityId);
+	if (community === undefined) {
+		community = await ctx.db.get(post.communityId);
+		cache.communityById.set(post.communityId, community);
+	}
 	if (!community) {
 		return false;
 	}
+
 	if (community.visibility === 'public') {
 		return true;
 	}
 	if (!viewerAuthId) {
 		return false;
 	}
-	const membership = await ctx.db
-		.query('community_memberships')
-		.withIndex('by_communityId_and_userAuthId', (q: any) =>
-			q.eq('communityId', community._id).eq('userAuthId', viewerAuthId)
-		)
-		.unique();
-	return membership?.status === 'active';
+
+	let isMember = cache.membershipByCommunityId.get(post.communityId);
+	if (isMember === undefined) {
+		const membership = await ctx.db
+			.query('community_memberships')
+			.withIndex('by_communityId_and_userAuthId', (q) =>
+				q.eq('communityId', post.communityId!).eq('userAuthId', viewerAuthId)
+			)
+			.unique();
+		isMember = membership?.status === 'active';
+		cache.membershipByCommunityId.set(post.communityId, isMember);
+	}
+
+	return isMember;
 };
 
-const materializeRanked = async (
-	ctx: any,
-	rawPosts: Array<any>,
-	tab: 'new' | 'top' | 'discussed',
+const mapFeedPosts = async (
+	ctx: QueryCtx,
+	posts: Array<Doc<'posts'>>,
+	viewerAuthId: ViewerAuthId
+) => {
+	const authorAuthIds = [...new Set(posts.map((post) => post.authorAuthId))];
+	const profiles = await Promise.all(
+		authorAuthIds.map((authId) =>
+			ctx.db
+				.query('users_profile')
+				.withIndex('by_authId', (q) => q.eq('authId', authId))
+				.unique()
+		)
+	);
+	const profileByAuthId = new Map(authorAuthIds.map((authId, index) => [authId, profiles[index]]));
+
+	const communityIds = [...new Set(posts.map((post) => post.communityId).filter(Boolean))] as Array<
+		Id<'communities'>
+	>;
+	const communities = await Promise.all(communityIds.map((communityId) => ctx.db.get(communityId)));
+	const communityById = new Map(
+		communityIds.map((communityId, index) => [communityId, communities[index]])
+	);
+
+	const userVotes = viewerAuthId
+		? await Promise.all(
+				posts.map((post) =>
+					ctx.db
+						.query('post_votes')
+						.withIndex('by_postId_and_userAuthId', (q) =>
+							q.eq('postId', post._id).eq('userAuthId', viewerAuthId)
+						)
+						.unique()
+				)
+			)
+		: [];
+
+	return posts.map((post, index) => {
+		const profile = profileByAuthId.get(post.authorAuthId);
+		const community = post.communityId ? communityById.get(post.communityId) : null;
+		const userVote = viewerAuthId ? (userVotes[index]?.value ?? null) : null;
+
+		return {
+			_id: post._id,
+			title: post.title,
+			type: post.type,
+			snippet: post.snippet,
+			url: post.url,
+			authorAuthId: post.authorAuthId,
+			authorName: profile?.name ?? 'Unknown',
+			authorUsername: profile?.username ?? null,
+			communityId: post.communityId,
+			communitySlug: community?.slug,
+			communityName: community?.name,
+			visibility: post.visibility,
+			score: post.score,
+			likes: post.likes,
+			dislikes: post.dislikes,
+			commentCount: post.commentCount,
+			tags: post.tags,
+			sourceType: post.sourceType,
+			createdAt: post.createdAt,
+			updatedAt: post.updatedAt,
+			userVote: (userVote ?? null) as -1 | 1 | null,
+			canDelete: viewerAuthId === post.authorAuthId
+		};
+	});
+};
+
+const rankAndPaginate = async (
+	ctx: QueryCtx,
+	posts: Array<Doc<'posts'>>,
+	tab: FeedTab,
 	windowStart: number,
-	viewerAuthId: string | null,
+	viewerAuthId: ViewerAuthId,
 	search: string | undefined,
-	tags: string[] | undefined,
+	tags: Array<string> | undefined,
 	cursor: string | null,
 	numItems: number
 ) => {
-	const visible: Array<any> = [];
-	for (const post of rawPosts) {
-		if (await isVisibleToViewer(ctx, post, viewerAuthId)) {
-			// Apply search filter if provided
-			if (search && search.trim()) {
-				const q = search.toLowerCase();
-				const match =
-					post.title.toLowerCase().includes(q) ||
-					(post.snippet && post.snippet.toLowerCase().includes(q));
-				if (!match) continue;
-			}
-			// Apply tag filter if provided (OR logic)
-			if (tags && tags.length > 0) {
-				const postTags = post.tags || [];
-				const hasMatch = tags.some((t) => postTags.includes(t));
-				if (!hasMatch) continue;
-			}
-			visible.push(post);
+	const visibilityCache: VisibilityCache = {
+		communityById: new Map(),
+		membershipByCommunityId: new Map()
+	};
+
+	const filtered: Array<Doc<'posts'>> = [];
+	for (const post of posts) {
+		if (!(await canViewerReadPost(ctx, post, viewerAuthId, visibilityCache))) {
+			continue;
 		}
+		if (post.createdAt < windowStart) {
+			continue;
+		}
+		if (search) {
+			const matchesSearch =
+				post.title.toLowerCase().includes(search) || post.snippet.toLowerCase().includes(search);
+			if (!matchesSearch) {
+				continue;
+			}
+		}
+		if (tags && tags.length > 0) {
+			const postTags = post.tags ?? [];
+			if (!tags.some((tag) => postTags.includes(tag))) {
+				continue;
+			}
+		}
+		filtered.push(post);
 	}
 
-	const rankedCandidates =
-		tab === 'new'
-			? visible
-					.filter((post) => post.createdAt >= windowStart)
-					.map((post) => ({ ...post, score: post.score, commentCount: post.commentCount }))
-			: await Promise.all(
-					visible.map(async (post) => {
-						const metrics = await getWindowMetrics(ctx, post._id, windowStart);
-						return {
-							...post,
-							score: tab === 'top' ? metrics.score : post.score,
-							commentCount: tab === 'discussed' ? metrics.commentCount : post.commentCount
-						};
-					})
-				);
-
-	const ranked = applyFeedRanking(rankedCandidates, tab);
-	const rankedSourceById = new Map(visible.map((post) => [post._id, post]));
-	const rankedSourcePosts = ranked
-		.map((post) => rankedSourceById.get(post._id))
-		.filter((post): post is any => !!post);
-
-	const paged = paginateByCursor(rankedSourcePosts, cursor, numItems);
+	const ranked = applyFeedRanking(filtered, tab);
+	const paged = paginateByCursor(ranked, cursor, numItems);
 	const page = await mapFeedPosts(ctx, paged.page, viewerAuthId);
 
 	return {
@@ -209,6 +394,40 @@ const materializeRanked = async (
 		isDone: paged.isDone,
 		continueCursor: paged.continueCursor
 	};
+};
+
+const loadGlobalCandidates = async (
+	ctx: QueryCtx,
+	scope: GlobalScope,
+	tab: FeedTab,
+	viewerAuthId: ViewerAuthId,
+	limit: number
+) => {
+	if (scope === 'you') {
+		if (!viewerAuthId) {
+			return [];
+		}
+		return await queryPostsByAuthor(ctx, viewerAuthId, tab, limit, 'private');
+	}
+	if (scope === 'me') {
+		if (!viewerAuthId) {
+			return [];
+		}
+		return await queryPostsByAuthor(ctx, viewerAuthId, tab, limit);
+	}
+	if (scope === 'public') {
+		return await queryPostsByVisibilityScope(ctx, 'public_global', tab, limit);
+	}
+	if (scope === 'community') {
+		return await queryPostsByVisibilityScope(ctx, 'public_community', tab, limit);
+	}
+
+	const [globalPosts, communityPosts] = await Promise.all([
+		queryPostsByVisibilityScope(ctx, 'public_global', tab, limit),
+		queryPostsByVisibilityScope(ctx, 'public_community', tab, limit)
+	]);
+
+	return dedupePosts([...globalPosts, ...communityPosts]);
 };
 
 export const listGlobal = query({
@@ -231,50 +450,45 @@ export const listGlobal = query({
 	returns: pagedFeedValidator,
 	handler: async (ctx, args) => {
 		const authUser = await getOptionalAuthUser(ctx);
-		const windowStart = args.scope === 'me' ? 0 : windowStartFromBucket(args.window ?? '24h');
-		const batchSize = Math.max(args.paginationOpts.numItems * 8, 200);
+		const viewerAuthId = authUser?._id ?? null;
+		const scope = (args.scope ?? (viewerAuthId ? 'all' : 'public')) as GlobalScope;
+		const windowStart = scope === 'me' ? 0 : windowStartFromBucket(args.window ?? '24h');
+		const search = normalizeSearch(args.search);
+		const tags = normalizeTags(args.tags);
+		const candidateLimit = candidateLimitFor(args.paginationOpts.numItems);
 
-		let rawPosts;
-		if (args.scope === 'you') {
-			if (!authUser) {
-				return { page: [], isDone: true, continueCursor: null };
+		const rawCandidates = tags
+			? await loadTaggedCandidates(ctx, tags)
+			: await loadGlobalCandidates(ctx, scope, args.tab, viewerAuthId, candidateLimit);
+
+		const scopeFilteredCandidates = rawCandidates.filter((post) => {
+			if (scope === 'you') {
+				return (
+					viewerAuthId !== null &&
+					post.authorAuthId === viewerAuthId &&
+					post.visibility === 'private'
+				);
 			}
-			rawPosts = await ctx.db
-				.query('posts')
-				.withIndex('by_authorAuthId_and_visibility_and_createdAt', (q) =>
-					q.eq('authorAuthId', authUser._id).eq('visibility', 'private')
-				)
-				.order('desc')
-				.take(batchSize);
-		} else if (args.scope === 'me') {
-			if (!authUser) {
-				return { page: [], isDone: true, continueCursor: null };
+			if (scope === 'me') {
+				return viewerAuthId !== null && post.authorAuthId === viewerAuthId;
 			}
-			rawPosts = await ctx.db
-				.query('posts')
-				.withIndex('by_authorAuthId_and_createdAt', (q) => q.eq('authorAuthId', authUser._id))
-				.order('desc')
-				.take(batchSize);
-		} else {
-			let query = ctx.db.query('posts').withIndex('by_createdAt').order('desc');
-
-			if (args.scope === 'public') {
-				query = query.filter((q) => q.eq(q.field('communityId'), undefined));
-			} else if (args.scope === 'community') {
-				query = query.filter((q) => q.neq(q.field('communityId'), undefined));
+			if (scope === 'public') {
+				return post.visibilityScope === 'public_global';
 			}
+			if (scope === 'community') {
+				return post.visibilityScope === 'public_community';
+			}
+			return true;
+		});
 
-			rawPosts = await query.filter((q) => q.neq(q.field('visibility'), 'private')).take(batchSize);
-		}
-
-		return await materializeRanked(
+		return await rankAndPaginate(
 			ctx,
-			rawPosts,
+			scopeFilteredCandidates,
 			args.tab,
 			windowStart,
-			authUser?._id ?? null,
-			args.search,
-			args.tags,
+			viewerAuthId,
+			search,
+			tags,
 			args.paginationOpts.cursor,
 			args.paginationOpts.numItems
 		);
@@ -293,10 +507,12 @@ export const listCommunity = query({
 	returns: pagedFeedValidator,
 	handler: async (ctx, args) => {
 		const authUser = await getOptionalAuthUser(ctx);
+		const viewerAuthId = authUser?._id ?? null;
 		const community = await ctx.db
 			.query('communities')
 			.withIndex('by_slug', (q) => q.eq('slug', args.slug.trim().toLowerCase()))
 			.unique();
+
 		if (!community) {
 			return {
 				page: [],
@@ -306,13 +522,13 @@ export const listCommunity = query({
 		}
 
 		if (community.visibility === 'private') {
-			if (!authUser) {
+			if (!viewerAuthId) {
 				throw new Error('Private community');
 			}
 			const membership = await ctx.db
 				.query('community_memberships')
 				.withIndex('by_communityId_and_userAuthId', (q) =>
-					q.eq('communityId', community._id).eq('userAuthId', authUser._id)
+					q.eq('communityId', community._id).eq('userAuthId', viewerAuthId)
 				)
 				.unique();
 			if (!membership || membership.status !== 'active') {
@@ -320,23 +536,26 @@ export const listCommunity = query({
 			}
 		}
 
+		const search = normalizeSearch(args.search);
+		const tags = normalizeTags(args.tags);
 		const windowStart = windowStartFromBucket(args.window ?? '24h');
-		const batchSize = Math.max(args.paginationOpts.numItems * 8, 200);
-		const rawPosts = await ctx.db
-			.query('posts')
-			.withIndex('by_communityId_and_createdAt', (q) => q.eq('communityId', community._id))
-			.filter((q) => q.neq(q.field('visibility'), 'private'))
-			.order('desc')
-			.take(batchSize);
+		const candidateLimit = candidateLimitFor(args.paginationOpts.numItems);
 
-		return await materializeRanked(
+		const rawCandidates = tags
+			? await loadTaggedCandidates(ctx, tags)
+			: await queryPostsByCommunity(ctx, community._id, args.tab, candidateLimit);
+		const candidates = rawCandidates.filter(
+			(post) => post.communityId === community._id && post.visibility === 'public'
+		);
+
+		return await rankAndPaginate(
 			ctx,
-			rawPosts,
+			candidates,
 			args.tab,
 			windowStart,
-			authUser?._id ?? null,
-			args.search,
-			args.tags,
+			viewerAuthId,
+			search,
+			tags,
 			args.paginationOpts.cursor,
 			args.paginationOpts.numItems
 		);
@@ -355,10 +574,14 @@ export const listUser = query({
 	returns: pagedFeedValidator,
 	handler: async (ctx, args) => {
 		const authUser = await getOptionalAuthUser(ctx);
+		const viewerAuthId = authUser?._id ?? null;
 		const profile = await ctx.db
 			.query('users_profile')
-			.withIndex('by_username', (q) => q.eq('username', args.username.trim().toLowerCase()))
+			.withIndex('by_usernameLower', (q) =>
+				q.eq('usernameLower', args.username.trim().toLowerCase())
+			)
 			.unique();
+
 		if (!profile) {
 			return {
 				page: [],
@@ -367,23 +590,26 @@ export const listUser = query({
 			};
 		}
 
+		const search = normalizeSearch(args.search);
+		const tags = normalizeTags(args.tags);
 		const windowStart = windowStartFromBucket(args.window ?? '24h');
-		const batchSize = Math.max(args.paginationOpts.numItems * 8, 200);
-		const rawPosts = await ctx.db
-			.query('posts')
-			.withIndex('by_authorAuthId_and_createdAt', (q) => q.eq('authorAuthId', profile.authId))
-			.filter((q) => q.neq(q.field('visibility'), 'private'))
-			.order('desc')
-			.take(batchSize);
+		const candidateLimit = candidateLimitFor(args.paginationOpts.numItems);
 
-		return await materializeRanked(
+		const rawCandidates = tags
+			? await loadTaggedCandidates(ctx, tags)
+			: await queryPostsByAuthor(ctx, profile.authId, args.tab, candidateLimit, 'public');
+		const candidates = rawCandidates.filter(
+			(post) => post.authorAuthId === profile.authId && post.visibility === 'public'
+		);
+
+		return await rankAndPaginate(
 			ctx,
-			rawPosts,
+			candidates,
 			args.tab,
 			windowStart,
-			authUser?._id ?? null,
-			args.search,
-			args.tags,
+			viewerAuthId,
+			search,
+			tags,
 			args.paginationOpts.cursor,
 			args.paginationOpts.numItems
 		);

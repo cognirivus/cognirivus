@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { action, internalAction, internalMutation, mutation, query } from './_generated/server';
 import { authComponent } from './auth';
@@ -8,6 +9,8 @@ import { rateLimiter } from './lib/rateLimits';
 
 const POST_BODY_INLINE_LIMIT = 1000;
 const POST_SNIPPET_LIMIT = 500;
+const MAX_TAGS_PER_POST = 10;
+const MAX_TAG_LENGTH = 32;
 
 const postTypeValidator = v.union(v.literal('text'), v.literal('link'), v.literal('media'));
 const voteValueValidator = v.union(v.literal(1), v.literal(-1));
@@ -76,6 +79,54 @@ const requireAuthenticatedUser = async (ctx: any) => {
 const normalizeTitle = (title: string) => title.trim();
 const normalizeBody = (body: string) => body.trim();
 const createSnippet = (input: string) => input.trim().slice(0, POST_SNIPPET_LIMIT);
+const normalizeTag = (tag: string) => tag.trim().toLowerCase();
+
+const normalizeTags = (tags?: Array<string>) => {
+	if (!tags || tags.length === 0) {
+		return [];
+	}
+
+	const uniqueTags = new Set<string>();
+	for (const rawTag of tags) {
+		const normalizedTag = normalizeTag(rawTag);
+		if (!normalizedTag) {
+			continue;
+		}
+		if (normalizedTag.length > MAX_TAG_LENGTH) {
+			throw new Error(`Tag "${normalizedTag.slice(0, 20)}" exceeds ${MAX_TAG_LENGTH} characters.`);
+		}
+		uniqueTags.add(normalizedTag);
+		if (uniqueTags.size > MAX_TAGS_PER_POST) {
+			throw new Error(`A post can have at most ${MAX_TAGS_PER_POST} tags.`);
+		}
+	}
+
+	return [...uniqueTags];
+};
+
+const deriveScope = (
+	communityId: Id<'communities'> | undefined,
+	visibility: 'public' | 'private'
+): {
+	scopeType: 'global' | 'community';
+	visibilityScope: 'public_global' | 'public_community' | 'private';
+} => {
+	const scopeType = communityId ? ('community' as const) : ('global' as const);
+	if (visibility === 'private') {
+		return { scopeType, visibilityScope: 'private' };
+	}
+	return {
+		scopeType,
+		visibilityScope: communityId ? 'public_community' : 'public_global'
+	};
+};
+
+const normalizeTagsForBackfill = (tags?: Array<string>) =>
+	[
+		...new Set(
+			(tags ?? []).map((tag) => normalizeTag(tag).slice(0, MAX_TAG_LENGTH)).filter(Boolean)
+		)
+	].slice(0, MAX_TAGS_PER_POST);
 
 const ensureProfile = async (ctx: any, authUser: any) => {
 	const existing = await ctx.db
@@ -87,6 +138,12 @@ const ensureProfile = async (ctx: any, authUser: any) => {
 		if (!existing.username) {
 			throw new Error('Please set your username in /settings/username before posting.');
 		}
+		if (existing.nameLower !== authUser.name.trim().toLowerCase()) {
+			await ctx.db.patch(existing._id, {
+				nameLower: authUser.name.trim().toLowerCase(),
+				updatedAt: Date.now()
+			});
+		}
 		return existing;
 	}
 
@@ -95,6 +152,7 @@ const ensureProfile = async (ctx: any, authUser: any) => {
 		authId: authUser._id,
 		email: authUser.email,
 		name: authUser.name,
+		nameLower: authUser.name.trim().toLowerCase(),
 		image: authUser.image,
 		createdAt: now,
 		updatedAt: now
@@ -232,6 +290,10 @@ export const createStored = internalMutation({
 	},
 	returns: v.id('posts'),
 	handler: async (ctx, args) => {
+		const visibility = args.visibility ?? 'private';
+		const tags = normalizeTags(args.tags);
+		const { scopeType, visibilityScope } = deriveScope(args.communityId, visibility);
+
 		if (args.communityId) {
 			const community = await ctx.db.get(args.communityId);
 			if (!community) {
@@ -252,17 +314,19 @@ export const createStored = internalMutation({
 		}
 
 		const now = Date.now();
-		return await ctx.db.insert('posts', {
+		const postId = await ctx.db.insert('posts', {
 			authorAuthId: args.authorAuthId,
 			communityId: args.communityId,
-			visibility: args.visibility ?? 'private',
+			scopeType,
+			visibility,
+			visibilityScope,
 			type: args.type,
 			title: args.title,
 			snippet: args.snippet,
 			body: args.body,
 			r2Key: args.r2Key,
 			url: args.url,
-			tags: args.tags,
+			tags: tags.length > 0 ? tags : undefined,
 			sourceType: args.sourceType,
 			score: 0,
 			likes: 0,
@@ -271,6 +335,16 @@ export const createStored = internalMutation({
 			createdAt: args.createdAt ?? now,
 			updatedAt: now
 		});
+
+		for (const tagLower of tags) {
+			await ctx.db.insert('post_tags', {
+				postId,
+				tagLower,
+				createdAt: args.createdAt ?? now
+			});
+		}
+
+		return postId;
 	}
 });
 
@@ -716,6 +790,14 @@ export const deletePost = mutation({
 			await ctx.db.delete(comment._id);
 		}
 
+		const postTags = await ctx.db
+			.query('post_tags')
+			.withIndex('by_postId', (q) => q.eq('postId', args.postId))
+			.collect();
+		for (const postTag of postTags) {
+			await ctx.db.delete(postTag._id);
+		}
+
 		await ctx.db.delete(post._id);
 		if (post.r2Key) {
 			await ctx.scheduler.runAfter(0, internal.posts.deleteStoredBody, {
@@ -741,5 +823,72 @@ export const deleteStoredBody = internalAction({
 			console.error('Failed to delete R2 object', args.r2Key, error);
 		}
 		return null;
+	}
+});
+
+export const backfillDerivedPostFields = internalMutation({
+	args: {
+		paginationOpts: paginationOptsValidator
+	},
+	returns: v.object({
+		processedPosts: v.number(),
+		isDone: v.boolean(),
+		continueCursor: v.union(v.string(), v.null())
+	}),
+	handler: async (ctx, args) => {
+		const result = await ctx.db.query('posts').paginate(args.paginationOpts);
+		let processedPosts = 0;
+
+		for (const post of result.page) {
+			const visibility = (post.visibility ?? 'private') as 'public' | 'private';
+			const normalizedTags = normalizeTagsForBackfill(post.tags);
+			const { scopeType, visibilityScope } = deriveScope(post.communityId, visibility);
+
+			const shouldPatchPost =
+				post.visibility !== visibility ||
+				post.scopeType !== scopeType ||
+				post.visibilityScope !== visibilityScope ||
+				JSON.stringify(post.tags ?? []) !== JSON.stringify(normalizedTags);
+
+			if (shouldPatchPost) {
+				await ctx.db.patch(post._id, {
+					visibility,
+					scopeType,
+					visibilityScope,
+					tags: normalizedTags.length > 0 ? normalizedTags : undefined,
+					updatedAt: Date.now()
+				});
+			}
+
+			const existingPostTags = await ctx.db
+				.query('post_tags')
+				.withIndex('by_postId', (q) => q.eq('postId', post._id))
+				.collect();
+			const existingTagSet = new Set(existingPostTags.map((row) => row.tagLower));
+			const normalizedTagSet = new Set(normalizedTags);
+
+			for (const existingRow of existingPostTags) {
+				if (!normalizedTagSet.has(existingRow.tagLower)) {
+					await ctx.db.delete(existingRow._id);
+				}
+			}
+			for (const tagLower of normalizedTags) {
+				if (!existingTagSet.has(tagLower)) {
+					await ctx.db.insert('post_tags', {
+						postId: post._id,
+						tagLower,
+						createdAt: post.createdAt
+					});
+				}
+			}
+
+			processedPosts += 1;
+		}
+
+		return {
+			processedPosts,
+			isDone: result.isDone,
+			continueCursor: result.continueCursor
+		};
 	}
 });
