@@ -8,15 +8,19 @@ const schema = defineSchema({
 		authId: v.string(),
 		email: v.string(),
 		name: v.string(),
+		nameLower: v.string(),
 		image: v.optional(v.union(v.null(), v.string())),
 		username: v.optional(v.string()),
+		usernameLower: v.optional(v.string()),
 		usernameSetAt: v.optional(v.number()),
 		bio: v.optional(v.string()),
 		createdAt: v.number(),
 		updatedAt: v.number()
 	})
 		.index('by_authId', ['authId'])
-		.index('by_username', ['username']),
+		.index('by_username', ['username'])
+		.index('by_usernameLower', ['usernameLower'])
+		.index('by_nameLower', ['nameLower']),
 	communities: defineTable({
 		slug: v.string(),
 		name: v.string(),
@@ -44,7 +48,13 @@ const schema = defineSchema({
 	posts: defineTable({
 		authorAuthId: v.string(),
 		communityId: v.optional(v.id('communities')),
+		scopeType: v.union(v.literal('global'), v.literal('community')),
 		visibility: v.optional(v.union(v.literal('public'), v.literal('private'))),
+		visibilityScope: v.union(
+			v.literal('public_global'),
+			v.literal('public_community'),
+			v.literal('private')
+		),
 		type: v.union(v.literal('text'), v.literal('link'), v.literal('media')),
 		title: v.string(),
 		body: v.optional(v.string()),
@@ -61,13 +71,58 @@ const schema = defineSchema({
 		updatedAt: v.number()
 	})
 		.index('by_createdAt', ['createdAt'])
+		.index('by_scopeType_and_createdAt', ['scopeType', 'createdAt'])
+		.index('by_visibilityScope_and_createdAt', ['visibilityScope', 'createdAt'])
+		.index('by_visibilityScope_and_score_and_createdAt', ['visibilityScope', 'score', 'createdAt'])
+		.index('by_visibilityScope_and_commentCount_and_createdAt', [
+			'visibilityScope',
+			'commentCount',
+			'createdAt'
+		])
 		.index('by_communityId_and_createdAt', ['communityId', 'createdAt'])
+		.index('by_communityId_and_visibility_and_createdAt', [
+			'communityId',
+			'visibility',
+			'createdAt'
+		])
+		.index('by_communityId_and_visibility_and_score_and_createdAt', [
+			'communityId',
+			'visibility',
+			'score',
+			'createdAt'
+		])
+		.index('by_communityId_and_visibility_and_commentCount_and_createdAt', [
+			'communityId',
+			'visibility',
+			'commentCount',
+			'createdAt'
+		])
 		.index('by_authorAuthId_and_createdAt', ['authorAuthId', 'createdAt'])
 		.index('by_authorAuthId_and_visibility_and_createdAt', [
 			'authorAuthId',
 			'visibility',
 			'createdAt'
+		])
+		.index('by_authorAuthId_and_visibility_and_score_and_createdAt', [
+			'authorAuthId',
+			'visibility',
+			'score',
+			'createdAt'
+		])
+		.index('by_authorAuthId_and_visibility_and_commentCount_and_createdAt', [
+			'authorAuthId',
+			'visibility',
+			'commentCount',
+			'createdAt'
 		]),
+	post_tags: defineTable({
+		postId: v.id('posts'),
+		tagLower: v.string(),
+		createdAt: v.number()
+	})
+		.index('by_postId', ['postId'])
+		.index('by_postId_and_tagLower', ['postId', 'tagLower'])
+		.index('by_tagLower_and_createdAt', ['tagLower', 'createdAt']),
 	post_votes: defineTable({
 		postId: v.id('posts'),
 		userAuthId: v.string(),
@@ -162,6 +217,20 @@ const schema = defineSchema({
 		.index('by_participant1', ['participant1'])
 		.index('by_participant2', ['participant2'])
 		.index('by_pair', ['participant1', 'participant2']),
+	dm_participants: defineTable({
+		conversationId: v.id('dm_conversations'),
+		userAuthId: v.string(),
+		otherUserAuthId: v.string(),
+		unreadCount: v.number(),
+		lastReadAt: v.number(),
+		lastReadMessageAt: v.number(),
+		lastMessageAt: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_conversationId_and_userAuthId', ['conversationId', 'userAuthId'])
+		.index('by_userAuthId_and_lastMessageAt', ['userAuthId', 'lastMessageAt'])
+		.index('by_userAuthId_and_otherUserAuthId', ['userAuthId', 'otherUserAuthId']),
 	dm_messages: defineTable({
 		conversationId: v.id('dm_conversations'),
 		senderAuthId: v.string(),
