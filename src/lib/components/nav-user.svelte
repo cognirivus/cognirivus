@@ -9,7 +9,6 @@
 		BadgeCheck,
 		Bell,
 		ChevronsUpDown,
-		CreditCard,
 		LogOut,
 		Sparkles,
 		User,

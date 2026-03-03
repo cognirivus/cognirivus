@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
 	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Popover from '$lib/components/ui/popover';
 	import { ChevronDown, Tag, X, Check } from '@lucide/svelte';
@@ -9,7 +8,7 @@
 	let {
 		availableTags = [] as string[],
 		selectedTags = [] as string[],
-		onSelect = (tags: string[]) => {}
+		onSelect = (() => {}) as (tags: string[]) => void
 	} = $props<{
 		availableTags?: string[];
 		selectedTags?: string[];
@@ -18,7 +17,7 @@
 
 	function toggleTag(tag: string) {
 		if (selectedTags.includes(tag)) {
-			onSelect(selectedTags.filter((t) => t !== tag));
+			onSelect(selectedTags.filter((selectedTag: string) => selectedTag !== tag));
 		} else {
 			onSelect([...selectedTags, tag]);
 		}
@@ -68,7 +67,7 @@
 								No tags available
 							</div>
 						{:else}
-							{#each availableTags as tag}
+							{#each availableTags as tag (tag)}
 								{@const isSelected = selectedTags.includes(tag)}
 								<button
 									class={cn(
@@ -92,7 +91,7 @@
 
 		{#if selectedTags.length > 0}
 			<div class="flex animate-in flex-wrap gap-1.5 fade-in slide-in-from-left-2">
-				{#each selectedTags as tag}
+				{#each selectedTags as tag (tag)}
 					<Badge
 						variant="secondary"
 						class="h-7 gap-1 bg-primary px-2 text-[10px] text-primary-foreground hover:bg-primary/90"

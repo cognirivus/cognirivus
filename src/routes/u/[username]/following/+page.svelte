@@ -65,7 +65,10 @@
 								<CardContent class="flex items-center justify-between gap-3">
 									<div class="min-w-0">
 										{#if user.username}
-											<a class="inline-flex items-center gap-1 text-sm font-medium hover:underline" href="/u/{user.username}">
+											<a
+												class="inline-flex items-center gap-1 text-sm font-medium hover:underline"
+												href="/u/{user.username}"
+											>
 												<UserRoundCheck class="size-3.5" />
 												u/{user.username}
 											</a>

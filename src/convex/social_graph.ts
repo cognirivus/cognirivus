@@ -155,9 +155,7 @@ export const listFollowing = query({
 				.collect(),
 			ctx.db
 				.query('follows_communities')
-				.withIndex('by_followerAuthId_and_createdAt', (q) =>
-					q.eq('followerAuthId', authUser._id)
-				)
+				.withIndex('by_followerAuthId_and_createdAt', (q) => q.eq('followerAuthId', authUser._id))
 				.collect()
 		]);
 

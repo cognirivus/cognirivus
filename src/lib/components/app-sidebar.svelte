@@ -1,29 +1,12 @@
 <script lang="ts">
-	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/state';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
-	import { authClient } from '$lib/auth-client';
-	import {
-		Compass,
-		Users,
-		Send,
-		CirclePlus,
-		User,
-		Globe,
-		LogIn,
-		UserPlus,
-		MessageSquare,
-		FileText
-	} from '@lucide/svelte';
+	import { Compass, Users, Send, User, LogIn, UserPlus, MessageSquare } from '@lucide/svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
-	import { useSidebar } from '$lib/components/ui/sidebar/index.js';
-	import * as Avatar from '$lib/components/ui/avatar/index.js';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import Logo from './Logo.svelte';
 	import NavUser from './nav-user.svelte';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import type { ComponentProps } from 'svelte';
 
 	let {
@@ -33,13 +16,9 @@
 	}: ComponentProps<typeof Sidebar.Root> = $props();
 
 	const auth = useAuth();
-	const sidebar = useSidebar();
 
 	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
 	const currentUser = $derived(currentUserQuery.data);
-	const profileHref = $derived(
-		currentUser?.username ? `/u/${currentUser.username}` : '/settings/username'
-	);
 
 	const myCommunitiesQuery = useQuery((api as any).communities.listMine, {});
 	const myCommunities = $derived(myCommunitiesQuery.data ?? []);
@@ -66,11 +45,6 @@
 			return page.url.pathname === '/c' || page.url.pathname.startsWith('/c/');
 		}
 		return page.url.pathname === href;
-	}
-
-	async function signOut() {
-		await authClient.signOut();
-		await invalidateAll();
 	}
 </script>
 
