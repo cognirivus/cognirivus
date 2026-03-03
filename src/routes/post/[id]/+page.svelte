@@ -3,8 +3,9 @@
 	import { goto } from '$app/navigation';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
-	import { ThumbsDown, ThumbsUp } from '@lucide/svelte';
+	import { ThumbsDown, ThumbsUp, Tag, Archive } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
+	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import CommentsSection from '$lib/components/comments/CommentsSection.svelte';
 	import { toast } from 'svelte-sonner';
@@ -109,105 +110,123 @@
 			toast.error(error?.message ?? 'Delete failed');
 		}
 	}
-
 </script>
 
 <main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
 	<div class="mx-auto w-full max-w-4xl">
-	{#if postQuery.isLoading}
-		<p class="text-sm text-muted-foreground">Loading post...</p>
-	{:else if postQuery.error || !postQuery.data}
-		<p class="text-sm text-destructive">Post not found.</p>
-	{:else}
-		<article class="rounded-lg border border-border bg-card p-5">
-			<div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-				<div class="flex flex-wrap items-center gap-2">
-					{#if postQuery.data.authorUsername}
-						<a class="hover:underline" href="/u/{postQuery.data.authorUsername}">
-							u/{postQuery.data.authorUsername}
-						</a>
-					{:else}
-						<span>{postQuery.data.authorName}</span>
-					{/if}
-					{#if postQuery.data.communitySlug}
+		{#if postQuery.isLoading}
+			<p class="text-sm text-muted-foreground">Loading post...</p>
+		{:else if postQuery.error || !postQuery.data}
+			<p class="text-sm text-destructive">Post not found.</p>
+		{:else}
+			<article class="rounded-lg border border-border bg-card p-5">
+				<div
+					class="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"
+				>
+					<div class="flex flex-wrap items-center gap-2">
+						{#if postQuery.data.authorUsername}
+							<a class="hover:underline" href="/u/{postQuery.data.authorUsername}">
+								u/{postQuery.data.authorUsername}
+							</a>
+						{:else}
+							<span>{postQuery.data.authorName}</span>
+						{/if}
+						{#if postQuery.data.communitySlug}
+							<span>•</span>
+							<a class="hover:underline" href="/c/{postQuery.data.communitySlug}">
+								c/{postQuery.data.communitySlug}
+							</a>
+						{/if}
 						<span>•</span>
-						<a class="hover:underline" href="/c/{postQuery.data.communitySlug}">
-							c/{postQuery.data.communitySlug}
-						</a>
+						<span>{new Date(postQuery.data.createdAt).toLocaleString()}</span>
+					</div>
+					{#if postQuery.data.canDelete}
+						<Button variant="destructive" size="sm" onclick={deletePost}>Delete</Button>
 					{/if}
-					<span>•</span>
-					<span>{new Date(postQuery.data.createdAt).toLocaleString()}</span>
 				</div>
-				{#if postQuery.data.canDelete}
-					<Button variant="destructive" size="sm" onclick={deletePost}>Delete</Button>
+
+				<h1 class="text-2xl font-semibold tracking-tight">{postQuery.data.title}</h1>
+				{#if postQuery.data.url}
+					<p class="mt-2 text-sm">
+						<a class="underline" href={postQuery.data.url} target="_blank" rel="noreferrer">
+							{postQuery.data.url}
+						</a>
+					</p>
 				{/if}
-			</div>
 
-			<h1 class="text-2xl font-semibold tracking-tight">{postQuery.data.title}</h1>
-			{#if postQuery.data.url}
-				<p class="mt-2 text-sm">
-					<a class="underline" href={postQuery.data.url} target="_blank" rel="noreferrer">
-						{postQuery.data.url}
-					</a>
-				</p>
-			{/if}
-			<div class="mt-4 whitespace-pre-wrap text-sm leading-6">
-				{#if loadingBody}
-					Loading body...
-				{:else}
-					{fullBody}
+				<div class="mt-3 flex flex-wrap gap-2">
+					{#if (postQuery.data.tags?.length ?? 0) > 0}
+						{#each postQuery.data.tags as tag}
+							<Badge variant="secondary" class="gap-1 bg-secondary/50">
+								<Tag class="size-3" />
+								{tag}
+							</Badge>
+						{/each}
+					{/if}
+					{#if postQuery.data.sourceType}
+						<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
+							<Archive class="size-3" />
+							{postQuery.data.sourceType === 'chrome_import'
+								? 'Chrome Bookmark'
+								: postQuery.data.sourceType}
+						</Badge>
+					{/if}
+				</div>
+				<div class="mt-4 text-sm leading-6 whitespace-pre-wrap">
+					{#if loadingBody}
+						Loading body...
+					{:else}
+						{fullBody}
+					{/if}
+				</div>
+
+				<div class="mt-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+					<Button
+						size="icon-sm"
+						variant={postQuery.data.userVote === 1 ? 'secondary' : 'outline'}
+						class={postQuery.data.userVote === 1
+							? 'border-primary/40 text-primary [&_svg_path]:!fill-current'
+							: ''}
+						disabled={!auth.isAuthenticated}
+						onclick={() => vote(1)}
+						aria-label="Like post"
+					>
+						<ThumbsUp class="size-4" />
+					</Button>
+					<Button
+						size="icon-sm"
+						variant={postQuery.data.userVote === -1 ? 'secondary' : 'outline'}
+						class={postQuery.data.userVote === -1
+							? 'border-destructive/40 text-destructive [&_svg_path]:!fill-current'
+							: ''}
+						disabled={!auth.isAuthenticated}
+						onclick={() => vote(-1)}
+						aria-label="Dislike post"
+					>
+						<ThumbsDown class="size-4" />
+					</Button>
+					<span>score {postQuery.data.score}</span>
+					<span>•</span>
+					<span>{postQuery.data.commentCount} comments</span>
+				</div>
+				{#if !auth.isAuthenticated}
+					<p class="mt-3 text-xs text-muted-foreground">
+						Sign in to vote and comment.
+						<a class="ml-1 underline" href={signInHref}>Sign in</a>
+					</p>
 				{/if}
-			</div>
+			</article>
 
-			<div class="mt-5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-				<Button
-					size="icon-sm"
-					variant={postQuery.data.userVote === 1 ? 'secondary' : 'outline'}
-					class={postQuery.data.userVote === 1
-						? 'border-primary/40 text-primary [&_svg_path]:!fill-current'
-						: ''}
-					disabled={!auth.isAuthenticated}
-					onclick={() => vote(1)}
-					aria-label="Like post"
-				>
-					<ThumbsUp class="size-4" />
-				</Button>
-				<Button
-					size="icon-sm"
-					variant={postQuery.data.userVote === -1 ? 'secondary' : 'outline'}
-					class={postQuery.data.userVote === -1
-						? 'border-destructive/40 text-destructive [&_svg_path]:!fill-current'
-						: ''}
-					disabled={!auth.isAuthenticated}
-					onclick={() => vote(-1)}
-					aria-label="Dislike post"
-				>
-					<ThumbsDown class="size-4" />
-				</Button>
-				<span>score {postQuery.data.score}</span>
-				<span>•</span>
-				<span>{postQuery.data.commentCount} comments</span>
-			</div>
-			{#if !auth.isAuthenticated}
-				<p class="mt-3 text-xs text-muted-foreground">
-					Sign in to vote and comment.
-					<a class="ml-1 underline" href={signInHref}>Sign in</a>
-				</p>
-			{/if}
-		</article>
-
-		<CommentsSection
-			comments={commentsQuery.data ?? []}
-			isLoading={commentsQuery.isLoading}
-			isAuthenticated={auth.isAuthenticated}
-			{signInHref}
-			{currentUserInitial}
-			onAddComment={addComment}
-			onCommentLike={(commentId) => voteComment(commentId, 1)}
-			onCommentDislike={(commentId) => voteComment(commentId, -1)}
-		/>
-	{/if}
+			<CommentsSection
+				comments={commentsQuery.data ?? []}
+				isLoading={commentsQuery.isLoading}
+				isAuthenticated={auth.isAuthenticated}
+				{signInHref}
+				{currentUserInitial}
+				onAddComment={addComment}
+				onCommentLike={(commentId) => voteComment(commentId, 1)}
+				onCommentDislike={(commentId) => voteComment(commentId, -1)}
+			/>
+		{/if}
 	</div>
 </main>
-
-

@@ -9,6 +9,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Lock, Globe, Users } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
+	import ImportBookmarks from '$lib/components/ImportBookmarks.svelte';
 
 	const client = useConvexClient();
 	const meQuery = useQuery(api.auth.getCurrentUser, {});
@@ -61,6 +62,18 @@
 	<p class="mt-1 text-sm text-muted-foreground">
 		Share a knowledge post to the global feed or a community.
 	</p>
+
+	<div
+		class="mt-4 flex items-center justify-between gap-4 rounded-xl border border-dashed border-border bg-muted/30 p-4"
+	>
+		<div class="space-y-1">
+			<h2 class="text-sm font-medium">Bulk Import</h2>
+			<p class="text-xs text-muted-foreground">
+				Import your Chrome bookmarks directly into your private feed.
+			</p>
+		</div>
+		<ImportBookmarks />
+	</div>
 
 	<form
 		class="mx-auto mt-6 max-w-3xl space-y-4 rounded-xl border border-border bg-card p-5"

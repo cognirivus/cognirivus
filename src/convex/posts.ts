@@ -33,6 +33,8 @@ const postDetailsValidator = v.object({
 	likes: v.number(),
 	dislikes: v.number(),
 	commentCount: v.number(),
+	tags: v.optional(v.array(v.string())),
+	sourceType: v.optional(v.string()),
 	createdAt: v.number(),
 	updatedAt: v.number(),
 	userVote: userVoteValidator,
@@ -223,7 +225,10 @@ export const createStored = internalMutation({
 		snippet: v.string(),
 		body: v.optional(v.string()),
 		r2Key: v.optional(v.string()),
-		url: v.optional(v.string())
+		url: v.optional(v.string()),
+		tags: v.optional(v.array(v.string())),
+		sourceType: v.optional(v.string()),
+		createdAt: v.optional(v.number())
 	},
 	returns: v.id('posts'),
 	handler: async (ctx, args) => {
@@ -257,11 +262,13 @@ export const createStored = internalMutation({
 			body: args.body,
 			r2Key: args.r2Key,
 			url: args.url,
+			tags: args.tags,
+			sourceType: args.sourceType,
 			score: 0,
 			likes: 0,
 			dislikes: 0,
 			commentCount: 0,
-			createdAt: now,
+			createdAt: args.createdAt ?? now,
 			updatedAt: now
 		});
 	}
@@ -399,6 +406,8 @@ export const get = query({
 			likes: post.likes,
 			dislikes: post.dislikes,
 			commentCount: post.commentCount,
+			tags: post.tags,
+			sourceType: post.sourceType,
 			createdAt: post.createdAt,
 			updatedAt: post.updatedAt,
 			userVote: (userVoteDoc?.value ?? null) as -1 | 1 | null,

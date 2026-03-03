@@ -5,7 +5,12 @@ import { authComponent } from './auth';
 import { applyFeedRanking, paginateByCursor, windowStartFromBucket } from './lib/feedRanking';
 
 const tabValidator = v.union(v.literal('new'), v.literal('top'), v.literal('discussed'));
-const windowValidator = v.union(v.literal('24h'), v.literal('7d'), v.literal('30d'));
+const windowValidator = v.union(
+	v.literal('all'),
+	v.literal('24h'),
+	v.literal('7d'),
+	v.literal('30d')
+);
 
 const getOptionalAuthUser = async (ctx: any) => {
 	try {
@@ -32,6 +37,8 @@ const feedPostValidator = v.object({
 	likes: v.number(),
 	dislikes: v.number(),
 	commentCount: v.number(),
+	tags: v.optional(v.array(v.string())),
+	sourceType: v.optional(v.string()),
 	createdAt: v.number(),
 	updatedAt: v.number(),
 	userVote: v.union(v.null(), v.literal(1), v.literal(-1)),
@@ -80,6 +87,8 @@ const mapFeedPosts = async (ctx: any, posts: Array<any>, viewerAuthId: string | 
 				likes: post.likes,
 				dislikes: post.dislikes,
 				commentCount: post.commentCount,
+				tags: post.tags,
+				sourceType: post.sourceType,
 				createdAt: post.createdAt,
 				updatedAt: post.updatedAt,
 				userVote: (vote?.value ?? null) as -1 | 1 | null,
@@ -144,12 +153,28 @@ const materializeRanked = async (
 	tab: 'new' | 'top' | 'discussed',
 	windowStart: number,
 	viewerAuthId: string | null,
+	search: string | undefined,
+	tags: string[] | undefined,
 	cursor: string | null,
 	numItems: number
 ) => {
 	const visible: Array<any> = [];
 	for (const post of rawPosts) {
 		if (await isVisibleToViewer(ctx, post, viewerAuthId)) {
+			// Apply search filter if provided
+			if (search && search.trim()) {
+				const q = search.toLowerCase();
+				const match =
+					post.title.toLowerCase().includes(q) ||
+					(post.snippet && post.snippet.toLowerCase().includes(q));
+				if (!match) continue;
+			}
+			// Apply tag filter if provided (OR logic)
+			if (tags && tags.length > 0) {
+				const postTags = post.tags || [];
+				const hasMatch = tags.some((t) => postTags.includes(t));
+				if (!hasMatch) continue;
+			}
 			visible.push(post);
 		}
 	}
@@ -199,6 +224,8 @@ export const listGlobal = query({
 			)
 		),
 		window: v.optional(windowValidator),
+		search: v.optional(v.string()),
+		tags: v.optional(v.array(v.string())),
 		paginationOpts: paginationOptsValidator
 	},
 	returns: pagedFeedValidator,
@@ -246,6 +273,8 @@ export const listGlobal = query({
 			args.tab,
 			windowStart,
 			authUser?._id ?? null,
+			args.search,
+			args.tags,
 			args.paginationOpts.cursor,
 			args.paginationOpts.numItems
 		);
@@ -257,6 +286,8 @@ export const listCommunity = query({
 		slug: v.string(),
 		tab: tabValidator,
 		window: v.optional(windowValidator),
+		search: v.optional(v.string()),
+		tags: v.optional(v.array(v.string())),
 		paginationOpts: paginationOptsValidator
 	},
 	returns: pagedFeedValidator,
@@ -304,6 +335,8 @@ export const listCommunity = query({
 			args.tab,
 			windowStart,
 			authUser?._id ?? null,
+			args.search,
+			args.tags,
 			args.paginationOpts.cursor,
 			args.paginationOpts.numItems
 		);
@@ -315,6 +348,8 @@ export const listUser = query({
 		username: v.string(),
 		tab: tabValidator,
 		window: v.optional(windowValidator),
+		search: v.optional(v.string()),
+		tags: v.optional(v.array(v.string())),
 		paginationOpts: paginationOptsValidator
 	},
 	returns: pagedFeedValidator,
@@ -347,6 +382,8 @@ export const listUser = query({
 			args.tab,
 			windowStart,
 			authUser?._id ?? null,
+			args.search,
+			args.tags,
 			args.paginationOpts.cursor,
 			args.paginationOpts.numItems
 		);

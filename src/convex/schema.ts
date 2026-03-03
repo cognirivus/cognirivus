@@ -55,6 +55,8 @@ const schema = defineSchema({
 		likes: v.number(),
 		dislikes: v.number(),
 		commentCount: v.number(),
+		tags: v.optional(v.array(v.string())),
+		sourceType: v.optional(v.string()),
 		createdAt: v.number(),
 		updatedAt: v.number()
 	})

@@ -12,16 +12,22 @@
 		User,
 		Users,
 		Lock,
-		ExternalLink
+		ExternalLink,
+		Tag,
+		Archive,
+		Search,
+		X
 	} from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
+	import { Input } from '$lib/components/ui/input';
 	import { toast } from 'svelte-sonner';
+	import TagMultiSelect from '$lib/components/TagMultiSelect.svelte';
 
 	type FeedTab = 'new' | 'top' | 'discussed';
-	type FeedWindow = '24h' | '7d' | '30d';
+	type FeedWindow = 'all' | '24h' | '7d' | '30d';
 	type FeedScope = 'you' | 'public' | 'community';
 
 	const auth = useAuth();
@@ -35,9 +41,22 @@
 		(page.url.searchParams.get('scope') as FeedScope | null) ??
 			(auth.isAuthenticated ? 'you' : 'public')
 	);
+	const search = $derived(page.url.searchParams.get('search') ?? '');
+	const selectedTags = $derived(
+		page.url.searchParams.get('tags')?.split(',').filter(Boolean) ?? []
+	);
 	const cursor = $derived(page.url.searchParams.get('cursor'));
 
+	let searchInput = $state(search);
+
+	// Sync input with URL search param
+	$effect(() => {
+		searchInput = search;
+	});
+
 	const feedQuery = useQuery((api as any).feed.listGlobal, () => {
+		const s = search;
+		const ts = selectedTags;
 		const base = {
 			paginationOpts: {
 				numItems: 20,
@@ -48,7 +67,9 @@
 			...base,
 			tab,
 			scope,
-			window: windowBucket
+			window: windowBucket,
+			search: s || undefined,
+			tags: ts.length > 0 ? ts : undefined
 		};
 	});
 
@@ -56,6 +77,8 @@
 		scope?: FeedScope;
 		tab?: FeedTab;
 		window?: FeedWindow;
+		search?: string | null;
+		tags?: string[] | null;
 		cursor?: string | null;
 	}) {
 		const params = Object.fromEntries(page.url.searchParams.entries()) as Record<string, string>;
@@ -63,8 +86,24 @@
 			params.scope = next.scope;
 			delete params.cursor;
 		}
-		if (next.tab) params.tab = next.tab;
-		if (next.window) params.window = next.window;
+		if (next.tab) {
+			params.tab = next.tab;
+			delete params.cursor;
+		}
+		if (next.window) {
+			params.window = next.window;
+			delete params.cursor;
+		}
+		if (next.search !== undefined) {
+			if (next.search === null || next.search === '') delete params.search;
+			else params.search = next.search;
+			delete params.cursor;
+		}
+		if (next.tags !== undefined) {
+			if (next.tags === null || next.tags.length === 0) delete params.tags;
+			else params.tags = next.tags.join(',');
+			delete params.cursor;
+		}
 		if (next.cursor) params.cursor = next.cursor;
 		else if (next.cursor === null) delete params.cursor;
 
@@ -150,30 +189,68 @@
 			{/each}
 		</div>
 
-		{#if scope !== 'you'}
-			<div class="mx-1 h-4 w-px bg-border"></div>
-			{#each ['new', 'top', 'discussed'] as t (t)}
-				<Button
-					variant={tab === t ? 'default' : 'outline'}
-					size="sm"
-					class="h-8"
-					onclick={() => updateParams({ tab: t as FeedTab, cursor: null })}
+		<div class="mx-1 h-4 w-px bg-border"></div>
+		{#each ['new', 'top', 'discussed'] as t (t)}
+			<Button
+				variant={tab === t ? 'default' : 'outline'}
+				size="sm"
+				class="h-8"
+				onclick={() => updateParams({ tab: t as FeedTab, cursor: null })}
+			>
+				{t}
+			</Button>
+		{/each}
+		<div class="mx-1 h-4 w-px bg-border"></div>
+		{#each ['all', '24h', '7d', '30d'] as w (w)}
+			<Button
+				variant={windowBucket === w ? 'secondary' : 'ghost'}
+				size="sm"
+				class="h-8"
+				onclick={() => updateParams({ window: w as FeedWindow, cursor: null })}
+			>
+				{w === 'all' ? 'All' : w}
+			</Button>
+		{/each}
+	</div>
+
+	<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center">
+		<div class="relative flex-1">
+			<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+			<Input
+				placeholder="Search feed..."
+				class="pr-9 pl-9"
+				bind:value={searchInput}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						const nextSearch = searchInput.trim();
+						updateParams({
+							search: nextSearch,
+							window: nextSearch.length > 0 ? 'all' : undefined,
+							cursor: null
+						});
+					}
+				}}
+			/>
+			{#if searchInput}
+				<button
+					class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+					onclick={() => {
+						searchInput = '';
+						updateParams({ search: '', cursor: null });
+					}}
 				>
-					{t}
-				</Button>
-			{/each}
-			<div class="mx-1 h-4 w-px bg-border"></div>
-			{#each ['24h', '7d', '30d'] as w (w)}
-				<Button
-					variant={windowBucket === w ? 'secondary' : 'ghost'}
-					size="sm"
-					class="h-8"
-					onclick={() => updateParams({ window: w as FeedWindow, cursor: null })}
-				>
-					{w}
-				</Button>
-			{/each}
-		{/if}
+					<X class="size-4" />
+				</button>
+			{/if}
+		</div>
+
+		<TagMultiSelect
+			availableTags={Array.from(
+				new Set((feedQuery.data?.page ?? []).flatMap((p: any) => p.tags ?? []))
+			)}
+			{selectedTags}
+			onSelect={(tags: string[]) => updateParams({ tags: tags, cursor: null })}
+		/>
 	</div>
 
 	{#if feedQuery.isLoading}
@@ -251,6 +328,20 @@
 										<Badge variant="outline" class="gap-1">
 											<Globe class="size-3.5" />
 											<span class="font-semibold">Public</span>
+										</Badge>
+									{/if}
+									{#if (post.tags?.length ?? 0) > 0}
+										{#each post.tags as tag}
+											<Badge variant="secondary" class="gap-1 bg-secondary/50">
+												<Tag class="size-3" />
+												{tag}
+											</Badge>
+										{/each}
+									{/if}
+									{#if post.sourceType}
+										<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
+											<Archive class="size-3" />
+											{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
 										</Badge>
 									{/if}
 								</div>

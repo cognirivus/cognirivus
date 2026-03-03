@@ -1,5 +1,5 @@
 export type FeedTab = 'new' | 'top' | 'discussed';
-export type FeedWindow = '24h' | '7d' | '30d';
+export type FeedWindow = 'all' | '24h' | '7d' | '30d';
 
 export type RankedPost = {
 	_creationTime?: number;
@@ -10,6 +10,8 @@ export type RankedPost = {
 
 export const windowStartFromBucket = (bucket: FeedWindow, now = Date.now()) => {
 	switch (bucket) {
+		case 'all':
+			return 0;
 		case '24h':
 			return now - 24 * 60 * 60 * 1000;
 		case '7d':

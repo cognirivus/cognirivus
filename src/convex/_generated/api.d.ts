@@ -10,6 +10,7 @@
 
 import type * as ai_tools from "../ai_tools.js";
 import type * as auth from "../auth.js";
+import type * as bookmarks from "../bookmarks.js";
 import type * as communities from "../communities.js";
 import type * as community_chat from "../community_chat.js";
 import type * as dm from "../dm.js";
@@ -33,6 +34,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   ai_tools: typeof ai_tools;
   auth: typeof auth;
+  bookmarks: typeof bookmarks;
   communities: typeof communities;
   community_chat: typeof community_chat;
   dm: typeof dm;
