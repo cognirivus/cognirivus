@@ -113,6 +113,9 @@ export const importSelectedBookmarks = mutation({
 		let importedCount = 0;
 		let rejectedCount = 0;
 		const errors: Array<{ index: number; reason: string }> = [];
+		const sourceId = await ctx.runMutation((internal as any).sources.ensureUserBookmarkSource, {
+			userAuthId: authUser._id
+		});
 
 		for (const [index, bookmark] of args.bookmarks.entries()) {
 			try {
@@ -120,17 +123,16 @@ export const importSelectedBookmarks = mutation({
 				const url = normalizeUrl(bookmark.url);
 				const tags = normalizeTags(bookmark.tags);
 				const createdAt = normalizeCreatedAt(bookmark.createdAt);
+				const snippetSource =
+					tags.length > 0 ? `${url} • tags: ${tags.join(', ')}` : `${url} • imported bookmark`;
 
-				await ctx.runMutation(internal.posts.createStored, {
-					authorAuthId: authUser._id,
-					type: 'link',
+				await ctx.runMutation((internal as any).sources.ingestSourceItemFromInput, {
+					sourceId,
 					title,
 					url,
-					tags,
-					sourceType: 'chrome_import',
-					visibility: 'private',
-					snippet: url,
-					createdAt
+					snippet: snippetSource,
+					publishedAt: createdAt,
+					contentHash: `bookmark:${url}`
 				});
 				importedCount += 1;
 			} catch (error) {

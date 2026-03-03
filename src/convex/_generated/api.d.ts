@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as ai_tools from "../ai_tools.js";
 import type * as auth from "../auth.js";
 import type * as bookmarks from "../bookmarks.js";
@@ -25,6 +26,8 @@ import type * as posts from "../posts.js";
 import type * as presence from "../presence.js";
 import type * as profiles from "../profiles.js";
 import type * as social_graph from "../social_graph.js";
+import type * as sources from "../sources.js";
+import type * as sources_node from "../sources_node.js";
 
 import type {
   ApiFromModules,
@@ -33,6 +36,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   ai_tools: typeof ai_tools;
   auth: typeof auth;
   bookmarks: typeof bookmarks;
@@ -50,6 +54,8 @@ declare const fullApi: ApiFromModules<{
   presence: typeof presence;
   profiles: typeof profiles;
   social_graph: typeof social_graph;
+  sources: typeof sources;
+  sources_node: typeof sources_node;
 }>;
 
 /**

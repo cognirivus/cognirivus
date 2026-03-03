@@ -12,6 +12,8 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
 	votePost: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 },
 	voteComment: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 },
 	bookmarkImport: { kind: 'token bucket', rate: 40, period: HOUR, capacity: 5 },
+	addSource: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
+	unsubscribeSource: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
 	followUser: { kind: 'token bucket', rate: 120, period: HOUR, capacity: 30 },
 	followCommunity: { kind: 'token bucket', rate: 120, period: HOUR, capacity: 30 },
 	feedRefresh: { kind: 'token bucket', rate: 240, period: MINUTE, capacity: 80 },

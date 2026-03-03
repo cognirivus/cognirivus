@@ -64,6 +64,7 @@
 		"isomorphic-dompurify": "^2.35.0",
 		"marked": "^17.0.1",
 		"mode-watcher": "^1.1.0",
+		"rss-parser": "^3.13.0",
 		"runed": "^0.31.1",
 		"svelte-image-viewer": "^6.0.0",
 		"svelte-streamdown": "^2.6.1"

@@ -67,6 +67,11 @@ const schema = defineSchema({
 		commentCount: v.number(),
 		tags: v.optional(v.array(v.string())),
 		sourceType: v.optional(v.string()),
+		sourceId: v.optional(v.id('sources')),
+		sourceItemId: v.optional(v.id('source_items')),
+		sourceTypeSnapshot: v.optional(v.string()),
+		sourceTitleSnapshot: v.optional(v.string()),
+		sourceUrlSnapshot: v.optional(v.string()),
 		createdAt: v.number(),
 		updatedAt: v.number()
 	})
@@ -114,7 +119,101 @@ const schema = defineSchema({
 			'visibility',
 			'commentCount',
 			'createdAt'
-		]),
+		])
+		.index('by_authorAuthId_and_sourceId_and_createdAt', ['authorAuthId', 'sourceId', 'createdAt'])
+		.index('by_authorAuthId_and_sourceItemId_and_createdAt', [
+			'authorAuthId',
+			'sourceItemId',
+			'createdAt'
+		])
+		.index('by_sourceItemId_and_createdAt', ['sourceItemId', 'createdAt']),
+	sources: defineTable({
+		type: v.union(
+			v.literal('website'),
+			v.literal('rss'),
+			v.literal('youtube'),
+			v.literal('bookmarks')
+		),
+		normalizedKey: v.string(),
+		canonicalUrl: v.string(),
+		title: v.string(),
+		description: v.optional(v.string()),
+		status: v.union(v.literal('active'), v.literal('paused'), v.literal('error')),
+		lastFetchedAt: v.optional(v.number()),
+		lastSuccessAt: v.optional(v.number()),
+		lastError: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_normalizedKey', ['normalizedKey'])
+		.index('by_type_and_updatedAt', ['type', 'updatedAt'])
+		.index('by_status_and_updatedAt', ['status', 'updatedAt']),
+	source_subscriptions: defineTable({
+		userAuthId: v.string(),
+		sourceId: v.id('sources'),
+		status: v.union(v.literal('active'), v.literal('paused')),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		unsubscribedAt: v.optional(v.number())
+	})
+		.index('by_userAuthId_and_sourceId', ['userAuthId', 'sourceId'])
+		.index('by_userAuthId_and_updatedAt', ['userAuthId', 'updatedAt'])
+		.index('by_sourceId_and_status', ['sourceId', 'status']),
+	source_items: defineTable({
+		sourceId: v.id('sources'),
+		externalId: v.optional(v.string()),
+		url: v.string(),
+		urlHash: v.string(),
+		title: v.string(),
+		snippet: v.string(),
+		body: v.optional(v.string()),
+		r2Key: v.optional(v.string()),
+		publishedAt: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		contentHash: v.optional(v.string()),
+		contentType: v.optional(v.string())
+	})
+		.index('by_sourceId_and_publishedAt', ['sourceId', 'publishedAt'])
+		.index('by_sourceId_and_externalId', ['sourceId', 'externalId'])
+		.index('by_sourceId_and_urlHash', ['sourceId', 'urlHash'])
+		.index('by_publishedAt', ['publishedAt']),
+	user_source_items: defineTable({
+		userAuthId: v.string(),
+		sourceId: v.id('sources'),
+		sourceItemId: v.id('source_items'),
+		publishedAt: v.number(),
+		deliveredAt: v.number()
+	})
+		.index('by_userAuthId_and_publishedAt', ['userAuthId', 'publishedAt'])
+		.index('by_userAuthId_and_sourceId_and_publishedAt', ['userAuthId', 'sourceId', 'publishedAt'])
+		.index('by_userAuthId_and_sourceItemId', ['userAuthId', 'sourceItemId'])
+		.index('by_sourceItemId', ['sourceItemId'])
+		.index('by_sourceId_and_publishedAt', ['sourceId', 'publishedAt']),
+	source_jobs: defineTable({
+		jobType: v.union(
+			v.literal('sync_source'),
+			v.literal('bulk_unsubscribe'),
+			v.literal('resubscribe_backfill')
+		),
+		userAuthId: v.optional(v.string()),
+		sourceId: v.optional(v.id('sources')),
+		status: v.union(
+			v.literal('queued'),
+			v.literal('running'),
+			v.literal('done'),
+			v.literal('failed')
+		),
+		cursor: v.optional(v.string()),
+		processed: v.number(),
+		error: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		finishedAt: v.optional(v.number())
+	})
+		.index('by_status_and_updatedAt', ['status', 'updatedAt'])
+		.index('by_userAuthId_and_createdAt', ['userAuthId', 'createdAt'])
+		.index('by_sourceId_and_createdAt', ['sourceId', 'createdAt']),
 	post_tags: defineTable({
 		postId: v.id('posts'),
 		tagLower: v.string(),

@@ -27,7 +27,8 @@ const MAX_FILTER_TAGS = 10;
 type GlobalScope = 'all' | 'public' | 'community' | 'you' | 'me';
 type ViewerAuthId = string | null;
 
-const feedPostValidator = v.object({
+const postFeedItemValidator = v.object({
+	kind: v.literal('post'),
 	_id: v.id('posts'),
 	title: v.string(),
 	type: v.union(v.literal('text'), v.literal('link'), v.literal('media')),
@@ -46,14 +47,39 @@ const feedPostValidator = v.object({
 	commentCount: v.number(),
 	tags: v.optional(v.array(v.string())),
 	sourceType: v.optional(v.string()),
+	sourceId: v.optional(v.id('sources')),
+	sourceItemId: v.optional(v.id('source_items')),
+	sourceTypeSnapshot: v.optional(v.string()),
+	sourceTitleSnapshot: v.optional(v.string()),
+	sourceUrlSnapshot: v.optional(v.string()),
 	createdAt: v.number(),
 	updatedAt: v.number(),
 	userVote: v.union(v.null(), v.literal(1), v.literal(-1)),
 	canDelete: v.boolean()
 });
 
+const sourceFeedItemValidator = v.object({
+	kind: v.literal('source_item'),
+	_id: v.id('source_items'),
+	sourceId: v.id('sources'),
+	sourceType: v.union(
+		v.literal('website'),
+		v.literal('rss'),
+		v.literal('youtube'),
+		v.literal('bookmarks')
+	),
+	sourceTitle: v.string(),
+	title: v.string(),
+	snippet: v.string(),
+	url: v.string(),
+	publishedAt: v.number(),
+	createdAt: v.number(),
+	updatedAt: v.number(),
+	shareCount: v.number()
+});
+
 const pagedFeedValidator = v.object({
-	page: v.array(feedPostValidator),
+	page: v.array(v.union(postFeedItemValidator, sourceFeedItemValidator)),
 	isDone: v.boolean(),
 	continueCursor: v.union(v.string(), v.null())
 });
@@ -319,6 +345,7 @@ const mapFeedPosts = async (
 		const userVote = viewerAuthId ? (userVotes[index]?.value ?? null) : null;
 
 		return {
+			kind: 'post' as const,
 			_id: post._id,
 			title: post.title,
 			type: post.type,
@@ -337,12 +364,122 @@ const mapFeedPosts = async (
 			commentCount: post.commentCount,
 			tags: post.tags,
 			sourceType: post.sourceType,
+			sourceId: post.sourceId,
+			sourceItemId: post.sourceItemId,
+			sourceTypeSnapshot: post.sourceTypeSnapshot,
+			sourceTitleSnapshot: post.sourceTitleSnapshot,
+			sourceUrlSnapshot: post.sourceUrlSnapshot,
 			createdAt: post.createdAt,
 			updatedAt: post.updatedAt,
 			userVote: (userVote ?? null) as -1 | 1 | null,
 			canDelete: viewerAuthId === post.authorAuthId
 		};
 	});
+};
+
+const loadUserSourceFeedItems = async (
+	ctx: QueryCtx,
+	userAuthId: string,
+	limit: number,
+	windowStart: number,
+	search: string | undefined
+) => {
+	const deliveredRows = await ctx.db
+		.query('user_source_items')
+		.withIndex('by_userAuthId_and_publishedAt', (q) => q.eq('userAuthId', userAuthId))
+		.order('desc')
+		.take(limit);
+
+	const sourceItems = await Promise.all(deliveredRows.map((row) => ctx.db.get(row.sourceItemId)));
+	const uniqueSourceIds = [
+		...new Set(
+			sourceItems.filter((item): item is Doc<'source_items'> => !!item).map((item) => item.sourceId)
+		)
+	];
+	const sourceDocs = await Promise.all(uniqueSourceIds.map((sourceId) => ctx.db.get(sourceId)));
+	const sourceById = new Map(
+		uniqueSourceIds.map((sourceId, index) => [sourceId, sourceDocs[index]])
+	);
+
+	const mapped = sourceItems
+		.map((sourceItem) => {
+			if (!sourceItem) {
+				return null;
+			}
+			const source = sourceById.get(sourceItem.sourceId);
+			if (!source) {
+				return null;
+			}
+			const searchable =
+				`${sourceItem.title} ${sourceItem.snippet} ${sourceItem.url}`.toLowerCase();
+			if (search && !searchable.includes(search)) {
+				return null;
+			}
+			if (sourceItem.publishedAt < windowStart) {
+				return null;
+			}
+			return {
+				kind: 'source_item' as const,
+				_id: sourceItem._id,
+				sourceId: source._id,
+				sourceType: source.type,
+				sourceTitle: source.title,
+				title: sourceItem.title,
+				snippet: sourceItem.snippet,
+				url: sourceItem.url,
+				publishedAt: sourceItem.publishedAt,
+				createdAt: sourceItem.publishedAt,
+				updatedAt: sourceItem.updatedAt,
+				shareCount: 0
+			};
+		})
+		.filter((item): item is NonNullable<typeof item> => !!item);
+
+	return mapped;
+};
+
+const enrichSourceItemsWithShareCount = async (
+	ctx: QueryCtx,
+	userAuthId: string,
+	items: Array<
+		| {
+				kind: 'post';
+				_id: Id<'posts'>;
+		  }
+		| {
+				kind: 'source_item';
+				_id: Id<'source_items'>;
+				sourceId: Id<'sources'>;
+				sourceType: 'website' | 'rss' | 'youtube' | 'bookmarks';
+				sourceTitle: string;
+				title: string;
+				snippet: string;
+				url: string;
+				publishedAt: number;
+				createdAt: number;
+				updatedAt: number;
+				shareCount: number;
+		  }
+	>
+) => {
+	const enriched: Array<(typeof items)[number]> = [];
+	for (const item of items) {
+		if (item.kind !== 'source_item') {
+			enriched.push(item);
+			continue;
+		}
+		const shares = await ctx.db
+			.query('posts')
+			.withIndex('by_authorAuthId_and_sourceItemId_and_createdAt', (q) =>
+				q.eq('authorAuthId', userAuthId).eq('sourceItemId', item._id)
+			)
+			.collect();
+		enriched.push({
+			...item,
+			shareCount: shares.length
+		});
+	}
+	return enriched;
 };
 
 const rankAndPaginate = async (
@@ -391,6 +528,53 @@ const rankAndPaginate = async (
 
 	return {
 		page,
+		isDone: paged.isDone,
+		continueCursor: paged.continueCursor
+	};
+};
+
+const listYouFeed = async (
+	ctx: QueryCtx,
+	viewerAuthId: string,
+	tab: FeedTab,
+	windowStart: number,
+	search: string | undefined,
+	tags: Array<string> | undefined,
+	cursor: string | null,
+	numItems: number,
+	candidateLimit: number
+) => {
+	const privatePosts = await queryPostsByAuthor(ctx, viewerAuthId, tab, candidateLimit, 'private');
+	const scopedPosts = privatePosts.filter((post) => {
+		if (post.createdAt < windowStart) {
+			return false;
+		}
+		if (search) {
+			const matchesSearch =
+				post.title.toLowerCase().includes(search) || post.snippet.toLowerCase().includes(search);
+			if (!matchesSearch) {
+				return false;
+			}
+		}
+		if (tags && tags.length > 0) {
+			const postTags = post.tags ?? [];
+			if (!tags.some((tag) => postTags.includes(tag))) {
+				return false;
+			}
+		}
+		return true;
+	});
+	const mappedPosts = await mapFeedPosts(ctx, scopedPosts, viewerAuthId);
+	const sourceItems =
+		tags && tags.length > 0
+			? []
+			: await loadUserSourceFeedItems(ctx, viewerAuthId, candidateLimit, windowStart, search);
+
+	const merged = [...mappedPosts, ...sourceItems].sort((a, b) => b.createdAt - a.createdAt);
+	const paged = paginateByCursor(merged, cursor, numItems);
+	const enrichedPage = await enrichSourceItemsWithShareCount(ctx, viewerAuthId, paged.page as any);
+	return {
+		page: enrichedPage as any,
 		isDone: paged.isDone,
 		continueCursor: paged.continueCursor
 	};
@@ -457,18 +641,32 @@ export const listGlobal = query({
 		const tags = normalizeTags(args.tags);
 		const candidateLimit = candidateLimitFor(args.paginationOpts.numItems);
 
+		if (scope === 'you') {
+			if (!viewerAuthId) {
+				return {
+					page: [],
+					isDone: true,
+					continueCursor: null
+				};
+			}
+			return await listYouFeed(
+				ctx,
+				viewerAuthId,
+				args.tab,
+				windowStart,
+				search,
+				tags,
+				args.paginationOpts.cursor,
+				args.paginationOpts.numItems,
+				candidateLimit
+			);
+		}
+
 		const rawCandidates = tags
 			? await loadTaggedCandidates(ctx, tags)
 			: await loadGlobalCandidates(ctx, scope, args.tab, viewerAuthId, candidateLimit);
 
 		const scopeFilteredCandidates = rawCandidates.filter((post) => {
-			if (scope === 'you') {
-				return (
-					viewerAuthId !== null &&
-					post.authorAuthId === viewerAuthId &&
-					post.visibility === 'private'
-				);
-			}
 			if (scope === 'me') {
 				return viewerAuthId !== null && post.authorAuthId === viewerAuthId;
 			}

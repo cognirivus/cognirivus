@@ -25,6 +25,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { toast } from 'svelte-sonner';
 	import TagMultiSelect from '$lib/components/TagMultiSelect.svelte';
+	import { decodeHtmlEntities } from '$lib/utils';
 
 	type FeedTab = 'new' | 'top' | 'discussed';
 	type FeedWindow = 'all' | '24h' | '7d' | '30d';
@@ -92,6 +93,14 @@
 			tags: ts.length > 0 ? ts : undefined
 		};
 	});
+	const communitiesQuery = useQuery((api as any).communities.listPublic, { limit: 100 });
+	let shareCommunityId = $state('');
+
+	$effect(() => {
+		if (!shareCommunityId && (communitiesQuery.data?.length ?? 0) > 0) {
+			shareCommunityId = communitiesQuery.data![0]._id;
+		}
+	});
 
 	function updateParams(next: {
 		scope?: FeedScope;
@@ -147,6 +156,28 @@
 			await client.mutation((api as any).posts.vote, { postId, value });
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Failed to vote');
+		}
+	}
+
+	async function shareSourceItem(
+		sourceItemId: string,
+		visibility: 'private' | 'public',
+		communityId?: string
+	) {
+		if (!auth.isAuthenticated) {
+			toast.error('Sign in required');
+			return;
+		}
+		try {
+			const postId = await client.action((api as any).posts.shareSourceItemAsPost, {
+				sourceItemId,
+				visibility,
+				communityId: visibility === 'public' ? communityId : undefined
+			});
+			toast.success('Shared as post');
+			goto(`/post/${postId}`);
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to share source item');
 		}
 	}
 </script>
@@ -268,138 +299,224 @@
 	{:else if feedQuery.error}
 		<p class="text-sm text-destructive">Failed to load feed.</p>
 	{:else if (feedQuery.data?.page?.length ?? 0) === 0}
-		<p class="text-sm text-muted-foreground">No posts yet. Be the first to publish.</p>
+		<p class="text-sm text-muted-foreground">No feed items yet.</p>
 	{:else}
 		<div class="space-y-3">
-			{#each feedQuery.data?.page ?? [] as post (post._id)}
+			{#each feedQuery.data?.page ?? [] as item (item._id)}
 				<Card class="gap-0 py-4">
 					<CardContent>
-						<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-							<div class="min-w-0 flex-1">
-								<div class="flex items-start justify-between gap-3">
-									<div class="flex items-center gap-2">
-										<a
-											href="/post/{post._id}"
-											class="line-clamp-2 text-base font-medium hover:underline"
-										>
-											{post.title}
-										</a>
-										{#if post.visibility === 'private'}
-											<Lock class="size-3.5 text-muted-foreground" />
-										{/if}
-										{#if post.type === 'link' && post.url}
+						{#if item.kind === 'post'}
+							<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+								<div class="min-w-0 flex-1">
+									<div class="flex items-start justify-between gap-3">
+										<div class="flex items-center gap-2">
 											<a
-												href={post.url}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="text-muted-foreground hover:text-foreground"
+												href="/post/{item._id}"
+												class="line-clamp-2 text-base font-medium hover:underline"
 											>
-												<ExternalLink class="size-3.5" />
+												{item.title}
 											</a>
-										{/if}
+											{#if item.visibility === 'private'}
+												<Lock class="size-3.5 text-muted-foreground" />
+											{/if}
+											{#if item.type === 'link' && item.url}
+												<a
+													href={item.url}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="text-muted-foreground hover:text-foreground"
+												>
+													<ExternalLink class="size-3.5" />
+												</a>
+											{/if}
+										</div>
+										<span
+											class="hidden shrink-0 items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:inline-flex"
+										>
+											<Calendar class="size-3.5" />
+											{new Date(item.createdAt).toLocaleString()}
+										</span>
 									</div>
+									<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.snippet}</p>
 									<span
-										class="hidden shrink-0 items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:inline-flex"
+										class="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:hidden"
 									>
 										<Calendar class="size-3.5" />
-										{new Date(post.createdAt).toLocaleString()}
+										{new Date(item.createdAt).toLocaleString()}
 									</span>
+									<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+										{#if item.authorUsername}
+											<Badge href="/u/{item.authorUsername}" variant="outline" class="gap-1">
+												<User class="size-3.5" />
+												<span class="font-semibold">u/{item.authorUsername}</span>
+											</Badge>
+										{:else}
+											<Badge variant="outline" class="gap-1">
+												<User class="size-3.5" />
+												<span class="font-semibold">{item.authorName}</span>
+											</Badge>
+										{/if}
+										{#if item.communitySlug}
+											<Badge href="/c/{item.communitySlug}" variant="outline" class="gap-1">
+												<Users class="size-3.5" />
+												<span class="font-semibold">c/{item.communitySlug}</span>
+											</Badge>
+										{:else if item.visibility === 'private'}
+											<Badge variant="outline" class="gap-1 border-muted-foreground/30 bg-muted/20">
+												<Lock class="size-3.5" />
+												<span class="font-semibold text-muted-foreground">Private</span>
+											</Badge>
+										{:else}
+											<Badge variant="outline" class="gap-1">
+												<Globe class="size-3.5" />
+												<span class="font-semibold">Public</span>
+											</Badge>
+										{/if}
+										{#if (item.tags?.length ?? 0) > 0}
+											{#each item.tags as tag (tag)}
+												<Badge variant="secondary" class="gap-1 bg-secondary/50">
+													<Tag class="size-3" />
+													{tag}
+												</Badge>
+											{/each}
+										{/if}
+										{#if item.sourceType}
+											<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
+												<Archive class="size-3" />
+												{item.sourceType}
+											</Badge>
+										{/if}
+									</div>
 								</div>
-								<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
-								<span
-									class="mt-2 inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground sm:hidden"
-								>
-									<Calendar class="size-3.5" />
-									{new Date(post.createdAt).toLocaleString()}
-								</span>
-								<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
-									{#if post.authorUsername}
-										<Badge href="/u/{post.authorUsername}" variant="outline" class="gap-1">
-											<User class="size-3.5" />
-											<span class="font-semibold">u/{post.authorUsername}</span>
-										</Badge>
-									{:else}
+							</div>
+							<div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+								<div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+									<span class="inline-flex items-center gap-1">
+										<MessageSquare class="size-3.5" />
+										{item.commentCount} comments
+									</span>
+									<span class="inline-flex items-center gap-1">
+										<ThumbsUp class="size-3.5" />
+										{item.likes}
+									</span>
+									<span class="inline-flex items-center gap-1">
+										<ThumbsDown class="size-3.5" />
+										{item.dislikes}
+									</span>
+									<span>score {item.score}</span>
+								</div>
+								<div class="flex shrink-0 items-center gap-2 self-end sm:self-auto">
+									<Button
+										size="icon-sm"
+										variant={item.userVote === 1 ? 'secondary' : 'outline'}
+										class={item.userVote === 1
+											? 'border-primary/40 text-primary [&_svg_path]:fill-current!'
+											: ''}
+										disabled={!auth.isAuthenticated}
+										onclick={() => vote(item._id, 1)}
+										aria-label="Like post"
+									>
+										<ThumbsUp class="size-4" />
+									</Button>
+									<Button
+										size="icon-sm"
+										variant={item.userVote === -1 ? 'secondary' : 'outline'}
+										class={item.userVote === -1
+											? 'border-destructive/40 text-destructive [&_svg_path]:fill-current!'
+											: ''}
+										disabled={!auth.isAuthenticated}
+										onclick={() => vote(item._id, -1)}
+										aria-label="Dislike post"
+									>
+										<ThumbsDown class="size-4" />
+									</Button>
+								</div>
+							</div>
+						{:else}
+							<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+								<div class="min-w-0 flex-1">
+									<div class="flex items-center gap-2">
+										<a
+											href="/source/{item._id}"
+											class="line-clamp-2 text-base font-medium hover:underline"
+										>
+											{decodeHtmlEntities(item.title)}
+										</a>
+										<a
+											href={item.url}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="text-muted-foreground hover:text-foreground"
+										>
+											<ExternalLink class="size-3.5" />
+										</a>
+									</div>
+									<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">
+										{decodeHtmlEntities(item.snippet)}
+									</p>
+									<div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
 										<Badge variant="outline" class="gap-1">
-											<User class="size-3.5" />
-											<span class="font-semibold">{post.authorName}</span>
+											<Archive class="size-3.5" />
+											{item.sourceType}
 										</Badge>
-									{/if}
-									{#if post.communitySlug}
-										<Badge href="/c/{post.communitySlug}" variant="outline" class="gap-1">
-											<Users class="size-3.5" />
-											<span class="font-semibold">c/{post.communitySlug}</span>
-										</Badge>
-									{:else if post.visibility === 'private'}
-										<Badge variant="outline" class="gap-1 border-muted-foreground/30 bg-muted/20">
-											<Lock class="size-3.5" />
-											<span class="font-semibold text-muted-foreground">Private</span>
-										</Badge>
-									{:else}
 										<Badge variant="outline" class="gap-1">
 											<Globe class="size-3.5" />
-											<span class="font-semibold">Public</span>
+											{decodeHtmlEntities(item.sourceTitle)}
 										</Badge>
-									{/if}
-									{#if (post.tags?.length ?? 0) > 0}
-										{#each post.tags as tag (tag)}
-											<Badge variant="secondary" class="gap-1 bg-secondary/50">
-												<Tag class="size-3" />
-												{tag}
+										{#if item.shareCount > 0}
+											<Badge variant="secondary" class="gap-1">
+												<MessageSquare class="size-3.5" />
+												Shared {item.shareCount}
 											</Badge>
-										{/each}
-									{/if}
-									{#if post.sourceType}
-										<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
-											<Archive class="size-3" />
-											{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
-										</Badge>
-									{/if}
+										{/if}
+										<span
+											class="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+										>
+											<Calendar class="size-3.5" />
+											{new Date(item.publishedAt).toLocaleString()}
+										</span>
+									</div>
 								</div>
 							</div>
-						</div>
-						<div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-							<div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-								<span class="inline-flex items-center gap-1">
-									<MessageSquare class="size-3.5" />
-									{post.commentCount} comments
-								</span>
-								<span class="inline-flex items-center gap-1">
-									<ThumbsUp class="size-3.5" />
-									{post.likes}
-								</span>
-								<span class="inline-flex items-center gap-1">
-									<ThumbsDown class="size-3.5" />
-									{post.dislikes}
-								</span>
-								<span>score {post.score}</span>
-							</div>
-							<div class="flex shrink-0 items-center gap-2 self-end sm:self-auto">
-								<Button
-									size="icon-sm"
-									variant={post.userVote === 1 ? 'secondary' : 'outline'}
-									class={post.userVote === 1
-										? 'border-primary/40 text-primary [&_svg_path]:fill-current!'
-										: ''}
-									disabled={!auth.isAuthenticated}
-									onclick={() => vote(post._id, 1)}
-									aria-label="Like post"
-								>
-									<ThumbsUp class="size-4" />
-								</Button>
-								<Button
-									size="icon-sm"
-									variant={post.userVote === -1 ? 'secondary' : 'outline'}
-									class={post.userVote === -1
-										? 'border-destructive/40 text-destructive [&_svg_path]:fill-current!'
-										: ''}
-									disabled={!auth.isAuthenticated}
-									onclick={() => vote(post._id, -1)}
-									aria-label="Dislike post"
-								>
-									<ThumbsDown class="size-4" />
-								</Button>
-							</div>
-						</div>
+							{#if scope === 'you'}
+								<div class="mt-3 flex flex-wrap items-center gap-2">
+									<Button
+										size="sm"
+										variant="outline"
+										disabled={!auth.isAuthenticated}
+										onclick={() => shareSourceItem(item._id, 'private')}
+									>
+										Share Private
+									</Button>
+									<Button
+										size="sm"
+										variant="outline"
+										disabled={!auth.isAuthenticated}
+										onclick={() => shareSourceItem(item._id, 'public')}
+									>
+										Share Public
+									</Button>
+									{#if (communitiesQuery.data?.length ?? 0) > 0}
+										<select
+											class="h-9 rounded-md border border-input bg-transparent px-2 text-xs"
+											bind:value={shareCommunityId}
+										>
+											{#each communitiesQuery.data ?? [] as c (c._id)}
+												<option value={c._id}>{c.name}</option>
+											{/each}
+										</select>
+										<Button
+											size="sm"
+											variant="outline"
+											disabled={!auth.isAuthenticated || !shareCommunityId}
+											onclick={() => shareSourceItem(item._id, 'public', shareCommunityId)}
+										>
+											Share to Community
+										</Button>
+									{/if}
+								</div>
+							{/if}
+						{/if}
 					</CardContent>
 				</Card>
 			{/each}

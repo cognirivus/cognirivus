@@ -155,6 +155,10 @@
 								<FileText class="mr-2 size-4" />
 								Manage Posts
 							</Button>
+							<Button variant="outline" href="/u/{username}/sources/manage">
+								<Archive class="mr-2 size-4" />
+								Manage Sources
+							</Button>
 						{/if}
 						{#if !isOwnProfile && auth.isAuthenticated}
 							<Button variant="outline" onclick={() => goto(`/chat/${username}`)}>

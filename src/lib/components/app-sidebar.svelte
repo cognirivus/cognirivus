@@ -3,7 +3,16 @@
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
-	import { Compass, Users, Send, User, LogIn, UserPlus, MessageSquare } from '@lucide/svelte';
+	import {
+		Compass,
+		Users,
+		Send,
+		User,
+		LogIn,
+		UserPlus,
+		MessageSquare,
+		Shield
+	} from '@lucide/svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import Logo from './Logo.svelte';
 	import NavUser from './nav-user.svelte';
@@ -19,6 +28,30 @@
 
 	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
 	const currentUser = $derived(currentUserQuery.data);
+	const isAdmin = $derived.by(() => {
+		const role = currentUser?.role;
+		if (typeof role === 'string') {
+			const normalizedRole = role.toLowerCase();
+			return (
+				normalizedRole === 'admin' ||
+				normalizedRole === 'system-admin' ||
+				normalizedRole === 'superadmin' ||
+				normalizedRole === 'owner'
+			);
+		}
+		if (Array.isArray(role)) {
+			const roleValues = role as Array<unknown>;
+			return roleValues.some(
+				(entry: unknown) =>
+					typeof entry === 'string' &&
+					(entry.toLowerCase() === 'admin' ||
+						entry.toLowerCase() === 'system-admin' ||
+						entry.toLowerCase() === 'superadmin' ||
+						entry.toLowerCase() === 'owner')
+			);
+		}
+		return false;
+	});
 
 	const myCommunitiesQuery = useQuery((api as any).communities.listMine, {});
 	const myCommunities = $derived(myCommunitiesQuery.data ?? []);
@@ -34,7 +67,8 @@
 		{ title: 'Feed', url: '/feed', icon: User, authOnly: true },
 		{ title: 'Communities', url: '/c', icon: Compass, authOnly: false },
 		{ title: 'Submit', url: '/submit', icon: Send, authOnly: true },
-		{ title: 'Chat', url: '/chat', icon: MessageSquare, authOnly: true }
+		{ title: 'Chat', url: '/chat', icon: MessageSquare, authOnly: true },
+		{ title: 'Admin', url: '/admin', icon: Shield, authOnly: true, adminOnly: true }
 	];
 
 	function isActive(href: string) {
@@ -69,7 +103,7 @@
 			<Sidebar.GroupContent>
 				<Sidebar.Menu>
 					{#each navItems as item (item.url)}
-						{#if !item.authOnly || auth.isAuthenticated}
+						{#if (!item.authOnly || auth.isAuthenticated) && (!item.adminOnly || isAdmin)}
 							<Sidebar.MenuItem>
 								<Sidebar.MenuButton tooltipContent={item.title} isActive={isActive(item.url)}>
 									{#snippet child({ props })}

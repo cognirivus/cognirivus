@@ -13,6 +13,7 @@ declare global {
 				username: string | null;
 				hasUsername: boolean;
 			} | null;
+			isAdmin?: boolean;
 			authState?: import('@mmailaender/convex-better-auth-svelte/sveltekit').AuthState;
 		}
 	}

@@ -8,9 +8,20 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
 	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
-	import { Lock, Globe, Users, PenLine, FileUp, Loader2, Send } from '@lucide/svelte';
-	import { toast } from 'svelte-sonner';
 	import ImportBookmarks from '$lib/components/ImportBookmarks.svelte';
+	import {
+		Globe,
+		Link,
+		Loader2,
+		Lock,
+		PenLine,
+		Rss,
+		Send,
+		Users,
+		Youtube,
+		FileUp
+	} from '@lucide/svelte';
+	import { toast } from 'svelte-sonner';
 
 	const client = useConvexClient();
 	const meQuery = useQuery(api.auth.getCurrentUser, {});
@@ -24,6 +35,11 @@
 	let visibility = $state<'public' | 'private'>('private');
 	let communityId = $state('');
 	let submitting = $state(false);
+
+	let sourceType = $state<'website' | 'rss' | 'youtube' | 'bookmarks'>('website');
+	let sourceInput = $state('');
+	let sourceTitle = $state('');
+	let addingSource = $state(false);
 
 	$effect(() => {
 		if (!meQuery.isLoading && !meQuery.data) {
@@ -58,6 +74,34 @@
 		}
 	}
 
+	async function submitSource(event: Event) {
+		event.preventDefault();
+		if (sourceType === 'bookmarks') {
+			return;
+		}
+		addingSource = true;
+		try {
+			const result = await client.action((api as any).sources.addSource, {
+				type: sourceType,
+				inputUrlOrId: sourceInput,
+				title: sourceTitle || undefined
+			});
+			const status = result?.subscriptionStatus as 'active' | 'already_subscribed' | undefined;
+			if (status === 'already_subscribed') {
+				toast.info('You are already subscribed to this source.');
+			} else {
+				toast.success('Source subscribed. Sync job queued.');
+			}
+			sourceInput = '';
+			sourceTitle = '';
+			goto('/feed?scope=you');
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to add source');
+		} finally {
+			addingSource = false;
+		}
+	}
+
 	const visibilityOptions = [
 		{ value: 'private', label: 'Private', icon: Lock, description: 'Your feed only' },
 		{ value: 'public', label: 'Public', icon: Globe, description: 'Global feed' },
@@ -70,40 +114,43 @@
 		{ value: 'media', label: 'Media', description: 'Upload media' }
 	] as const;
 
+	const sourceTypes = [
+		{ value: 'website', label: 'Website', icon: Globe, description: 'Track a webpage' },
+		{ value: 'rss', label: 'RSS', icon: Rss, description: 'Track a feed URL' },
+		{ value: 'youtube', label: 'YouTube', icon: Youtube, description: 'Track a channel/page URL' },
+		{ value: 'bookmarks', label: 'Bookmarks', icon: FileUp, description: 'Import bookmarks file' }
+	] as const;
+
 	const activeVisibility = $derived(
 		visibility === 'public' && communityId ? 'community' : visibility
 	);
 </script>
 
 <main class="mx-auto w-full max-w-3xl overflow-x-hidden px-4 py-8 sm:px-6">
-	<!-- Header -->
 	<div class="mb-6">
 		<h1 class="text-2xl font-semibold tracking-tight">Submit</h1>
 		<p class="mt-1 text-sm text-muted-foreground">
-			Create a post or import bookmarks into your knowledge feed.
+			Create a discussion post or subscribe to content sources for your private feed.
 		</p>
 	</div>
 
-	<!-- Tabs -->
 	<Tabs bind:value={activeTab} class="w-full">
 		<TabsList class="mb-6 grid w-full grid-cols-2">
 			<TabsTrigger value="create" class="gap-2">
 				<PenLine class="size-4" />
 				Create Post
 			</TabsTrigger>
-			<TabsTrigger value="import" class="gap-2">
-				<FileUp class="size-4" />
-				Import Bookmarks
+			<TabsTrigger value="source" class="gap-2">
+				<Link class="size-4" />
+				Add Source
 			</TabsTrigger>
 		</TabsList>
 
-		<!-- Create Post Tab -->
 		<TabsContent value="create">
 			<form
 				class="space-y-6 rounded-xl border border-border bg-card p-4 sm:p-6"
 				onsubmit={submitPost}
 			>
-				<!-- Visibility -->
 				<fieldset class="space-y-3">
 					<Label class="text-sm font-medium">Visibility</Label>
 					<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -138,7 +185,6 @@
 					</div>
 				</fieldset>
 
-				<!-- Community selector -->
 				{#if activeVisibility === 'community' && (communitiesQuery.data?.length ?? 0) > 0}
 					<div class="space-y-2">
 						<Label for="community">Community</Label>
@@ -154,7 +200,6 @@
 					</div>
 				{/if}
 
-				<!-- Post Type -->
 				<fieldset class="space-y-3">
 					<Label class="text-sm font-medium">Post Type</Label>
 					<div class="flex gap-2">
@@ -174,7 +219,6 @@
 					</div>
 				</fieldset>
 
-				<!-- Title -->
 				<div class="space-y-2">
 					<Label for="title">Title</Label>
 					<Input
@@ -186,7 +230,6 @@
 					/>
 				</div>
 
-				<!-- URL (link type) -->
 				{#if type === 'link'}
 					<div class="space-y-2">
 						<Label for="url">URL</Label>
@@ -200,7 +243,6 @@
 					</div>
 				{/if}
 
-				<!-- Body (text/media types) -->
 				{#if type !== 'link'}
 					<div class="space-y-2">
 						<Label for="body">Body</Label>
@@ -218,7 +260,6 @@
 					</div>
 				{/if}
 
-				<!-- Actions -->
 				<div class="flex items-center gap-3 border-t border-border pt-5">
 					<Button type="submit" disabled={submitting} class="gap-2">
 						{#if submitting}
@@ -234,65 +275,81 @@
 			</form>
 		</TabsContent>
 
-		<!-- Import Bookmarks Tab -->
-		<TabsContent value="import">
+		<TabsContent value="source">
 			<div class="space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6">
 				<div class="space-y-1">
-					<h2 class="text-base font-semibold">Import Chrome Bookmarks</h2>
+					<h2 class="text-base font-semibold">Add a Source</h2>
 					<p class="text-sm text-muted-foreground">
-						Import your Chrome bookmarks directly into your private feed. Export your bookmarks from
-						Chrome as an HTML file, then upload it here.
+						Subscribe to websites, feeds, or channels. New source items appear in your private feed.
 					</p>
 				</div>
 
-				<!-- Steps -->
-				<div class="grid gap-3 sm:grid-cols-3">
-					<div class="rounded-lg bg-muted/40 p-4">
-						<div
-							class="mb-2 flex size-7 items-center justify-center rounded-full bg-foreground text-xs font-bold text-background"
-						>
-							1
-						</div>
-						<p class="text-sm font-medium">Export from Chrome</p>
-						<p class="mt-0.5 text-xs text-muted-foreground">
-							Open Chrome → Bookmarks → Bookmark Manager → ⋮ → Export bookmarks
-						</p>
+				<fieldset class="space-y-3">
+					<Label class="text-sm font-medium">Source Type</Label>
+					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+						{#each sourceTypes as st (st.value)}
+							{@const isActive = sourceType === st.value}
+							<button
+								type="button"
+								class="flex items-center gap-3 rounded-lg border px-3 py-3 text-left transition-all
+									{isActive ? 'border-primary bg-primary/5' : 'border-border bg-muted/20 hover:bg-muted/40'}"
+								onclick={() => (sourceType = st.value)}
+							>
+								<st.icon class="size-4 shrink-0" />
+								<div>
+									<p class="text-sm font-medium">{st.label}</p>
+									<p class="text-xs text-muted-foreground">{st.description}</p>
+								</div>
+							</button>
+						{/each}
 					</div>
-					<div class="rounded-lg bg-muted/40 p-4">
-						<div
-							class="mb-2 flex size-7 items-center justify-center rounded-full bg-foreground text-xs font-bold text-background"
-						>
-							2
-						</div>
-						<p class="text-sm font-medium">Upload HTML file</p>
-						<p class="mt-0.5 text-xs text-muted-foreground">
-							Select the exported .html file using the button below
-						</p>
-					</div>
-					<div class="rounded-lg bg-muted/40 p-4">
-						<div
-							class="mb-2 flex size-7 items-center justify-center rounded-full bg-foreground text-xs font-bold text-background"
-						>
-							3
-						</div>
-						<p class="text-sm font-medium">Review & import</p>
-						<p class="mt-0.5 text-xs text-muted-foreground">
-							Preview, filter, and select which bookmarks to import
-						</p>
-					</div>
-				</div>
+				</fieldset>
 
-				<!-- Upload area -->
-				<div class="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed border-border bg-muted/20 px-4 py-8 sm:px-6 sm:py-10 text-center">
-					<div class="flex size-12 items-center justify-center rounded-full bg-muted">
-						<FileUp class="size-6 text-muted-foreground" />
+				{#if sourceType === 'bookmarks'}
+					<div class="rounded-lg border border-dashed border-border bg-muted/20 p-4">
+						<p class="mb-3 text-sm text-muted-foreground">
+							Import your browser bookmarks as source items. This no longer creates posts directly.
+						</p>
+						<ImportBookmarks />
 					</div>
-					<div class="space-y-1">
-						<p class="text-sm font-medium">Upload your bookmarks file</p>
-						<p class="text-xs text-muted-foreground">HTML files exported from Chrome, Firefox, or Edge</p>
-					</div>
-					<ImportBookmarks />
-				</div>
+				{:else}
+					<form class="space-y-4" onsubmit={submitSource}>
+						<div class="space-y-2">
+							<Label for="sourceInput">Source URL</Label>
+							<Input
+								id="sourceInput"
+								bind:value={sourceInput}
+								required
+								placeholder={sourceType === 'rss'
+									? 'https://example.com/feed.xml'
+									: sourceType === 'youtube'
+										? 'https://www.youtube.com/@channel'
+										: 'https://example.com'}
+							/>
+						</div>
+						<div class="space-y-2">
+							<Label for="sourceTitle">Custom Title (optional)</Label>
+							<Input
+								id="sourceTitle"
+								bind:value={sourceTitle}
+								maxlength={220}
+								placeholder="Override displayed source title"
+							/>
+						</div>
+						<div class="flex items-center gap-3 border-t border-border pt-4">
+							<Button type="submit" disabled={addingSource} class="gap-2">
+								{#if addingSource}
+									<Loader2 class="size-4 animate-spin" />
+									Adding...
+								{:else}
+									<Link class="size-4" />
+									Subscribe Source
+								{/if}
+							</Button>
+							<Button type="button" variant="ghost" href="/feed?scope=you">Go to My Feed</Button>
+						</div>
+					</form>
+				{/if}
 			</div>
 		</TabsContent>
 	</Tabs>
