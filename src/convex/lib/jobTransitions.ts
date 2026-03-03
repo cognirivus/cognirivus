@@ -30,7 +30,7 @@ const DELETION_JOB_TRANSITIONS: TransitionMap<DeletionJobStatus> = {
 
 const R2_RETRY_JOB_TRANSITIONS: TransitionMap<R2RetryJobStatus> = {
 	queued: ['running', 'failed'],
-	running: ['done', 'failed'],
+	running: ['queued', 'done', 'failed'],
 	done: [],
 	failed: ['queued']
 };

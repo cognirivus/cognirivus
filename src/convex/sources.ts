@@ -28,6 +28,7 @@ import {
 	toFailureMessage
 } from './lib/jobFailure';
 import { assertNightlyRunTransition, assertSourceJobTransition } from './lib/jobTransitions';
+import { toSourceJobResponse } from './lib/serializers';
 
 const SOURCE_ITEM_INLINE_LIMIT = 1000;
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
@@ -43,7 +44,7 @@ const MANUAL_REFRESH_DAILY_LIMIT = 3;
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
 const NEW_ACCOUNT_WINDOW_MS = 7 * UTC_DAY_MS;
 const NEW_ACCOUNT_MANUAL_REFRESH_DAILY_LIMIT = 1;
-const MAX_FETCH_REDIRECTS = 5;
+const MAX_FETCH_REDIRECTS = 15;
 
 const sourceSyncWorkpool = new Workpool((components as any).sourceSyncWorkpool, {
 	maxParallelism: 8,
@@ -126,6 +127,19 @@ const sha256Hex = async (value: string) => {
 
 const urlHash = async (url: string) => sha256Hex(url.trim().toLowerCase());
 
+const hasCredentialsInAuthority = (inputUrl: string) => {
+	const match = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\/([^/?#]+)/.exec(inputUrl);
+	if (!match) {
+		return false;
+	}
+	const authority = match[1] ?? '';
+	const atIndex = authority.lastIndexOf('@');
+	if (atIndex === -1) {
+		return false;
+	}
+	return authority.slice(atIndex + 1).length > 0;
+};
+
 const normalizeHttpUrl = (inputUrl: string) => {
 	const trimmed = inputUrl.trim();
 	if (!trimmed) {
@@ -146,7 +160,7 @@ const normalizeHttpUrl = (inputUrl: string) => {
 	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
 		throw new Error('Only http/https source URLs are supported.');
 	}
-	if (parsed.username || parsed.password) {
+	if (hasCredentialsInAuthority(withProtocol)) {
 		throw new Error('Source URLs with credentials are not supported.');
 	}
 	if (parsed.toString().length > SOURCE_URL_LIMIT) {
@@ -2526,31 +2540,6 @@ export const getJobStatus = query({
 		if (!job || job.userAuthId !== authUser._id) {
 			return null;
 		}
-		const response: {
-			_id: Id<'source_jobs'>;
-			jobType: 'sync_source' | 'bulk_unsubscribe' | 'resubscribe_backfill';
-			status: 'queued' | 'running' | 'done' | 'failed';
-			processed: number;
-			createdAt: number;
-			updatedAt: number;
-			userAuthId?: string;
-			sourceId?: Id<'sources'>;
-			cursor?: string;
-			error?: string;
-			finishedAt?: number;
-		} = {
-			_id: job._id,
-			jobType: job.jobType,
-			status: job.status,
-			processed: job.processed,
-			createdAt: job.createdAt,
-			updatedAt: job.updatedAt
-		};
-		if (job.userAuthId) response.userAuthId = job.userAuthId;
-		if (job.sourceId) response.sourceId = job.sourceId;
-		if (job.cursor) response.cursor = job.cursor;
-		if (job.error) response.error = job.error;
-		if (job.finishedAt !== undefined) response.finishedAt = job.finishedAt;
-		return response;
+		return toSourceJobResponse(job);
 	}
 });

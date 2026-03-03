@@ -8,7 +8,7 @@ import {
 	query
 } from './_generated/server';
 import { internal } from './_generated/api';
-import { r2 } from './lib/r2';
+import { deleteR2MetadataOnly, deleteR2ObjectOnly, r2 } from './lib/r2';
 import type { Id } from './_generated/dataModel';
 import { requireAdminUser } from './lib/adminAuth';
 import { actionRetrier } from './lib/actionRetrier';
@@ -20,6 +20,7 @@ import {
 } from './lib/aggregates';
 import { JOB_FAILURE_CODE, toFailureMessage } from './lib/jobFailure';
 import { assertDeletionJobTransition, assertR2RetryJobTransition } from './lib/jobTransitions';
+import { toR2RetryJobResponse, type R2RetryJobResponse } from './lib/serializers';
 
 const stringifyDetails = (value: unknown): string => {
 	try {
@@ -126,7 +127,8 @@ const dashboardRetryBacklogValidator = v.object({
 const dashboardFailureCountsValidator = v.object({
 	sourceJobs24h: v.number(),
 	deletionJobs24h: v.number(),
-	r2RetryJobs24h: v.number()
+	r2RetryJobs24h: v.number(),
+	invalidR2RetryRows: v.number()
 });
 
 const dashboardSweeperValidator = v.object({
@@ -217,6 +219,8 @@ const r2RetryStatusValidator = v.union(
 	v.literal('failed')
 );
 
+const r2RetryStageValidator = v.union(v.literal('object_delete'), v.literal('metadata_delete'));
+
 const r2OrphanSweeperPhaseValidator = v.union(
 	v.literal('source_items'),
 	v.literal('posts'),
@@ -251,10 +255,13 @@ const r2RetryJobValidator = v.union(
 		entityId: v.string(),
 		r2Key: v.string(),
 		operation: v.literal('delete'),
+		stage: r2RetryStageValidator,
 		status: r2RetryStatusValidator,
 		attemptCount: v.number(),
 		nextRunAt: v.number(),
 		lastError: v.optional(v.string()),
+		objectDeletedAt: v.optional(v.number()),
+		metadataDeletedAt: v.optional(v.number()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 		finishedAt: v.optional(v.number())
@@ -330,6 +337,7 @@ type DeletePostPermanentlyResult = {
 	r2Deleted: boolean;
 };
 
+
 type DeletionJobTargetType = 'source' | 'source_item' | 'post';
 
 type DeletionJobClaim = {
@@ -345,6 +353,9 @@ type R2RetryJobClaim = {
 	status: 'queued' | 'running' | 'done' | 'failed';
 	shouldRun: boolean;
 };
+
+type R2RetryStage = 'object_delete' | 'metadata_delete';
+type R2RetryStatus = 'queued' | 'running' | 'done' | 'failed';
 
 const createDeletionRequestKey = (targetType: DeletionJobTargetType, targetId: string) =>
 	`v1:${targetType}:${targetId}`;
@@ -481,6 +492,9 @@ export const listDashboard = query({
 				.withIndex('by_status_and_nextRunAt', (q) => q.eq('status', 'failed'))
 				.collect()
 		]);
+		const invalidR2RetryRows = [...r2QueuedJobs, ...r2RunningJobs, ...r2FailedJobs].filter(
+			(job) => job.stage !== 'object_delete' && job.stage !== 'metadata_delete'
+		).length;
 
 		const [failedSourceJobs24h, failedDeletionJobs24h, failedR2RetryJobs24h, sweeperEvents] =
 			await Promise.all([
@@ -544,7 +558,8 @@ export const listDashboard = query({
 				failures24h: {
 					sourceJobs24h: failedSourceJobs24h.length,
 					deletionJobs24h: failedDeletionJobs24h.length,
-					r2RetryJobs24h: failedR2RetryJobs24h.length
+					r2RetryJobs24h: failedR2RetryJobs24h.length,
+					invalidR2RetryRows
 				},
 				sweeper: {
 					lastSuccessAt: sweeperEvents[0]?.createdAt ?? null
@@ -1394,6 +1409,7 @@ export const upsertR2DeleteRetryJob = internalMutation({
 				entityId: args.entityId,
 				r2Key: args.r2Key,
 				operation: 'delete',
+				stage: 'object_delete',
 				status: 'queued',
 				attemptCount: 0,
 				nextRunAt: now,
@@ -1425,6 +1441,7 @@ export const upsertR2DeleteRetryJob = internalMutation({
 
 		assertR2RetryJobTransition(existing.status, 'queued');
 		await ctx.db.patch(existing._id, {
+			stage: existing.stage === 'metadata_delete' ? 'metadata_delete' : 'object_delete',
 			status: 'queued',
 			nextRunAt: now,
 			lastError: undefined,
@@ -1449,36 +1466,10 @@ export const getR2RetryJob = internalQuery({
 		if (!job || job.operation !== 'delete') {
 			return null;
 		}
-		const response: {
-			_id: Id<'r2_retry_jobs'>;
-			entityType: string;
-			entityId: string;
-			r2Key: string;
-			operation: 'delete';
-			status: 'queued' | 'running' | 'done' | 'failed';
-			attemptCount: number;
-			nextRunAt: number;
-			lastError?: string;
-			createdAt: number;
-			updatedAt: number;
-			finishedAt?: number;
-		} = {
-			_id: job._id,
-			entityType: job.entityType,
-			entityId: job.entityId,
-			r2Key: job.r2Key,
-			operation: job.operation,
-			status: job.status,
-			attemptCount: job.attemptCount,
-			nextRunAt: job.nextRunAt,
-			createdAt: job.createdAt,
-			updatedAt: job.updatedAt
-		};
-		if (job.lastError) response.lastError = job.lastError;
-		if (job.finishedAt !== undefined) response.finishedAt = job.finishedAt;
-		return response;
+		return toR2RetryJobResponse(job);
 	}
 });
+
 
 export const markR2RetryJobAttempt = internalMutation({
 	args: {
@@ -1524,8 +1515,10 @@ export const markR2RetryJobDone = internalMutation({
 		assertR2RetryJobTransition(job.status, 'done');
 		await ctx.db.patch(job._id, {
 			status: 'done',
+			stage: 'metadata_delete',
 			lastError: undefined,
 			updatedAt: now,
+			metadataDeletedAt: now,
 			finishedAt: now
 		});
 		return null;
@@ -1553,10 +1546,42 @@ export const markR2RetryJobFailed = internalMutation({
 		assertR2RetryJobTransition(job.status, 'failed');
 		await ctx.db.patch(job._id, {
 			status: 'failed',
+			stage: job.stage === 'metadata_delete' ? 'metadata_delete' : 'object_delete',
 			lastError: args.error.slice(0, 1000),
 			nextRunAt: now,
 			updatedAt: now,
 			finishedAt: now
+		});
+		return null;
+	}
+});
+
+export const advanceR2RetryJobToMetadataStage = internalMutation({
+	args: {
+		retryJobId: v.id('r2_retry_jobs')
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const now = Date.now();
+		const job = await ctx.db.get(args.retryJobId);
+		if (!job) {
+			return null;
+		}
+		if (job.status === 'done') {
+			return null;
+		}
+		if (job.stage === 'metadata_delete' && job.status === 'queued') {
+			return null;
+		}
+		assertR2RetryJobTransition(job.status, 'queued');
+		await ctx.db.patch(job._id, {
+			stage: 'metadata_delete',
+			status: 'queued',
+			objectDeletedAt: now,
+			lastError: undefined,
+			nextRunAt: now,
+			updatedAt: now,
+			finishedAt: undefined
 		});
 		return null;
 	}
@@ -1582,7 +1607,17 @@ export const runR2DeleteAttempt = internalAction({
 		await ctx.runMutation((internal as any).admin.markR2RetryJobAttempt, {
 			retryJobId: args.retryJobId
 		});
-		await r2.deleteObject(ctx, retryJob.r2Key);
+		if (retryJob.stage === 'object_delete') {
+			await deleteR2ObjectOnly(ctx, retryJob.r2Key);
+			await ctx.runMutation((internal as any).admin.advanceR2RetryJobToMetadataStage, {
+				retryJobId: args.retryJobId
+			});
+			return { retryJobId: args.retryJobId };
+		}
+		await deleteR2MetadataOnly(ctx, retryJob.r2Key);
+		await ctx.runMutation((internal as any).admin.markR2RetryJobDone, {
+			retryJobId: args.retryJobId
+		});
 		return { retryJobId: args.retryJobId };
 	}
 });
@@ -1612,59 +1647,84 @@ const runRetriedR2Delete = async (
 		return false;
 	}
 
-	const runId = await actionRetrier.run(
-		ctx,
-		(internal as any).admin.runR2DeleteAttempt,
-		{
-			retryJobId: claim.jobId
-		},
-		{
-			initialBackoffMs: 250,
-			base: 2,
-			maxFailures: 4
-		}
-	);
-
-	try {
-		while (true) {
-			const status: any = await actionRetrier.status(ctx, runId);
-			if (status?.type === 'inProgress') {
-				await sleep(120);
-				continue;
+	for (let stageAttempt = 0; stageAttempt < 3; stageAttempt += 1) {
+		const runId = await actionRetrier.run(
+			ctx,
+			(internal as any).admin.runR2DeleteAttempt,
+			{
+				retryJobId: claim.jobId
+			},
+			{
+				initialBackoffMs: 250,
+				base: 2,
+				maxFailures: 4
 			}
-			const result = status?.result;
-			if (result?.type === 'success') {
-				await ctx.runMutation((internal as any).admin.markR2RetryJobDone, {
-					retryJobId: claim.jobId
-				});
-				return true;
-			}
+		);
 
-			const errorMessage =
-				result?.type === 'failed'
-					? toFailureMessage(
-							JOB_FAILURE_CODE.R2_DELETE_FAILED,
-							result.error,
-							'R2 deletion retrier run failed.'
-						)
-					: toFailureMessage(
-							JOB_FAILURE_CODE.R2_DELETE_FAILED,
-							null,
-							'R2 deletion retrier run was canceled.'
-						);
-			await ctx.runMutation((internal as any).admin.markR2RetryJobFailed, {
-				retryJobId: claim.jobId,
-				error: errorMessage
-			});
-			return false;
-		}
-	} finally {
 		try {
-			await actionRetrier.cleanup(ctx, runId);
-		} catch (cleanupError) {
-			console.error('Failed to cleanup action retrier run for R2 delete.', cleanupError);
+			while (true) {
+				const status: any = await actionRetrier.status(ctx, runId);
+				if (status?.type === 'inProgress') {
+					await sleep(120);
+					continue;
+				}
+
+				const result = status?.result;
+				if (result?.type !== 'success') {
+					const errorMessage =
+						result?.type === 'failed'
+							? toFailureMessage(
+									JOB_FAILURE_CODE.R2_DELETE_FAILED,
+									result.error,
+									'R2 deletion retrier run failed.'
+								)
+							: toFailureMessage(
+									JOB_FAILURE_CODE.R2_DELETE_FAILED,
+									null,
+									'R2 deletion retrier run was canceled.'
+								);
+					await ctx.runMutation((internal as any).admin.markR2RetryJobFailed, {
+						retryJobId: claim.jobId,
+						error: errorMessage
+					});
+					return false;
+				}
+
+				const retryJob: R2RetryJobResponse | null = await ctx.runQuery(
+					(internal as any).admin.getR2RetryJob,
+					{
+						retryJobId: claim.jobId
+					}
+				);
+				if (!retryJob) {
+					return false;
+				}
+				if (retryJob.status === 'done') {
+					return true;
+				}
+				if (retryJob.stage === 'metadata_delete' && retryJob.status === 'queued') {
+					break;
+				}
+				return false;
+			}
+		} finally {
+			try {
+				await actionRetrier.cleanup(ctx, runId);
+			} catch (cleanupError) {
+				console.error('Failed to cleanup action retrier run for R2 delete.', cleanupError);
+			}
 		}
 	}
+
+	await ctx.runMutation((internal as any).admin.markR2RetryJobFailed, {
+		retryJobId: claim.jobId,
+		error: toFailureMessage(
+			JOB_FAILURE_CODE.R2_DELETE_FAILED,
+			null,
+			'R2 deletion stages did not converge.'
+		)
+	});
+	return false;
 };
 
 const deleteR2Keys = async (
@@ -1700,6 +1760,7 @@ const deleteR2Keys = async (
 	}
 	return deletedCount;
 };
+
 
 export const deleteSourcePermanently = action({
 	args: {

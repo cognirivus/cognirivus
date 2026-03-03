@@ -14,7 +14,7 @@ const SOURCE_ITEM_SNIPPET_LIMIT = 500;
 const SOURCE_TITLE_LIMIT = 220;
 const SOURCE_SYNC_ITEM_LIMIT = 25;
 const SOURCE_URL_LIMIT = 2048;
-const MAX_FETCH_REDIRECTS = 10;
+const MAX_FETCH_REDIRECTS = 15;
 
 const REQUEST_HEADERS = {
 	'User-Agent':
@@ -295,6 +295,24 @@ const fetchRssTextWithGuards = async (url: string, timeoutMs = 15000) => {
 
 const normalizeFeedError = (error: unknown) => {
 	const message = error instanceof Error ? error.message : 'RSS fetch failed.';
+	if (/redirect loop/i.test(message)) {
+		return 'RSS fetch redirect loop detected.';
+	}
+	if (/exceeded .*redirect/i.test(message)) {
+		return `RSS fetch exceeded ${MAX_FETCH_REDIRECTS} redirects.`;
+	}
+	if (/dns resolution failed/i.test(message)) {
+		return 'Source host DNS resolution failed.';
+	}
+	if (/missing location header/i.test(message)) {
+		return 'RSS host returned an invalid redirect response.';
+	}
+	if (/blocked for safety|blocked address|host is blocked/i.test(message)) {
+		return 'Source host is blocked for safety.';
+	}
+	if (/rss parse failed/i.test(message)) {
+		return 'RSS parse failed for this source.';
+	}
 	if (/\b403\b|\b401\b|access denied|forbidden/i.test(message)) {
 		return 'Access denied by RSS host. This feed blocks server-side fetches.';
 	}
@@ -327,7 +345,13 @@ export const syncRssSource = internalAction({
 		for (const candidate of candidates) {
 			try {
 				const fetched = await fetchRssTextWithGuards(candidate);
-				parsedFeed = await parser.parseString(fetched.body);
+				try {
+					parsedFeed = await parser.parseString(fetched.body);
+				} catch (parseError) {
+					const parseMessage =
+						parseError instanceof Error ? parseError.message : 'Unknown parser error';
+					throw new Error(`RSS parse failed: ${parseMessage}`);
+				}
 				parsedFeedUrl = fetched.finalUrl;
 				break;
 			} catch (error) {

@@ -294,6 +294,7 @@ const schema = defineSchema({
 		entityId: v.string(),
 		r2Key: v.string(),
 		operation: v.literal('delete'),
+		stage: v.optional(v.union(v.literal('object_delete'), v.literal('metadata_delete'))),
 		status: v.union(
 			v.literal('queued'),
 			v.literal('running'),
@@ -303,6 +304,8 @@ const schema = defineSchema({
 		attemptCount: v.number(),
 		nextRunAt: v.number(),
 		lastError: v.optional(v.string()),
+		objectDeletedAt: v.optional(v.number()),
+		metadataDeletedAt: v.optional(v.number()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 		finishedAt: v.optional(v.number())

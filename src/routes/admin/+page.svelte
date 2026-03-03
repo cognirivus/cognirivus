@@ -192,6 +192,9 @@
 									.data.debug.failures24h.deletionJobs24h} | R2:{dashboardQuery.data.debug
 									.failures24h.r2RetryJobs24h}
 							</p>
+							<p class="mt-1 text-xs text-muted-foreground">
+								Invalid R2 rows: {dashboardQuery.data.debug.failures24h.invalidR2RetryRows}
+							</p>
 						</div>
 						<div class="rounded-md border p-3">
 							<p class="text-xs text-muted-foreground">Last Sweeper Success</p>

@@ -10,7 +10,22 @@ import authConfig from './auth.config';
 import authSchema from './betterAuth/schema';
 import { admin } from 'better-auth/plugins';
 
-const getSiteUrl = () => process.env.SITE_URL ?? process.env.PUBLIC_SITE_URL ?? '';
+const getSiteUrl = () => {
+	const candidate =
+		process.env.SITE_URL ??
+		process.env.PUBLIC_SITE_URL ??
+		process.env.VITE_SITE_URL ??
+		process.env.NEXT_PUBLIC_SITE_URL ??
+		'';
+	const raw = candidate.trim();
+	if (!raw) return '';
+	try {
+		const normalized = new URL(raw);
+		return normalized.toString().replace(/\/$/, '');
+	} catch {
+		throw new Error('SITE_URL or PUBLIC_SITE_URL must be a valid absolute URL.');
+	}
+};
 
 const NAME_MIN = 2;
 const NAME_MAX = 50;

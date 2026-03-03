@@ -36,6 +36,18 @@ describe('jobFailure taxonomy', () => {
 		expect(classifySourceSyncFailureCode(new Error('Network fetch failed.'))).toBe(
 			JOB_FAILURE_CODE.SOURCE_SYNC_FETCH_FAILED
 		);
+		expect(classifySourceSyncFailureCode(new Error('Source redirect loop detected.'))).toBe(
+			JOB_FAILURE_CODE.SOURCE_SYNC_REDIRECT_LOOP
+		);
+		expect(classifySourceSyncFailureCode(new Error('Source fetch exceeded 15 redirects.'))).toBe(
+			JOB_FAILURE_CODE.SOURCE_SYNC_REDIRECT_LIMIT_EXCEEDED
+		);
+		expect(classifySourceSyncFailureCode(new Error('Source host DNS resolution failed.'))).toBe(
+			JOB_FAILURE_CODE.SOURCE_SYNC_DNS_FAILED
+		);
+		expect(classifySourceSyncFailureCode(new Error('RSS parse failed for this source.'))).toBe(
+			JOB_FAILURE_CODE.SOURCE_SYNC_PARSE_FAILED
+		);
 	});
 });
 
@@ -55,6 +67,7 @@ describe('job status transition guards', () => {
 	it('supports deletion and r2 retry retries only on allowed states', () => {
 		expect(() => assertDeletionJobTransition('failed', 'running')).not.toThrow();
 		expect(() => assertR2RetryJobTransition('failed', 'queued')).not.toThrow();
+		expect(() => assertR2RetryJobTransition('running', 'queued')).not.toThrow();
 		expect(() => assertDeletionJobTransition('done', 'running')).toThrow(
 			`[${JOB_FAILURE_CODE.JOB_INVALID_TRANSITION}]`
 		);

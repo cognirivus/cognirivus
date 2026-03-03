@@ -4,7 +4,7 @@ import { action, internalAction, internalMutation, mutation, query } from './_ge
 import { authComponent } from './auth';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { r2 } from './lib/r2';
+import { deleteR2MetadataOnly, deleteR2ObjectOnly, r2 } from './lib/r2';
 import { rateLimiter } from './lib/rateLimits';
 import { trackPostDeleted, trackPostInserted } from './lib/aggregates';
 
@@ -951,7 +951,8 @@ export const deleteStoredBody = internalAction({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		try {
-			await r2.deleteObject(ctx, args.r2Key);
+			await deleteR2ObjectOnly(ctx, args.r2Key);
+			await deleteR2MetadataOnly(ctx, args.r2Key);
 		} catch (error) {
 			console.error('Failed to delete R2 object', args.r2Key, error);
 		}

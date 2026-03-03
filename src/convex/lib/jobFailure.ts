@@ -6,6 +6,10 @@ export const JOB_FAILURE_CODE = {
 	SOURCE_SYNC_BLOCKED_HOST: 'SOURCE_SYNC_BLOCKED_HOST',
 	SOURCE_SYNC_ACCESS_DENIED: 'SOURCE_SYNC_ACCESS_DENIED',
 	SOURCE_SYNC_FETCH_FAILED: 'SOURCE_SYNC_FETCH_FAILED',
+	SOURCE_SYNC_REDIRECT_LOOP: 'SOURCE_SYNC_REDIRECT_LOOP',
+	SOURCE_SYNC_REDIRECT_LIMIT_EXCEEDED: 'SOURCE_SYNC_REDIRECT_LIMIT_EXCEEDED',
+	SOURCE_SYNC_DNS_FAILED: 'SOURCE_SYNC_DNS_FAILED',
+	SOURCE_SYNC_PARSE_FAILED: 'SOURCE_SYNC_PARSE_FAILED',
 	SOURCE_BULK_UNSUBSCRIBE_FAILED: 'SOURCE_BULK_UNSUBSCRIBE_FAILED',
 	SOURCE_RESUBSCRIBE_BACKFILL_FAILED: 'SOURCE_RESUBSCRIBE_BACKFILL_FAILED',
 	SOURCE_NIGHTLY_REFRESH_FAILED: 'SOURCE_NIGHTLY_REFRESH_FAILED',
@@ -60,6 +64,18 @@ export const extractFailureCode = (value?: string | null): JobFailureCode | null
 
 export const classifySourceSyncFailureCode = (error: unknown): JobFailureCode => {
 	const message = toPlainMessage(error, '').toLowerCase();
+	if (message.includes('redirect loop')) {
+		return JOB_FAILURE_CODE.SOURCE_SYNC_REDIRECT_LOOP;
+	}
+	if (message.includes('exceeded') && message.includes('redirect')) {
+		return JOB_FAILURE_CODE.SOURCE_SYNC_REDIRECT_LIMIT_EXCEEDED;
+	}
+	if (message.includes('dns resolution failed') || message.includes('dns')) {
+		return JOB_FAILURE_CODE.SOURCE_SYNC_DNS_FAILED;
+	}
+	if (message.includes('rss parse') || message.includes('feed parse')) {
+		return JOB_FAILURE_CODE.SOURCE_SYNC_PARSE_FAILED;
+	}
 	if (message.includes('not found')) {
 		return JOB_FAILURE_CODE.SOURCE_SYNC_NOT_FOUND;
 	}
