@@ -29,6 +29,8 @@ const parser = new Parser({
 	timeout: 15000,
 	headers: REQUEST_HEADERS
 });
+const ENABLE_THIRD_PARTY_INGESTION_FALLBACK =
+	(process.env.ENABLE_THIRD_PARTY_INGESTION_FALLBACK ?? '').toLowerCase() === 'true';
 
 const createSnippet = (value: string) =>
 	value.trim().replace(/\s+/g, ' ').slice(0, SOURCE_ITEM_SNIPPET_LIMIT);
@@ -287,6 +289,14 @@ const normalizeFeedError = (error: unknown) => {
 	return message;
 };
 
+const tryThirdPartyIngestionFallback = async (): Promise<{
+	parsedFeed: any;
+	parsedFeedUrl: string | null;
+} | null> => {
+	// Policy default: keep third-party ingestion disabled unless explicitly enabled and implemented.
+	return null;
+};
+
 export const syncRssSource = internalAction({
 	args: {
 		sourceId: v.id('sources'),
@@ -310,6 +320,16 @@ export const syncRssSource = internalAction({
 				break;
 			} catch (error) {
 				lastError = error;
+			}
+		}
+
+		if (!parsedFeed) {
+			if (ENABLE_THIRD_PARTY_INGESTION_FALLBACK) {
+				const fallback = await tryThirdPartyIngestionFallback();
+				if (fallback) {
+					parsedFeed = fallback.parsedFeed;
+					parsedFeedUrl = fallback.parsedFeedUrl;
+				}
 			}
 		}
 
