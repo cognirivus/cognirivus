@@ -39,8 +39,10 @@ const FANOUT_BATCH_SIZE = 200;
 const FANOUT_RETRY_MAX_ATTEMPTS = 3;
 const FANOUT_RETRY_BASE_DELAY_MS = 1000;
 const MANUAL_REFRESH_DAILY_LIMIT = 3;
-const MAX_FETCH_REDIRECTS = 5;
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
+const NEW_ACCOUNT_WINDOW_MS = 7 * UTC_DAY_MS;
+const NEW_ACCOUNT_MANUAL_REFRESH_DAILY_LIMIT = 1;
+const MAX_FETCH_REDIRECTS = 5;
 
 const sourceTypeValidator = v.union(
 	v.literal('website'),
@@ -69,6 +71,8 @@ const sourceJobStatusValidator = v.union(
 const nextUtcMidnightMs = (now = Date.now()) =>
 	Math.floor(now / UTC_DAY_MS) * UTC_DAY_MS + UTC_DAY_MS;
 const utcRunDateKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
+const isNewAccount = (profileCreatedAt: number | null, now = Date.now()) =>
+	profileCreatedAt !== null && now - profileCreatedAt < NEW_ACCOUNT_WINDOW_MS;
 
 const createSnippet = (value: string) =>
 	value.trim().replace(/\s+/g, ' ').slice(0, SOURCE_ITEM_SNIPPET_LIMIT);
@@ -1494,6 +1498,20 @@ export const patchSourceSyncError = internalMutation({
 	}
 });
 
+export const getUserProfileCreatedAt = internalQuery({
+	args: {
+		userAuthId: v.string()
+	},
+	returns: v.union(v.number(), v.null()),
+	handler: async (ctx, args) => {
+		const profile = await ctx.db
+			.query('users_profile')
+			.withIndex('by_authId', (q) => q.eq('authId', args.userAuthId))
+			.unique();
+		return profile?.createdAt ?? null;
+	}
+});
+
 export const addSource = action({
 	args: {
 		type: sourceTypeValidator,
@@ -1510,9 +1528,25 @@ export const addSource = action({
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
-		await rateLimiter.limit(ctx, 'addSource', { key: authUser._id, throws: true });
-
 		const normalizedInput = normalizeSourceInput(args.type, args.inputUrlOrId);
+		await rateLimiter.limit(ctx, 'addSource', { key: authUser._id, throws: true });
+		await rateLimiter.limit(ctx, 'addSourcePerNormalizedKey', {
+			key: `${authUser._id}:${normalizedInput.normalizedKey}`,
+			throws: true
+		});
+		const profileCreatedAt: number | null = await ctx.runQuery(
+			(internal as any).sources.getUserProfileCreatedAt,
+			{
+				userAuthId: authUser._id
+			}
+		);
+		if (isNewAccount(profileCreatedAt)) {
+			await rateLimiter.limit(ctx, 'addSourceNewAccount', {
+				key: authUser._id,
+				throws: true
+			});
+		}
+
 		const ensureResult: {
 			sourceId: Id<'sources'>;
 			alreadySubscribed: boolean;
@@ -1677,6 +1711,22 @@ export const refreshSource = action({
 				key: authUser._id,
 				throws: true
 			});
+			await rateLimiter.limit(ctx, 'manualSourceRefreshPerSource', {
+				key: `${authUser._id}:${args.sourceId}`,
+				throws: true
+			});
+			const profileCreatedAt: number | null = await ctx.runQuery(
+				(internal as any).sources.getUserProfileCreatedAt,
+				{
+					userAuthId: authUser._id
+				}
+			);
+			if (isNewAccount(profileCreatedAt)) {
+				await rateLimiter.limit(ctx, 'manualSourceRefreshNewAccount', {
+					key: authUser._id,
+					throws: true
+				});
+			}
 		}
 		const jobId: Id<'source_jobs'> = await ctx.runMutation(
 			(internal as any).sources.enqueueSourceSyncForUser,
@@ -1712,18 +1762,45 @@ export const getMyRefreshQuota = query({
 			};
 		}
 
+		const profile = await ctx.db
+			.query('users_profile')
+			.withIndex('by_authId', (q) => q.eq('authId', authUser._id))
+			.unique();
 		const [status, currentValue] = await Promise.all([
 			rateLimiter.check(ctx, 'manualSourceRefresh', { key: authUser._id }),
 			rateLimiter.getValue(ctx, 'manualSourceRefresh', { key: authUser._id })
 		]);
+		const globalRemaining = Math.max(0, Math.floor(currentValue.value));
+		const newAccount = isNewAccount(profile?.createdAt ?? null);
+		if (!newAccount) {
+			return {
+				isUnlimited: false,
+				dailyLimit: MANUAL_REFRESH_DAILY_LIMIT,
+				remaining: globalRemaining,
+				used: Math.max(0, MANUAL_REFRESH_DAILY_LIMIT - globalRemaining),
+				retryAfterMs: status.ok ? undefined : status.retryAfter,
+				resetsAt: nextUtcMidnightMs()
+			};
+		}
 
-		const remaining = Math.max(0, Math.floor(currentValue.value));
+		const [newAccountStatus, newAccountValue] = await Promise.all([
+			rateLimiter.check(ctx, 'manualSourceRefreshNewAccount', { key: authUser._id }),
+			rateLimiter.getValue(ctx, 'manualSourceRefreshNewAccount', { key: authUser._id })
+		]);
+		const newAccountRemaining = Math.max(0, Math.floor(newAccountValue.value));
+		const remaining = Math.min(globalRemaining, newAccountRemaining);
+		const retryAfterCandidates = [
+			status.ok ? undefined : status.retryAfter,
+			newAccountStatus.ok ? undefined : newAccountStatus.retryAfter
+		].filter((value): value is number => value !== undefined);
+		const retryAfterMs =
+			retryAfterCandidates.length > 0 ? Math.min(...retryAfterCandidates) : undefined;
 		return {
 			isUnlimited: false,
-			dailyLimit: MANUAL_REFRESH_DAILY_LIMIT,
+			dailyLimit: NEW_ACCOUNT_MANUAL_REFRESH_DAILY_LIMIT,
 			remaining,
-			used: Math.max(0, MANUAL_REFRESH_DAILY_LIMIT - remaining),
-			retryAfterMs: status.ok ? undefined : status.retryAfter,
+			used: Math.max(0, NEW_ACCOUNT_MANUAL_REFRESH_DAILY_LIMIT - remaining),
+			retryAfterMs,
 			resetsAt: nextUtcMidnightMs()
 		};
 	}

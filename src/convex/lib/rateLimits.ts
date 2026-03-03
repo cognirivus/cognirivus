@@ -13,11 +13,39 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
 	voteComment: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 },
 	bookmarkImport: { kind: 'token bucket', rate: 40, period: HOUR, capacity: 5 },
 	addSource: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
+	addSourcePerNormalizedKey: {
+		kind: 'fixed window',
+		rate: 3,
+		period: DAY,
+		capacity: 3,
+		start: 0
+	},
+	addSourceNewAccount: {
+		kind: 'fixed window',
+		rate: 10,
+		period: DAY,
+		capacity: 10,
+		start: 0
+	},
 	manualSourceRefresh: {
 		kind: 'fixed window',
 		rate: 3,
 		period: DAY,
 		capacity: 3,
+		start: 0
+	},
+	manualSourceRefreshPerSource: {
+		kind: 'fixed window',
+		rate: 2,
+		period: DAY,
+		capacity: 2,
+		start: 0
+	},
+	manualSourceRefreshNewAccount: {
+		kind: 'fixed window',
+		rate: 1,
+		period: DAY,
+		capacity: 1,
 		start: 0
 	},
 	unsubscribeSource: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
