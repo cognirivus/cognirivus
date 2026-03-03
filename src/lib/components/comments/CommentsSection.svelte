@@ -62,19 +62,19 @@
 	let isSubmitting = $state(false);
 
 	const commentTree = $derived.by(() => {
-		const map = new Map<string, CommentNode>();
+		const nodesById: Record<string, CommentNode> = {};
 		const roots: Array<CommentNode> = [];
 
 		for (const c of comments) {
-			map.set(c._id, { ...c, children: [] });
+			nodesById[c._id] = { ...c, children: [] };
 		}
 
 		for (const c of comments) {
-			const node = map.get(c._id);
+			const node = nodesById[c._id];
 			if (!node) continue;
-			if (c.parentId && map.has(c.parentId)) {
-				const parent = map.get(c.parentId);
-				if (parent) parent.children.push(node);
+			const parent = c.parentId ? nodesById[c.parentId] : undefined;
+			if (parent) {
+				parent.children.push(node);
 			} else {
 				roots.push(node);
 			}
@@ -176,6 +176,8 @@
 			{/each}
 		</div>
 	{:else}
-		<p class="text-center text-sm text-muted-foreground">No comments yet. Be the first to comment.</p>
+		<p class="text-center text-sm text-muted-foreground">
+			No comments yet. Be the first to comment.
+		</p>
 	{/if}
 </div>

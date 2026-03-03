@@ -30,6 +30,13 @@
 	let loading = $state(false);
 	let initialized = $state(false);
 
+	function resetMembersState() {
+		initialized = false;
+		allMembers = [];
+		continueCursor = null;
+		isDone = false;
+	}
+
 	async function loadPage(cursor: string | null) {
 		if (!communityQuery.data) return;
 		loading = true;
@@ -60,11 +67,9 @@
 	});
 
 	$effect(() => {
-		slug;
-		initialized = false;
-		allMembers = [];
-		continueCursor = null;
-		isDone = false;
+		const slugKey = slug;
+		resetMembersState();
+		if (!slugKey) return;
 	});
 
 	const roleIcon = {
@@ -91,7 +96,8 @@
 				<div>
 					<h1 class="text-2xl font-semibold tracking-tight">Members</h1>
 					<p class="text-sm text-muted-foreground">
-						{communityQuery.data.community.memberCount} members in c/{communityQuery.data.community.slug}
+						{communityQuery.data.community.memberCount} members in c/{communityQuery.data.community
+							.slug}
 					</p>
 				</div>
 				<Button variant="outline" href="/c/{slug}">Back to Community</Button>

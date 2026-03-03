@@ -23,10 +23,15 @@
 	let loadingRequests = $state(false);
 	let initialized = $state(false);
 
-	$effect(() => {
-		slug;
+	function resetPendingRequestsState() {
 		initialized = false;
 		pendingRequests = [];
+	}
+
+	$effect(() => {
+		const slugKey = slug;
+		resetPendingRequestsState();
+		if (!slugKey) return;
 	});
 
 	async function refreshPendingRequests() {
@@ -92,7 +97,9 @@
 	{:else}
 		<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
 			<div>
-				<h1 class="text-2xl font-semibold tracking-tight">Manage c/{communityQuery.data.community.slug}</h1>
+				<h1 class="text-2xl font-semibold tracking-tight">
+					Manage c/{communityQuery.data.community.slug}
+				</h1>
 				<p class="text-sm text-muted-foreground">Review and process pending join requests.</p>
 			</div>
 			<div class="flex gap-2">
