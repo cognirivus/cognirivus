@@ -22,6 +22,7 @@ const BULK_UNSUBSCRIBE_BATCH_SIZE = 200;
 const RESUBSCRIBE_BACKFILL_BATCH_SIZE = 200;
 const NIGHTLY_REFRESH_BATCH_SIZE = 100;
 const MANUAL_REFRESH_DAILY_LIMIT = 3;
+const MAX_FETCH_REDIRECTS = 5;
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
 
 const ADMIN_ROLE_VALUES = new Set(['admin', 'system-admin', 'superadmin', 'owner']);
@@ -169,12 +170,84 @@ const normalizeSourceInput = (
 	};
 };
 
+const isIpv4Address = (value: string) => {
+	const parts = value.split('.');
+	if (parts.length !== 4) {
+		return false;
+	}
+	return parts.every((part) => /^\d+$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
+};
+
+const isBlockedIpv4Address = (value: string) => {
+	if (!isIpv4Address(value)) {
+		return false;
+	}
+	const parts = value.split('.').map((part) => Number(part));
+	const [a, b] = parts;
+	if (a === 0 || a === 10 || a === 127) {
+		return true;
+	}
+	if (a === 169 && b === 254) {
+		return true;
+	}
+	if (a === 172 && b >= 16 && b <= 31) {
+		return true;
+	}
+	if (a === 192 && b === 168) {
+		return true;
+	}
+	return false;
+};
+
+const normalizeIpv6ForChecks = (value: string) =>
+	value
+		.trim()
+		.replace(/^\[|\]$/g, '')
+		.toLowerCase();
+
+const isBlockedIpv6Address = (value: string) => {
+	if (!value.includes(':')) {
+		return false;
+	}
+	const normalized = normalizeIpv6ForChecks(value);
+	if (!normalized) {
+		return false;
+	}
+	if (normalized === '::' || normalized === '::1') {
+		return true;
+	}
+	if (normalized.startsWith('fc') || normalized.startsWith('fd')) {
+		return true;
+	}
+	if (
+		normalized.startsWith('fe8') ||
+		normalized.startsWith('fe9') ||
+		normalized.startsWith('fea') ||
+		normalized.startsWith('feb')
+	) {
+		return true;
+	}
+	if (normalized.startsWith('::ffff:')) {
+		const mappedIpv4 = normalized.slice('::ffff:'.length);
+		if (isBlockedIpv4Address(mappedIpv4)) {
+			return true;
+		}
+	}
+	return false;
+};
+
+const isBlockedIpAddress = (value: string) =>
+	isBlockedIpv4Address(value) || isBlockedIpv6Address(value);
+
 const isBlockedHostname = (hostname: string) => {
 	const host = hostname.toLowerCase();
 	if (host === 'localhost' || host.endsWith('.local')) {
 		return true;
 	}
 	if (host === '::1') {
+		return true;
+	}
+	if (isBlockedIpAddress(host)) {
 		return true;
 	}
 	if (
@@ -194,6 +267,8 @@ const isBlockedHostname = (hostname: string) => {
 	}
 	return false;
 };
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 const fetchTextWithTimeout = async (url: string, timeoutMs = 12000) => {
 	const attemptHeaders: Array<Record<string, string> | undefined> = [
@@ -216,32 +291,51 @@ const fetchTextWithTimeout = async (url: string, timeoutMs = 12000) => {
 	let lastError: unknown = null;
 
 	for (const headers of attemptHeaders) {
-		const controller = new AbortController();
-		const timeout = setTimeout(() => controller.abort(), timeoutMs);
 		try {
-			const response = await fetch(url, {
-				method: 'GET',
-				signal: controller.signal,
-				redirect: 'follow',
-				headers
-			});
-			if (!response.ok) {
-				lastStatus = response.status;
-				if (response.status === 401 || response.status === 403) {
+			let nextUrl = url;
+			for (let redirectCount = 0; redirectCount <= MAX_FETCH_REDIRECTS; redirectCount += 1) {
+				const normalized = normalizeHttpUrl(nextUrl);
+				if (isBlockedHostname(normalized.hostname)) {
+					throw new Error('Source host is blocked for safety.');
+				}
+
+				const controller = new AbortController();
+				const timeout = setTimeout(() => controller.abort(), timeoutMs);
+				const response = await fetch(normalized.toString(), {
+					method: 'GET',
+					signal: controller.signal,
+					redirect: 'manual',
+					headers
+				});
+				clearTimeout(timeout);
+
+				if (REDIRECT_STATUSES.has(response.status)) {
+					const location = response.headers.get('location');
+					if (!location) {
+						throw new Error(`Source redirect (${response.status}) missing location header.`);
+					}
+					nextUrl = new URL(location, normalized.toString()).toString();
 					continue;
 				}
-				if (response.status === 429) {
-					throw new Error('Source website rate-limited requests (HTTP 429). Try again later.');
+
+				if (!response.ok) {
+					lastStatus = response.status;
+					if (response.status === 401 || response.status === 403) {
+						break;
+					}
+					if (response.status === 429) {
+						throw new Error('Source website rate-limited requests (HTTP 429). Try again later.');
+					}
+					throw new Error(`Source fetch failed (${response.status}).`);
 				}
-				throw new Error(`Source fetch failed (${response.status}).`);
+
+				const contentType = response.headers.get('content-type') ?? 'text/plain';
+				const body = await response.text();
+				return { body, contentType };
 			}
-			const contentType = response.headers.get('content-type') ?? 'text/plain';
-			const body = await response.text();
-			return { body, contentType };
-		} catch (error) {
+			throw new Error(`Source fetch exceeded ${MAX_FETCH_REDIRECTS} redirects.`);
+		} catch (error: unknown) {
 			lastError = error;
-		} finally {
-			clearTimeout(timeout);
 		}
 	}
 

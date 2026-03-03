@@ -2,6 +2,7 @@
 
 import Parser from 'rss-parser';
 import { createHash } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
 import { v } from 'convex/values';
 import { internalAction } from './_generated/server';
 import { internal } from './_generated/api';
@@ -12,16 +13,21 @@ const SOURCE_ITEM_INLINE_LIMIT = 1000;
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
 const SOURCE_TITLE_LIMIT = 220;
 const SOURCE_SYNC_ITEM_LIMIT = 25;
+const SOURCE_URL_LIMIT = 2048;
+const MAX_FETCH_REDIRECTS = 5;
+
+const REQUEST_HEADERS = {
+	'User-Agent':
+		'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+	Accept:
+		'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.7, */*;q=0.5',
+	'Accept-Language': 'en-US,en;q=0.9',
+	'Cache-Control': 'no-cache'
+} as const;
 
 const parser = new Parser({
 	timeout: 15000,
-	headers: {
-		'User-Agent':
-			'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-		Accept:
-			'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.7, */*;q=0.5',
-		'Accept-Language': 'en-US,en;q=0.9'
-	}
+	headers: REQUEST_HEADERS
 });
 
 const createSnippet = (value: string) =>
@@ -37,6 +43,88 @@ const stripHtml = (html: string) =>
 		.replace(/\s+/g, ' ')
 		.trim();
 
+const isIpv4Address = (value: string) => {
+	const parts = value.split('.');
+	if (parts.length !== 4) {
+		return false;
+	}
+	return parts.every((part) => /^\d+$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
+};
+
+const isBlockedIpv4Address = (value: string) => {
+	if (!isIpv4Address(value)) {
+		return false;
+	}
+	const [a, b] = value.split('.').map((part) => Number(part));
+	if (a === 0 || a === 10 || a === 127) {
+		return true;
+	}
+	if (a === 169 && b === 254) {
+		return true;
+	}
+	if (a === 172 && b >= 16 && b <= 31) {
+		return true;
+	}
+	if (a === 192 && b === 168) {
+		return true;
+	}
+	return false;
+};
+
+const normalizeIpv6ForChecks = (value: string) =>
+	value
+		.trim()
+		.replace(/^\[|\]$/g, '')
+		.toLowerCase();
+
+const isBlockedIpv6Address = (value: string) => {
+	if (!value.includes(':')) {
+		return false;
+	}
+	const normalized = normalizeIpv6ForChecks(value);
+	if (!normalized) {
+		return false;
+	}
+	if (normalized === '::' || normalized === '::1') {
+		return true;
+	}
+	if (normalized.startsWith('fc') || normalized.startsWith('fd')) {
+		return true;
+	}
+	if (
+		normalized.startsWith('fe8') ||
+		normalized.startsWith('fe9') ||
+		normalized.startsWith('fea') ||
+		normalized.startsWith('feb')
+	) {
+		return true;
+	}
+	if (normalized.startsWith('::ffff:')) {
+		const mappedIpv4 = normalized.slice('::ffff:'.length);
+		if (isBlockedIpv4Address(mappedIpv4)) {
+			return true;
+		}
+	}
+	return false;
+};
+
+const isBlockedIpAddress = (value: string) =>
+	isBlockedIpv4Address(value) || isBlockedIpv6Address(value);
+
+const isBlockedHostname = (hostname: string) => {
+	const host = hostname.toLowerCase();
+	if (host === 'localhost' || host.endsWith('.local')) {
+		return true;
+	}
+	if (host === '::1') {
+		return true;
+	}
+	if (isBlockedIpAddress(host)) {
+		return true;
+	}
+	return false;
+};
+
 const normalizeHttpUrl = (inputUrl: string) => {
 	let withProtocol = inputUrl.trim();
 	if (!/^https?:\/\//i.test(withProtocol)) {
@@ -46,8 +134,15 @@ const normalizeHttpUrl = (inputUrl: string) => {
 	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
 		throw new Error('Only http/https source URLs are supported.');
 	}
+	if (parsed.username || parsed.password) {
+		throw new Error('Source URLs with credentials are not supported.');
+	}
+	if (parsed.toString().length > SOURCE_URL_LIMIT) {
+		throw new Error(`Source URL exceeds ${SOURCE_URL_LIMIT} characters.`);
+	}
 	parsed.hash = '';
 	parsed.searchParams.sort();
+	parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
 	return parsed.toString();
 };
 
@@ -116,6 +211,74 @@ const parseDateToMs = (isoDate?: string | null, pubDate?: string | null) => {
 	return Date.now();
 };
 
+const resolveAndValidateHostname = async (hostname: string) => {
+	const results = await lookup(hostname, { all: true, verbatim: true });
+	if (results.length === 0) {
+		throw new Error('Source host DNS resolution failed.');
+	}
+	for (const result of results) {
+		if (isBlockedIpAddress(result.address)) {
+			throw new Error('Source host resolved to a blocked address.');
+		}
+	}
+};
+
+const assertSafeFetchUrl = async (url: string) => {
+	const normalized = normalizeHttpUrl(url);
+	const parsed = new URL(normalized);
+	if (isBlockedHostname(parsed.hostname)) {
+		throw new Error('Source host is blocked for safety.');
+	}
+	if (
+		!isBlockedIpAddress(parsed.hostname) &&
+		!isIpv4Address(parsed.hostname) &&
+		!parsed.hostname.includes(':')
+	) {
+		await resolveAndValidateHostname(parsed.hostname);
+	}
+	return parsed.toString();
+};
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+const fetchRssTextWithGuards = async (url: string, timeoutMs = 15000) => {
+	let nextUrl = url;
+	for (let redirectCount = 0; redirectCount <= MAX_FETCH_REDIRECTS; redirectCount += 1) {
+		const safeUrl = await assertSafeFetchUrl(nextUrl);
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), timeoutMs);
+		try {
+			const response = await fetch(safeUrl, {
+				method: 'GET',
+				headers: REQUEST_HEADERS,
+				redirect: 'manual',
+				signal: controller.signal
+			});
+
+			if (REDIRECT_STATUSES.has(response.status)) {
+				const location = response.headers.get('location');
+				if (!location) {
+					throw new Error(`Source redirect (${response.status}) missing location header.`);
+				}
+				nextUrl = new URL(location, safeUrl).toString();
+				continue;
+			}
+
+			if (!response.ok) {
+				throw new Error(`RSS fetch failed (${response.status}).`);
+			}
+
+			return {
+				finalUrl: safeUrl,
+				body: await response.text()
+			};
+		} finally {
+			clearTimeout(timeout);
+		}
+	}
+	throw new Error(`Source fetch exceeded ${MAX_FETCH_REDIRECTS} redirects.`);
+};
+
 const normalizeFeedError = (error: unknown) => {
 	const message = error instanceof Error ? error.message : 'RSS fetch failed.';
 	if (/\b403\b|\b401\b|access denied|forbidden/i.test(message)) {
@@ -137,10 +300,13 @@ export const syncRssSource = internalAction({
 		const candidates = rssCandidatesFrom(normalizedCanonicalUrl);
 
 		let parsedFeed: any = null;
+		let parsedFeedUrl: string | null = null;
 		let lastError: unknown = null;
 		for (const candidate of candidates) {
 			try {
-				parsedFeed = await parser.parseURL(candidate);
+				const fetched = await fetchRssTextWithGuards(candidate);
+				parsedFeed = await parser.parseString(fetched.body);
+				parsedFeedUrl = fetched.finalUrl;
 				break;
 			} catch (error) {
 				lastError = error;
@@ -154,6 +320,10 @@ export const syncRssSource = internalAction({
 		const items: Array<any> = Array.isArray(parsedFeed.items)
 			? parsedFeed.items.slice(0, SOURCE_SYNC_ITEM_LIMIT)
 			: [];
+		const feedBaseUrl =
+			typeof parsedFeed?.link === 'string' && parsedFeed.link.trim()
+				? parsedFeed.link
+				: (parsedFeedUrl ?? normalizedCanonicalUrl);
 		let processed = 0;
 
 		for (const item of items) {
@@ -161,7 +331,7 @@ export const syncRssSource = internalAction({
 			if (!rawUrl || typeof rawUrl !== 'string') {
 				continue;
 			}
-			const itemUrl = coerceItemUrl(rawUrl, normalizedCanonicalUrl);
+			const itemUrl = coerceItemUrl(rawUrl, feedBaseUrl);
 			if (!itemUrl) {
 				continue;
 			}
