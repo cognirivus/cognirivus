@@ -35,7 +35,7 @@
 	);
 	const cursor = $derived(page.url.searchParams.get('cursor'));
 
-	let searchInput = $state(search);
+	let searchInput = $state('');
 
 	// Sync input with URL search param
 	$effect(() => {

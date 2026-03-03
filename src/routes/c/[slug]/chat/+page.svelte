@@ -4,27 +4,9 @@
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import type { Id } from '$convex/_generated/dataModel';
 	import { api } from '$convex/_generated/api';
-	import { tick, onDestroy } from 'svelte';
-	import { fade } from 'svelte/transition';
 	import ChatInterface from '$lib/components/chat/ChatInterface.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Popover from '$lib/components/ui/popover';
-	import * as Avatar from '$lib/components/ui/avatar';
-	import {
-		ArrowDown,
-		Check,
-		CornerDownRight,
-		MessageSquare,
-		Pencil,
-		Reply,
-		SendHorizontal,
-		SmilePlus,
-		Trash2,
-		X,
-		LoaderCircle
-	} from '@lucide/svelte';
-	import { authClient } from '$lib/auth-client';
+	import { LoaderCircle } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	type ChatStatus = 'loading' | 'ready' | 'error';
@@ -56,7 +38,6 @@
 	const client = useConvexClient();
 	const meQuery = useQuery(api.auth.getCurrentUser, {});
 	const redirectTo = $derived(encodeURIComponent(page.url.pathname + page.url.search));
-	const session = authClient.useSession();
 	const currentUserId = $derived(meQuery.data?.id ?? null);
 	const isAuthenticated = $derived(!!currentUserId);
 
@@ -96,35 +77,6 @@
 		}
 	});
 
-	let isDeleteMessageDialogOpen = $state(false);
-
-	function getInitials(name: string) {
-		return (
-			name
-				?.split(' ')
-				.map((n: string) => n.charAt(0).toUpperCase())
-				.join('')
-				.slice(0, 2) || '?'
-		);
-	}
-
-	const avatarColors = [
-		'bg-blue-500/15 text-blue-700 dark:text-blue-400',
-		'bg-violet-500/15 text-violet-700 dark:text-violet-400',
-		'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-		'bg-amber-500/15 text-amber-700 dark:text-amber-400',
-		'bg-rose-500/15 text-rose-700 dark:text-rose-400',
-		'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400'
-	];
-
-	function getAvatarColor(userId: string) {
-		let hash = 0;
-		for (let i = 0; i < userId.length; i++) {
-			hash = userId.charCodeAt(i) + ((hash << 5) - hash);
-		}
-		return avatarColors[Math.abs(hash) % avatarColors.length];
-	}
-
 	async function requestJoin() {
 		if (!communityId) return;
 		if (!isAuthenticated) {
@@ -142,20 +94,7 @@
 			toast.error(error?.message ?? 'Failed to request to join');
 		}
 	}
-
-	function handleDocumentClick(event: MouseEvent) {
-		const target = event.target as HTMLElement | null;
-		if (!target?.closest('[data-reaction-popover]')) {
-			// Clicking outside a reaction popover should close any open popovers via their own logic.
-		}
-	}
-
-	onDestroy(() => {
-		// Cleanup listeners if we add any in the future.
-	});
 </script>
-
-<svelte:window on:click={handleDocumentClick} />
 
 <main class="mx-auto flex h-[calc(100vh-3rem)] w-full max-w-3xl flex-col">
 	{#if status === 'loading'}
@@ -260,6 +199,7 @@
 				} catch (error) {
 					console.error('Failed to send message:', error);
 					toast.error('Failed to send message');
+					throw error;
 				}
 			}}
 			onEditMessage={async (messageId: string, body: string) => {
@@ -273,6 +213,7 @@
 				} catch (error) {
 					console.error('Failed to edit message:', error);
 					toast.error('Failed to edit message');
+					throw error;
 				}
 			}}
 			onDeleteMessage={async (messageId: string) => {
@@ -285,6 +226,7 @@
 				} catch (error) {
 					console.error('Failed to delete message:', error);
 					toast.error('Failed to delete message');
+					throw error;
 				}
 			}}
 			onToggleReaction={async (messageId: string, emoji: string) => {

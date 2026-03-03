@@ -1,21 +1,10 @@
 <script lang="ts">
-	import { tick, onDestroy } from 'svelte';
+	import { tick } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Popover from '$lib/components/ui/popover';
 	import * as Avatar from '$lib/components/ui/avatar';
-	import {
-		ArrowDown,
-		CornerDownRight,
-		Pencil,
-		Reply,
-		SendHorizontal,
-		Trash2,
-		X,
-		MoreVertical,
-		Check
-	} from '@lucide/svelte';
+	import { ArrowDown, Pencil, Reply, SendHorizontal, Trash2, X, Check } from '@lucide/svelte';
 
 	interface Message {
 		_id: string;
@@ -70,6 +59,8 @@
 	let editingMessageId = $state<string | null>(null);
 	let editingMessageBody = $state('');
 	let isSavingEdit = $state(false);
+	let isSendingMessage = $state(false);
+	let isDeletingMessage = $state(false);
 	let deletingMessageId = $state<string | null>(null);
 	let isDeleteDialogOpen = $state(false);
 	let contextMenu = $state<{ x: number; y: number; msg: Message } | null>(null);
@@ -232,22 +223,45 @@
 	}
 
 	async function send() {
-		if (!newMessage.trim()) return;
-		const body = newMessage.trim();
-		const replyTo = replyingToMessage?._id;
-		newMessage = '';
-		replyingToMessage = null;
-		if (inputEl) inputEl.style.height = 'auto';
-		await onSendMessage(body, replyTo);
+		if (isSendingMessage || !newMessage.trim()) return;
+
+		const draftBody = newMessage;
+		const replyTarget = replyingToMessage;
+		const body = draftBody.trim();
+		const replyTo = replyTarget?._id;
+
+		isSendingMessage = true;
+		try {
+			await onSendMessage(body, replyTo);
+			newMessage = '';
+			replyingToMessage = null;
+			if (inputEl) {
+				inputEl.style.height = 'auto';
+			}
+		} catch {
+			newMessage = draftBody;
+			replyingToMessage = replyTarget;
+			if (inputEl) {
+				inputEl.style.height = 'auto';
+				inputEl.style.height = `${Math.min(inputEl.scrollHeight, 128)}px`;
+			}
+		} finally {
+			isSendingMessage = false;
+		}
 	}
 
 	async function saveEdit() {
 		if (!editingMessageId || !editingMessageBody.trim()) return;
 		isSavingEdit = true;
-		await onEditMessage(editingMessageId, editingMessageBody.trim());
-		editingMessageId = null;
-		editingMessageBody = '';
-		isSavingEdit = false;
+		try {
+			await onEditMessage(editingMessageId, editingMessageBody.trim());
+			editingMessageId = null;
+			editingMessageBody = '';
+		} catch {
+			return;
+		} finally {
+			isSavingEdit = false;
+		}
 	}
 
 	function handleEditKeydown(e: KeyboardEvent) {
@@ -400,6 +414,23 @@
 			deletingMessageId = contextMenu.msg._id;
 			isDeleteDialogOpen = true;
 			closeContextMenu();
+		}
+	}
+
+	async function confirmDelete() {
+		if (!deletingMessageId || isDeletingMessage) {
+			return;
+		}
+
+		isDeletingMessage = true;
+		try {
+			await onDeleteMessage(deletingMessageId);
+			isDeleteDialogOpen = false;
+			deletingMessageId = null;
+		} catch {
+			return;
+		} finally {
+			isDeletingMessage = false;
 		}
 	}
 
@@ -565,7 +596,7 @@
 
 									{#if msg.reactions && msg.reactions.length > 0}
 										<div class="mt-1.5 flex flex-wrap gap-1 {isMine ? 'flex-row-reverse' : ''}">
-											{#each msg.reactions as reaction}
+											{#each msg.reactions as reaction (reaction.emoji)}
 												<button
 													onclick={(e) => handleReactionClick(e, msg._id, reaction.emoji)}
 													class="group flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] transition-all hover:scale-105 {reaction.reactedByMe
@@ -619,7 +650,7 @@
 						{currentReactionMsg.reactions.reduce((acc, r) => acc + r.count, 0)}
 					</span>
 				</button>
-				{#each currentReactionMsg.reactions as reaction}
+				{#each currentReactionMsg.reactions as reaction (reaction.emoji)}
 					<button
 						onclick={() => (reactionDetails!.activeEmoji = reaction.emoji)}
 						class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors {reactionDetails.activeEmoji ===
@@ -696,7 +727,7 @@
 			}}
 		>
 			<div class="mb-1 grid grid-cols-7 gap-0.5 border-b border-border/40 p-1">
-				{#each REACTION_EMOJIS as emoji}
+				{#each REACTION_EMOJIS as emoji (emoji)}
 					<button
 						onclick={() => handleReactFromMenu(emoji)}
 						class="flex h-7 w-7 items-center justify-center rounded-md text-base transition-transform hover:scale-125 hover:bg-muted"
@@ -778,7 +809,7 @@
 			></textarea>
 			<Button
 				onclick={send}
-				disabled={!newMessage.trim()}
+				disabled={!newMessage.trim() || isSendingMessage}
 				size="icon"
 				variant="ghost"
 				class="h-9 w-9 text-primary hover:bg-primary/10"
@@ -796,14 +827,16 @@
 			<Dialog.Description>This action cannot be undone.</Dialog.Description>
 		</Dialog.Header>
 		<Dialog.Footer>
-			<Button variant="outline" onclick={() => (isDeleteDialogOpen = false)}>Cancel</Button>
 			<Button
-				variant="destructive"
-				onclick={() => {
-					if (deletingMessageId) onDeleteMessage(deletingMessageId);
-					isDeleteDialogOpen = false;
-				}}>Delete</Button
+				variant="outline"
+				onclick={() => (isDeleteDialogOpen = false)}
+				disabled={isDeletingMessage}
 			>
+				Cancel
+			</Button>
+			<Button variant="destructive" onclick={confirmDelete} disabled={isDeletingMessage}>
+				Delete
+			</Button>
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
