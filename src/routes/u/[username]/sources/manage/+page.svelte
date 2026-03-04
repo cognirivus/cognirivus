@@ -70,6 +70,10 @@
 		return (refreshQuotaQuery.data.remaining ?? 0) <= 0;
 	});
 
+	function isFetchableSourceType(type: string) {
+		return type !== 'bookmarks';
+	}
+
 	const refreshResetsAtUtc = $derived.by(() => {
 		const resetsAt = refreshQuotaQuery.data?.resetsAt;
 		if (!resetsAt) {
@@ -185,7 +189,7 @@
 								Manual refreshes left today: {refreshQuotaQuery.data.remaining ??
 									0}/{refreshQuotaQuery.data.dailyLimit ?? 3}
 								{#if refreshResetsAtUtc}
-									• resets {refreshResetsAtUtc} UTC
+									| resets {refreshResetsAtUtc} UTC
 								{/if}
 							</p>
 						{/if}
@@ -209,7 +213,7 @@
 					<div class="flex items-center gap-2">
 						<Loader2 class="size-4 animate-spin" />
 						<span>
-							Background job: {jobQuery.data?.status ?? 'queued'} • processed {jobQuery.data
+							Background job: {jobQuery.data?.status ?? 'queued'} - processed {jobQuery.data
 								?.processed ?? 0}
 						</span>
 					</div>
@@ -257,6 +261,14 @@
 					</TableHeader>
 					<TableBody>
 						{#each sourcesQuery.data?.page ?? [] as row (row.subscriptionId)}
+							{@const canRefresh = isFetchableSourceType(row.type)}
+							{@const refreshTitle = !canRefresh
+								? 'Bookmarks are non-fetchable. Upload a bookmarks file to add new items.'
+								: isRefreshLimited
+									? refreshResetsAtUtc
+										? `Daily limit reached. Resets ${refreshResetsAtUtc} UTC`
+										: 'Daily limit reached'
+									: 'Refresh now'}
 							<TableRow>
 								<TableCell>
 									<Checkbox
@@ -316,13 +328,9 @@
 										<Button
 											variant="outline"
 											size="icon-sm"
-											disabled={busySourceId === row.sourceId || isRefreshLimited}
+											disabled={busySourceId === row.sourceId || isRefreshLimited || !canRefresh}
 											onclick={() => refreshSource(row.sourceId)}
-											title={isRefreshLimited
-												? refreshResetsAtUtc
-													? `Daily limit reached. Resets ${refreshResetsAtUtc} UTC`
-													: 'Daily limit reached'
-												: 'Refresh now'}
+											title={refreshTitle}
 										>
 											<RefreshCw class="size-3.5" />
 										</Button>

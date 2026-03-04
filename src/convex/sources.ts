@@ -37,6 +37,7 @@ const BULK_UNSUBSCRIBE_BATCH_SIZE = 200;
 const RESUBSCRIBE_BACKFILL_BATCH_SIZE = 200;
 const NIGHTLY_REFRESH_BATCH_SIZE = 100;
 const FANOUT_BATCH_SIZE = 200;
+const DELIVERY_DEDUPE_SCAN_BATCH_SIZE = 128;
 const FANOUT_RETRY_MAX_ATTEMPTS = 3;
 const FANOUT_RETRY_BASE_DELAY_MS = 1000;
 const MANUAL_REFRESH_DAILY_LIMIT = 3;
@@ -78,6 +79,9 @@ const sourceJobStatusValidator = v.union(
 	v.literal('failed')
 );
 
+const isFetchableSourceType = (type: 'website' | 'rss' | 'youtube' | 'bookmarks') =>
+	type !== 'bookmarks';
+
 const nextUtcMidnightMs = (now = Date.now()) =>
 	Math.floor(now / UTC_DAY_MS) * UTC_DAY_MS + UTC_DAY_MS;
 const utcRunDateKey = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
@@ -107,6 +111,50 @@ const enqueueSourceCleanupWork = async (
 
 const createSnippet = (value: string) =>
 	value.trim().replace(/\s+/g, ' ').slice(0, SOURCE_ITEM_SNIPPET_LIMIT);
+
+const listDeliveriesForUserSourceItem = async (
+	ctx: any,
+	userAuthId: string,
+	sourceItemId: Id<'source_items'>
+) => {
+	const deliveries: any[] = [];
+	let cursor: string | null = null;
+	while (true) {
+		const page: any = await ctx.db
+			.query('user_source_items')
+			.withIndex('by_userAuthId_and_sourceItemId', (q: any) =>
+				q.eq('userAuthId', userAuthId).eq('sourceItemId', sourceItemId)
+			)
+			.paginate({
+				numItems: DELIVERY_DEDUPE_SCAN_BATCH_SIZE,
+				cursor
+			});
+		deliveries.push(...page.page);
+		if (page.isDone) {
+			break;
+		}
+		cursor = page.continueCursor;
+	}
+	return deliveries;
+};
+
+const keepOldestDeliveryAndDeleteDuplicates = async (ctx: any, deliveries: any[]) => {
+	if (deliveries.length <= 1) {
+		return deliveries[0] ?? null;
+	}
+	const keep = deliveries.slice().sort((a: any, b: any) => {
+		if (a.deliveredAt !== b.deliveredAt) {
+			return a.deliveredAt - b.deliveredAt;
+		}
+		return String(a._id).localeCompare(String(b._id));
+	})[0];
+	for (const row of deliveries) {
+		if (row._id !== keep._id) {
+			await ctx.db.delete(row._id);
+		}
+	}
+	return keep;
+};
 
 const textEncoder = new TextEncoder();
 
@@ -576,12 +624,7 @@ const deliverSourceItemFanoutBatchTx = async (
 		sourceItemId: Id<'source_items'>,
 		publishedAt: number
 	) => {
-		const deliveries = await ctx.db
-			.query('user_source_items')
-			.withIndex('by_userAuthId_and_sourceItemId', (q: any) =>
-				q.eq('userAuthId', userAuthId).eq('sourceItemId', sourceItemId)
-			)
-			.take(8);
+		const deliveries = await listDeliveriesForUserSourceItem(ctx, userAuthId, sourceItemId);
 
 		if (deliveries.length === 0) {
 			await ctx.db.insert('user_source_items', {
@@ -594,19 +637,7 @@ const deliverSourceItemFanoutBatchTx = async (
 			return true;
 		}
 
-		if (deliveries.length > 1) {
-			const keep = deliveries.slice().sort((a: any, b: any) => {
-				if (a.deliveredAt !== b.deliveredAt) {
-					return a.deliveredAt - b.deliveredAt;
-				}
-				return String(a._id).localeCompare(String(b._id));
-			})[0];
-			for (const row of deliveries) {
-				if (row._id !== keep._id) {
-					await ctx.db.delete(row._id);
-				}
-			}
-		}
+		await keepOldestDeliveryAndDeleteDuplicates(ctx, deliveries);
 
 		return false;
 	};
@@ -903,6 +934,41 @@ export const enqueueSourceSyncForUser = internalMutation({
 	}
 });
 
+export const getSourceForUserRefresh = internalQuery({
+	args: {
+		userAuthId: v.string(),
+		sourceId: v.id('sources')
+	},
+	returns: v.union(
+		v.null(),
+		v.object({
+			sourceId: v.id('sources'),
+			type: sourceTypeValidator,
+			subscriptionStatus: v.union(v.literal('active'), v.literal('paused'))
+		})
+	),
+	handler: async (ctx, args) => {
+		const subscription = await ctx.db
+			.query('source_subscriptions')
+			.withIndex('by_userAuthId_and_sourceId', (q) =>
+				q.eq('userAuthId', args.userAuthId).eq('sourceId', args.sourceId)
+			)
+			.unique();
+		if (!subscription) {
+			return null;
+		}
+		const source = await ctx.db.get(args.sourceId);
+		if (!source) {
+			return null;
+		}
+		return {
+			sourceId: source._id,
+			type: source.type,
+			subscriptionStatus: subscription.status
+		};
+	}
+});
+
 export const listNightlyRefreshSources = internalQuery({
 	args: {
 		paginationOpts: paginationOptsValidator
@@ -937,6 +1003,9 @@ export const enqueueNightlySourceSyncIfNeeded = internalMutation({
 	handler: async (ctx, args) => {
 		const source = await ctx.db.get(args.sourceId);
 		if (!source || source.status !== 'active') {
+			return null;
+		}
+		if (!isFetchableSourceType(source.type)) {
 			return null;
 		}
 
@@ -1575,6 +1644,13 @@ export const addSource = action({
 			};
 		}
 
+		if (!isFetchableSourceType(args.type) && !ensureResult.shouldBackfill) {
+			return {
+				sourceId: ensureResult.sourceId,
+				subscriptionStatus: 'active' as const
+			};
+		}
+
 		const jobType = ensureResult.shouldBackfill ? 'resubscribe_backfill' : 'sync_source';
 		const jobId: Id<'source_jobs'> = await ctx.runMutation((internal as any).sources.createJob, {
 			jobType,
@@ -1637,6 +1713,12 @@ export const runSourceSync = internalAction({
 				source.status === 'paused' ||
 				!source.hasActiveSubscriptions
 			) {
+				await ctx.runMutation((internal as any).sources.completeJob, {
+					jobId: args.jobId
+				});
+				return null;
+			}
+			if (!isFetchableSourceType(source.type)) {
 				await ctx.runMutation((internal as any).sources.completeJob, {
 					jobId: args.jobId
 				});
@@ -1719,6 +1801,22 @@ export const refreshSource = action({
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
+
+		const sourceForRefresh: {
+			sourceId: Id<'sources'>;
+			type: 'website' | 'rss' | 'youtube' | 'bookmarks';
+			subscriptionStatus: 'active' | 'paused';
+		} | null = await ctx.runQuery((internal as any).sources.getSourceForUserRefresh, {
+			userAuthId: authUser._id,
+			sourceId: args.sourceId
+		});
+		if (!sourceForRefresh || sourceForRefresh.subscriptionStatus !== 'active') {
+			throw new Error('Subscription not found.');
+		}
+		if (!isFetchableSourceType(sourceForRefresh.type)) {
+			throw new Error('Bookmark sources are upload-only and cannot be refreshed.');
+		}
+
 		if (!isAdminRole(authUser.role)) {
 			const identity = await ctx.auth.getUserIdentity();
 			const rawSessionId = (identity as { sessionId?: unknown } | null)?.sessionId;
@@ -2358,26 +2456,13 @@ export const deliverBackfillBatch = internalMutation({
 
 		let processed = 0;
 		for (const sourceItem of page.page) {
-			const deliveries = await ctx.db
-				.query('user_source_items')
-				.withIndex('by_userAuthId_and_sourceItemId', (q) =>
-					q.eq('userAuthId', args.userAuthId).eq('sourceItemId', sourceItem._id)
-				)
-				.take(8);
+			const deliveries = await listDeliveriesForUserSourceItem(
+				ctx,
+				args.userAuthId,
+				sourceItem._id
+			);
 			if (deliveries.length > 0) {
-				if (deliveries.length > 1) {
-					const keep = deliveries.slice().sort((a: any, b: any) => {
-						if (a.deliveredAt !== b.deliveredAt) {
-							return a.deliveredAt - b.deliveredAt;
-						}
-						return String(a._id).localeCompare(String(b._id));
-					})[0];
-					for (const row of deliveries) {
-						if (row._id !== keep._id) {
-							await ctx.db.delete(row._id);
-						}
-					}
-				}
+				await keepOldestDeliveryAndDeleteDuplicates(ctx, deliveries);
 				continue;
 			}
 			await ctx.db.insert('user_source_items', {
