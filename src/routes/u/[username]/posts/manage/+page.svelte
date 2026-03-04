@@ -8,6 +8,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import {
 		Table,
 		TableBody,
@@ -51,6 +52,12 @@
 
 	let selectedPostIds = $state<Array<string>>([]);
 	let bulkDeleting = $state(false);
+	type PendingDelete =
+		| { kind: 'single'; postId: Id<'posts'> }
+		| { kind: 'bulk'; postIds: Array<Id<'posts'>> }
+		| null;
+	let pendingDelete = $state<PendingDelete>(null);
+	let deleteDialogOpen = $state(false);
 
 	const allSelected = $derived.by(() => {
 		const rows = (feedQuery.data?.page ?? []).filter((item: any) => item.kind === 'post');
@@ -75,9 +82,6 @@
 	}
 
 	async function deletePost(postId: Id<'posts'>) {
-		if (!confirm('Delete this post permanently?')) {
-			return;
-		}
 		try {
 			await client.mutation((api as any).posts.deletePost, { postId });
 			selectedPostIds = selectedPostIds.filter((id) => id !== postId);
@@ -87,17 +91,12 @@
 		}
 	}
 
-	async function bulkDelete() {
-		if (selectedPostIds.length === 0) {
-			return;
-		}
-		if (!confirm(`Delete ${selectedPostIds.length} posts permanently?`)) {
-			return;
-		}
+	async function bulkDelete(postIds: Array<Id<'posts'>>) {
+		if (postIds.length === 0) return;
 		bulkDeleting = true;
 		try {
 			const results = await Promise.allSettled(
-				selectedPostIds.map((postId) =>
+				postIds.map((postId) =>
 					client.mutation((api as any).posts.deletePost, { postId: postId as Id<'posts'> })
 				)
 			);
@@ -113,6 +112,38 @@
 		} finally {
 			bulkDeleting = false;
 		}
+	}
+
+	function requestDeletePost(postId: Id<'posts'>) {
+		pendingDelete = { kind: 'single', postId };
+		deleteDialogOpen = true;
+	}
+
+	function requestBulkDelete() {
+		if (selectedPostIds.length === 0) return;
+		pendingDelete = {
+			kind: 'bulk',
+			postIds: selectedPostIds.map((postId) => postId as Id<'posts'>)
+		};
+		deleteDialogOpen = true;
+	}
+
+	function getDeleteDialogDescription() {
+		if (!pendingDelete) return 'This action cannot be undone.';
+		if (pendingDelete.kind === 'single') return 'Delete this post permanently?';
+		return `Delete ${pendingDelete.postIds.length} posts permanently?`;
+	}
+
+	async function confirmDelete() {
+		if (!pendingDelete) return;
+		const current = pendingDelete;
+		deleteDialogOpen = false;
+		pendingDelete = null;
+		if (current.kind === 'single') {
+			await deletePost(current.postId);
+			return;
+		}
+		await bulkDelete(current.postIds);
 	}
 </script>
 
@@ -131,7 +162,7 @@
 			<Button
 				variant="destructive"
 				disabled={selectedPostIds.length === 0 || bulkDeleting}
-				onclick={bulkDelete}
+				onclick={requestBulkDelete}
 				class="gap-2"
 			>
 				{#if bulkDeleting}
@@ -239,7 +270,7 @@
 										<Button
 											size="icon-sm"
 											variant="destructive"
-											onclick={() => deletePost(post._id)}
+											onclick={() => requestDeletePost(post._id)}
 										>
 											<Trash2 class="size-3.5" />
 										</Button>
@@ -253,3 +284,24 @@
 		{/if}
 	</div>
 </main>
+
+<Dialog.Root
+	open={deleteDialogOpen}
+	onOpenChange={(open) => {
+		deleteDialogOpen = open;
+		if (!open) {
+			pendingDelete = null;
+		}
+	}}
+>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Confirm Delete</Dialog.Title>
+			<Dialog.Description>{getDeleteDialogDescription()}</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (deleteDialogOpen = false)}>Cancel</Button>
+			<Button variant="destructive" disabled={bulkDeleting} onclick={confirmDelete}>Delete</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

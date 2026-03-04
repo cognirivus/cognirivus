@@ -7,6 +7,7 @@
 	import { api } from '$convex/_generated/api';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import CommentsSection from '$lib/components/comments/CommentsSection.svelte';
 	import { sanitizeDisplayText } from '$lib/utils';
 	import { toast } from 'svelte-sonner';
@@ -21,6 +22,7 @@
 
 	let fullBody = $state('');
 	let loadingBody = $state(false);
+	let deletePostDialogOpen = $state(false);
 	const signInHref = $derived(
 		`/signin?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
 	);
@@ -103,13 +105,22 @@
 
 	async function deletePost() {
 		if (!postQuery.data?.canDelete) return;
-		if (!confirm('Delete this post?')) return;
 		try {
 			await client.mutation((api as any).posts.delete, { postId });
 			goto('/feed');
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Delete failed');
 		}
+	}
+
+	function requestDeletePost() {
+		if (!postQuery.data?.canDelete) return;
+		deletePostDialogOpen = true;
+	}
+
+	async function confirmDeletePost() {
+		deletePostDialogOpen = false;
+		await deletePost();
 	}
 </script>
 
@@ -142,7 +153,7 @@
 						<span>{new Date(postQuery.data.createdAt).toLocaleString()}</span>
 					</div>
 					{#if postQuery.data.canDelete}
-						<Button variant="destructive" size="sm" onclick={deletePost}>Delete</Button>
+						<Button variant="destructive" size="sm" onclick={requestDeletePost}>Delete</Button>
 					{/if}
 				</div>
 
@@ -233,3 +244,16 @@
 		{/if}
 	</div>
 </main>
+
+<Dialog.Root bind:open={deletePostDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Delete Post</Dialog.Title>
+			<Dialog.Description>Delete this post?</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (deletePostDialogOpen = false)}>Cancel</Button>
+			<Button variant="destructive" onclick={confirmDeletePost}>Delete</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

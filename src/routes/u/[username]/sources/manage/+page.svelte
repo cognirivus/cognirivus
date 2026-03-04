@@ -8,6 +8,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import { Checkbox } from '$lib/components/ui/checkbox';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import {
 		Table,
 		TableBody,
@@ -38,6 +39,7 @@
 	let selectedSourceIds = $state<Array<string>>([]);
 	let runningJobId = $state<Id<'source_jobs'> | null>(null);
 	let busySourceId = $state<string | null>(null);
+	let bulkUnsubscribeDialogOpen = $state(false);
 
 	const jobQuery = useQuery((api as any).sources.getJobStatus, () =>
 		runningJobId ? { jobId: runningJobId } : 'skip'
@@ -150,19 +152,21 @@
 		}
 	}
 
-	async function bulkUnsubscribe() {
+	function requestBulkUnsubscribe() {
 		if (selectedSourceIds.length === 0) {
 			return;
 		}
-		if (!confirm(`Unsubscribe ${selectedSourceIds.length} source(s)?`)) {
-			return;
-		}
+		bulkUnsubscribeDialogOpen = true;
+	}
+
+	async function bulkUnsubscribe() {
 		try {
 			const jobId = await client.action((api as any).sources.bulkUnsubscribeSources, {
 				sourceIds: selectedSourceIds
 			});
 			runningJobId = jobId;
 			toast.success('Bulk unsubscribe job queued');
+			bulkUnsubscribeDialogOpen = false;
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Failed to queue bulk unsubscribe');
 		}
@@ -199,7 +203,7 @@
 			<Button
 				variant="destructive"
 				disabled={selectedSourceIds.length === 0 || !!runningJobId}
-				onclick={bulkUnsubscribe}
+				onclick={requestBulkUnsubscribe}
 				class="gap-2"
 			>
 				<Trash2 class="size-4" />
@@ -353,3 +357,24 @@
 		{/if}
 	</div>
 </main>
+
+<Dialog.Root bind:open={bulkUnsubscribeDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Confirm Unsubscribe</Dialog.Title>
+			<Dialog.Description>
+				Unsubscribe {selectedSourceIds.length} source(s)?
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (bulkUnsubscribeDialogOpen = false)}>Cancel</Button>
+			<Button
+				variant="destructive"
+				disabled={selectedSourceIds.length === 0 || !!runningJobId}
+				onclick={bulkUnsubscribe}
+			>
+				Unsubscribe
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

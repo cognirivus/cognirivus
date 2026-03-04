@@ -6,6 +6,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import {
 		Table,
 		TableBody,
@@ -20,11 +21,15 @@
 	const dashboardQuery = useQuery((api as any).admin.listDashboard, {});
 
 	let busyKey = $state<string | null>(null);
+	type PendingDelete =
+		| { kind: 'source'; id: Id<'sources'> }
+		| { kind: 'sourceItem'; id: Id<'source_items'> }
+		| { kind: 'post'; id: Id<'posts'> }
+		| null;
+	let pendingDelete = $state<PendingDelete>(null);
+	let deleteDialogOpen = $state(false);
 
 	async function removeSource(sourceId: Id<'sources'>) {
-		if (!confirm('Delete this source permanently? This removes all its items and R2 bodies.')) {
-			return;
-		}
 		busyKey = `source:${sourceId}`;
 		try {
 			const result = await client.action((api as any).admin.deleteSourcePermanently, {
@@ -45,9 +50,6 @@
 	}
 
 	async function removeSourceItem(sourceItemId: Id<'source_items'>) {
-		if (!confirm('Delete this source item permanently?')) {
-			return;
-		}
 		busyKey = `item:${sourceItemId}`;
 		try {
 			const result = await client.action((api as any).admin.deleteSourceItemPermanently, {
@@ -66,9 +68,6 @@
 	}
 
 	async function removePost(postId: Id<'posts'>) {
-		if (!confirm('Delete this post permanently? This also removes comments, votes, and R2 body.')) {
-			return;
-		}
 		busyKey = `post:${postId}`;
 		try {
 			const result = await client.action((api as any).admin.deletePostPermanently, { postId });
@@ -82,6 +81,48 @@
 		} finally {
 			busyKey = null;
 		}
+	}
+
+	function requestRemoveSource(sourceId: Id<'sources'>) {
+		pendingDelete = { kind: 'source', id: sourceId };
+		deleteDialogOpen = true;
+	}
+
+	function requestRemoveSourceItem(sourceItemId: Id<'source_items'>) {
+		pendingDelete = { kind: 'sourceItem', id: sourceItemId };
+		deleteDialogOpen = true;
+	}
+
+	function requestRemovePost(postId: Id<'posts'>) {
+		pendingDelete = { kind: 'post', id: postId };
+		deleteDialogOpen = true;
+	}
+
+	function getDeleteDialogDescription() {
+		if (!pendingDelete) return 'This action cannot be undone.';
+		if (pendingDelete.kind === 'source') {
+			return 'Delete this source permanently? This removes all its items and R2 bodies.';
+		}
+		if (pendingDelete.kind === 'sourceItem') {
+			return 'Delete this source item permanently?';
+		}
+		return 'Delete this post permanently? This also removes comments, votes, and R2 body.';
+	}
+
+	async function confirmDelete() {
+		if (!pendingDelete) return;
+		const current = pendingDelete;
+		deleteDialogOpen = false;
+		pendingDelete = null;
+		if (current.kind === 'source') {
+			await removeSource(current.id);
+			return;
+		}
+		if (current.kind === 'sourceItem') {
+			await removeSourceItem(current.id);
+			return;
+		}
+		await removePost(current.id);
 	}
 </script>
 
@@ -273,7 +314,7 @@
 												variant="destructive"
 												size="sm"
 												disabled={busyKey === `source:${source._id}`}
-												onclick={() => removeSource(source._id)}
+												onclick={() => requestRemoveSource(source._id)}
 											>
 												<Trash2 class="mr-1 size-4" />
 												Delete
@@ -324,7 +365,7 @@
 												variant="destructive"
 												size="sm"
 												disabled={busyKey === `item:${sourceItem._id}`}
-												onclick={() => removeSourceItem(sourceItem._id)}
+												onclick={() => requestRemoveSourceItem(sourceItem._id)}
 											>
 												<Trash2 class="mr-1 size-4" />
 												Delete
@@ -377,7 +418,7 @@
 												variant="destructive"
 												size="sm"
 												disabled={busyKey === `post:${post._id}`}
-												onclick={() => removePost(post._id)}
+												onclick={() => requestRemovePost(post._id)}
 											>
 												<Trash2 class="mr-1 size-4" />
 												Delete
@@ -393,3 +434,24 @@
 		</div>
 	{/if}
 </main>
+
+<Dialog.Root
+	open={deleteDialogOpen}
+	onOpenChange={(open) => {
+		deleteDialogOpen = open;
+		if (!open) {
+			pendingDelete = null;
+		}
+	}}
+>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Confirm Delete</Dialog.Title>
+			<Dialog.Description>{getDeleteDialogDescription()}</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (deleteDialogOpen = false)}>Cancel</Button>
+			<Button variant="destructive" onclick={confirmDelete}>Delete</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

@@ -140,7 +140,12 @@
 
 	--sidebar: oklch(0.14 0 0);
 	--sidebar-foreground: oklch(0.9 0 0);
+	--sidebar-primary: var(--primary);
+	--sidebar-primary-foreground: var(--primary-foreground);
+	--sidebar-accent: oklch(0.24 0 0);
+	--sidebar-accent-foreground: oklch(0.92 0 0);
 	--sidebar-border: oklch(0.35 0 0 / 40%);
+	--sidebar-ring: var(--ring);
 
 	--scrollbar-thumb: oklch(0.55 0 0 / 40%);
 	--scrollbar-thumb-hover: oklch(0.75 0 0 / 60%);

@@ -58,6 +58,11 @@ const postFeedItemValidator = v.object({
 	canDelete: v.boolean()
 });
 
+const sourceCommunityShareValidator = v.object({
+	communityId: v.id('communities'),
+	postId: v.id('posts')
+});
+
 const sourceFeedItemValidator = v.object({
 	kind: v.literal('source_item'),
 	_id: v.id('source_items'),
@@ -75,7 +80,10 @@ const sourceFeedItemValidator = v.object({
 	publishedAt: v.number(),
 	createdAt: v.number(),
 	updatedAt: v.number(),
-	shareCount: v.number()
+	shareCount: v.number(),
+	savedPostId: v.optional(v.id('posts')),
+	publicPostId: v.optional(v.id('posts')),
+	communityShares: v.array(sourceCommunityShareValidator)
 });
 
 const pagedFeedValidator = v.object({
@@ -430,7 +438,10 @@ const loadUserSourceFeedItems = async (
 				publishedAt: sourceItem.publishedAt,
 				createdAt: sourceItem.publishedAt,
 				updatedAt: sourceItem.updatedAt,
-				shareCount: 0
+				shareCount: 0,
+				savedPostId: undefined,
+				publicPostId: undefined,
+				communityShares: []
 			};
 		})
 		.filter((item): item is NonNullable<typeof item> => !!item);
@@ -459,6 +470,12 @@ const enrichSourceItemsWithShareCount = async (
 				createdAt: number;
 				updatedAt: number;
 				shareCount: number;
+				savedPostId?: Id<'posts'>;
+				publicPostId?: Id<'posts'>;
+				communityShares: Array<{
+					communityId: Id<'communities'>;
+					postId: Id<'posts'>;
+				}>;
 		  }
 	>
 ) => {
@@ -474,9 +491,28 @@ const enrichSourceItemsWithShareCount = async (
 				q.eq('authorAuthId', userAuthId).eq('sourceItemId', item._id)
 			)
 			.collect();
+		const savedShare = shares.find((share) => (share.visibility ?? 'private') === 'private');
+		const publicShare = shares.find(
+			(share) => (share.visibility ?? 'private') === 'public' && !share.communityId
+		);
+		const communityShareById = new Map<Id<'communities'>, Id<'posts'>>();
+		for (const share of shares) {
+			if ((share.visibility ?? 'private') !== 'public' || !share.communityId) {
+				continue;
+			}
+			if (!communityShareById.has(share.communityId)) {
+				communityShareById.set(share.communityId, share._id);
+			}
+		}
 		enriched.push({
 			...item,
-			shareCount: shares.length
+			shareCount: shares.length,
+			savedPostId: savedShare?._id,
+			publicPostId: publicShare?._id,
+			communityShares: Array.from(communityShareById.entries()).map(([communityId, postId]) => ({
+				communityId,
+				postId
+			}))
 		});
 	}
 	return enriched;

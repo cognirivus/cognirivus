@@ -22,6 +22,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { toast } from 'svelte-sonner';
 	import TagMultiSelect from '$lib/components/TagMultiSelect.svelte';
@@ -95,6 +96,11 @@
 	});
 	const communitiesQuery = useQuery((api as any).communities.listPublic, { limit: 100 });
 	let shareCommunityId = $state('');
+	let communityShareDialogOpen = $state(false);
+	let pendingCommunityShareState = $state<{
+		sourceItemId: string;
+		communityShares: Array<{ communityId: string; postId: string }>;
+	} | null>(null);
 
 	$effect(() => {
 		if (!shareCommunityId && (communitiesQuery.data?.length ?? 0) > 0) {
@@ -163,10 +169,10 @@
 		sourceItemId: string,
 		visibility: 'private' | 'public',
 		communityId?: string
-	) {
+	): Promise<boolean> {
 		if (!auth.isAuthenticated) {
 			toast.error('Sign in required');
-			return;
+			return false;
 		}
 		try {
 			const postId = await client.action((api as any).posts.shareSourceItemAsPost, {
@@ -176,8 +182,87 @@
 			});
 			toast.success('Shared as post');
 			goto(`/post/${postId}`);
+			return true;
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Failed to share source item');
+			return false;
+		}
+	}
+
+	async function unshareSourcePost(postId: string): Promise<boolean> {
+		if (!auth.isAuthenticated) {
+			toast.error('Sign in required');
+			return false;
+		}
+		try {
+			await client.mutation((api as any).posts.deletePost, { postId });
+			toast.success('Share removed');
+			return true;
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to remove share');
+			return false;
+		}
+	}
+
+	async function toggleSavedSourceItem(sourceItemId: string, savedPostId?: string) {
+		if (savedPostId) {
+			await unshareSourcePost(savedPostId);
+			return;
+		}
+		await shareSourceItem(sourceItemId, 'private');
+	}
+
+	async function togglePublicSourceItem(sourceItemId: string, publicPostId?: string) {
+		if (publicPostId) {
+			await unshareSourcePost(publicPostId);
+			return;
+		}
+		await shareSourceItem(sourceItemId, 'public');
+	}
+
+	function openCommunityShareDialog(
+		sourceItemId: string,
+		communityShares: Array<{ communityId: string; postId: string }>
+	) {
+		if (!auth.isAuthenticated) {
+			toast.error('Sign in required');
+			return;
+		}
+		pendingCommunityShareState = { sourceItemId, communityShares };
+		communityShareDialogOpen = true;
+	}
+
+	function getPendingCommunitySharePostId() {
+		if (!pendingCommunityShareState || !shareCommunityId) {
+			return null;
+		}
+		const existingShare = pendingCommunityShareState.communityShares.find(
+			(share) => share.communityId === shareCommunityId
+		);
+		return existingShare?.postId ?? null;
+	}
+
+	async function sharePendingSourceToCommunity() {
+		if (!pendingCommunityShareState || !shareCommunityId) {
+			return;
+		}
+		const existingSharePostId = getPendingCommunitySharePostId();
+		if (existingSharePostId) {
+			const unshared = await unshareSourcePost(existingSharePostId);
+			if (unshared) {
+				communityShareDialogOpen = false;
+				pendingCommunityShareState = null;
+			}
+			return;
+		}
+		const shared = await shareSourceItem(
+			pendingCommunityShareState.sourceItemId,
+			'public',
+			shareCommunityId
+		);
+		if (shared) {
+			communityShareDialogOpen = false;
+			pendingCommunityShareState = null;
 		}
 	}
 </script>
@@ -486,32 +571,24 @@
 										size="sm"
 										variant="outline"
 										disabled={!auth.isAuthenticated}
-										onclick={() => shareSourceItem(item._id, 'private')}
+										onclick={() => toggleSavedSourceItem(item._id, item.savedPostId)}
 									>
-										Share Private
+										{item.savedPostId ? 'Unsave' : 'Save'}
 									</Button>
 									<Button
 										size="sm"
 										variant="outline"
 										disabled={!auth.isAuthenticated}
-										onclick={() => shareSourceItem(item._id, 'public')}
+										onclick={() => togglePublicSourceItem(item._id, item.publicPostId)}
 									>
-										Share Public
+										{item.publicPostId ? 'Unshare Public' : 'Share Public'}
 									</Button>
 									{#if (communitiesQuery.data?.length ?? 0) > 0}
-										<select
-											class="h-9 rounded-md border border-input bg-transparent px-2 text-xs"
-											bind:value={shareCommunityId}
-										>
-											{#each communitiesQuery.data ?? [] as c (c._id)}
-												<option value={c._id}>{c.name}</option>
-											{/each}
-										</select>
 										<Button
 											size="sm"
 											variant="outline"
-											disabled={!auth.isAuthenticated || !shareCommunityId}
-											onclick={() => shareSourceItem(item._id, 'public', shareCommunityId)}
+											disabled={!auth.isAuthenticated}
+											onclick={() => openCommunityShareDialog(item._id, item.communityShares ?? [])}
 										>
 											Share to Community
 										</Button>
@@ -546,3 +623,60 @@
 		{/if}
 	{/if}
 </main>
+
+<Dialog.Root
+	open={communityShareDialogOpen}
+	onOpenChange={(open) => {
+		communityShareDialogOpen = open;
+		if (!open) {
+			pendingCommunityShareState = null;
+		}
+	}}
+>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Share to Community</Dialog.Title>
+			<Dialog.Description>Select a community to publish this source item in.</Dialog.Description>
+		</Dialog.Header>
+		{#if (communitiesQuery.data?.length ?? 0) === 0}
+			<p class="text-sm text-muted-foreground">No communities available yet.</p>
+		{:else}
+			<div class="max-h-64 space-y-2 overflow-y-auto">
+				{#each communitiesQuery.data ?? [] as c (c._id)}
+					{@const existingShare = pendingCommunityShareState?.communityShares.find(
+						(share) => share.communityId === c._id
+					)}
+					<button
+						type="button"
+						class={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${
+							shareCommunityId === c._id
+								? 'border-primary bg-primary/10 text-foreground'
+								: 'border-border hover:bg-muted/50'
+						}`}
+						onclick={() => (shareCommunityId = c._id)}
+					>
+						<div class="font-medium">{c.name}</div>
+						<div class="text-xs text-muted-foreground">
+							c/{c.slug}
+							{#if existingShare}
+								<span class="ml-1 font-medium text-foreground">- Shared</span>
+							{/if}
+						</div>
+					</button>
+				{/each}
+			</div>
+		{/if}
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (communityShareDialogOpen = false)}>Cancel</Button>
+			<Button
+				disabled={!auth.isAuthenticated ||
+					!pendingCommunityShareState ||
+					!shareCommunityId ||
+					(communitiesQuery.data?.length ?? 0) === 0}
+				onclick={sharePendingSourceToCommunity}
+			>
+				{getPendingCommunitySharePostId() ? 'Unshare' : 'Share'}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>
