@@ -29,12 +29,16 @@
 	const currentUserId = $derived(currentUserQuery.data?.id ?? null);
 
 	$effect(() => {
-		if (!browser || !currentUserId) return;
+		if (!browser || !currentUserId || !communityId) return;
 
 		const interval = 20_000;
+		const roomId = `community:${communityId}`;
 		const sendHeartbeat = async () => {
 			try {
-				await client.mutation((api as any).presence.heartbeat, {});
+				await client.mutation((api as any).presence.heartbeat, {
+					roomId,
+					interval
+				});
 			} catch (error) {
 				console.error('Community presence heartbeat failed:', error);
 			}

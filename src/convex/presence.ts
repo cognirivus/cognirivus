@@ -1,33 +1,130 @@
 import { v } from 'convex/values';
 import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import { components } from './_generated/api';
+import type { Id } from './_generated/dataModel';
 import { authComponent } from './auth';
 import { rateLimiter } from './lib/rateLimits';
+import { Presence } from '@convex-dev/presence';
 
 const MAX_SCOPE_ITEMS = 200;
+const COMMUNITY_ROOM_PREFIX = 'community:';
+const DM_ROOM_PREFIX = 'dm:';
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 20_000;
+const MIN_HEARTBEAT_INTERVAL_MS = 5_000;
+const MAX_HEARTBEAT_INTERVAL_MS = 60_000;
+
+const presence = new Presence(components.presence);
 
 const uniqueValues = <T>(values: Array<T>) => [...new Set(values)];
 
-const listOnlineUserIds = async (ctx: QueryCtx | MutationCtx, userAuthIds: Array<string>) => {
-	const now = Date.now();
-	const online: Array<string> = [];
-
-	for (const userAuthId of uniqueValues(userAuthIds)) {
-		const presence = await ctx.db
-			.query('user_presence')
-			.withIndex('by_userAuthId', (q) => q.eq('userAuthId', userAuthId))
-			.unique();
-
-		if (presence && presence.expiresAt > now) {
-			online.push(userAuthId);
-		}
+const toPresenceInterval = (value?: number) => {
+	if (typeof value !== 'number' || !Number.isFinite(value)) {
+		return DEFAULT_HEARTBEAT_INTERVAL_MS;
 	}
+	return Math.max(
+		MIN_HEARTBEAT_INTERVAL_MS,
+		Math.min(MAX_HEARTBEAT_INTERVAL_MS, Math.floor(value))
+	);
+};
 
-	return online;
+const toPresenceRoomId = (value: string) => {
+	const trimmed = value.trim();
+	if (!trimmed) {
+		throw new Error('roomId is required.');
+	}
+	return trimmed;
+};
+
+const resolvePresenceSessionId = async (
+	ctx: MutationCtx,
+	userId: string,
+	providedSessionId?: string
+) => {
+	if (typeof providedSessionId === 'string' && providedSessionId.trim()) {
+		return providedSessionId.trim();
+	}
+	const identity = await ctx.auth.getUserIdentity();
+	const identitySessionId = (identity as { sessionId?: unknown } | null)?.sessionId;
+	if (typeof identitySessionId === 'string' && identitySessionId.trim()) {
+		return identitySessionId.trim();
+	}
+	return `user:${userId}`;
+};
+
+const getCommunityFromRoom = async (ctx: QueryCtx | MutationCtx, roomId: string) => {
+	const communityId = roomId.slice(COMMUNITY_ROOM_PREFIX.length);
+	if (!communityId) {
+		throw new Error('Invalid community room id.');
+	}
+	try {
+		return await ctx.db.get(communityId as Id<'communities'>);
+	} catch {
+		throw new Error('Invalid community room id.');
+	}
+};
+
+const getConversationFromRoom = async (ctx: QueryCtx | MutationCtx, roomId: string) => {
+	const conversationId = roomId.slice(DM_ROOM_PREFIX.length);
+	if (!conversationId) {
+		throw new Error('Invalid DM room id.');
+	}
+	try {
+		return await ctx.db.get(conversationId as Id<'dm_conversations'>);
+	} catch {
+		throw new Error('Invalid DM room id.');
+	}
+};
+
+const assertRoomAccess = async (ctx: QueryCtx | MutationCtx, roomId: string, userAuthId: string) => {
+	if (roomId.startsWith(COMMUNITY_ROOM_PREFIX)) {
+		const community = await getCommunityFromRoom(ctx, roomId);
+		if (!community) {
+			throw new Error('Community not found.');
+		}
+		const membership = await ctx.db
+			.query('community_memberships')
+			.withIndex('by_communityId_and_userAuthId', (q) =>
+				q.eq('communityId', community._id).eq('userAuthId', userAuthId)
+			)
+			.unique();
+		if (!membership || membership.status !== 'active') {
+			throw new Error('Forbidden presence room.');
+		}
+		return;
+	}
+	if (roomId.startsWith(DM_ROOM_PREFIX)) {
+		const conversation = await getConversationFromRoom(ctx, roomId);
+		if (!conversation) {
+			throw new Error('Conversation not found.');
+		}
+		const isParticipant =
+			conversation.participant1 === userAuthId || conversation.participant2 === userAuthId;
+		if (!isParticipant) {
+			throw new Error('Forbidden presence room.');
+		}
+		return;
+	}
+	throw new Error('Unsupported presence room.');
+};
+
+const listOnlineUserIdsInRoom = async (
+	ctx: QueryCtx,
+	roomId: string,
+	userAuthIds: Array<string>,
+	limit: number
+) => {
+	const desiredIds = uniqueValues(userAuthIds);
+	if (desiredIds.length === 0) {
+		return [];
+	}
+	const onlineInRoom = await presence.listRoom(ctx, roomId, true, limit);
+	const onlineSet = new Set(onlineInRoom.map((entry) => entry.userId));
+	return desiredIds.filter((userAuthId) => onlineSet.has(userAuthId));
 };
 
 export const heartbeat = mutation({
 	args: {
-		roomId: v.optional(v.string()),
+		roomId: v.string(),
 		userId: v.optional(v.string()),
 		sessionId: v.optional(v.string()),
 		interval: v.optional(v.number())
@@ -41,24 +138,46 @@ export const heartbeat = mutation({
 		}
 
 		await rateLimiter.limit(ctx, 'presenceHeartbeat', { key: user._id, throws: true });
+		const roomId = toPresenceRoomId(args.roomId);
+		await assertRoomAccess(ctx, roomId, user._id);
+		const sessionId = await resolvePresenceSessionId(ctx, user._id, args.sessionId);
+		const interval = toPresenceInterval(args.interval);
 
-		const existing = await ctx.db
-			.query('user_presence')
-			.withIndex('by_userAuthId', (q) => q.eq('userAuthId', user._id))
-			.unique();
-
-		const expiresAt = Date.now() + 30_000;
-
-		if (existing) {
-			await ctx.db.patch(existing._id, { expiresAt });
-		} else {
-			await ctx.db.insert('user_presence', {
-				userAuthId: user._id,
-				expiresAt
-			});
-		}
+		await presence.heartbeat(ctx, roomId, user._id, sessionId, interval);
 
 		return null;
+	}
+});
+
+export const list = query({
+	args: {
+		roomToken: v.string(),
+		limit: v.optional(v.number())
+	},
+	returns: v.array(
+		v.object({
+			userId: v.string(),
+			online: v.boolean(),
+			lastDisconnected: v.number(),
+			data: v.optional(v.any())
+		})
+	),
+	handler: async (ctx, args) => {
+		const limit =
+			typeof args.limit === 'number' && Number.isFinite(args.limit)
+				? Math.max(1, Math.floor(args.limit))
+				: 104;
+		return await presence.list(ctx, args.roomToken, limit);
+	}
+});
+
+export const disconnect = mutation({
+	args: {
+		sessionToken: v.string()
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		return await presence.disconnect(ctx, args.sessionToken);
 	}
 });
 
@@ -77,7 +196,7 @@ export const getOnlineUsersForConversations = query({
 			throw new Error(`Too many conversation ids. Max ${MAX_SCOPE_ITEMS}.`);
 		}
 
-		const otherUserIds = new Set<string>();
+		const onlineUserIds = new Set<string>();
 		for (const conversationId of uniqueValues(args.conversationIds)) {
 			const conversation = await ctx.db.get(conversationId);
 			if (!conversation) {
@@ -94,10 +213,14 @@ export const getOnlineUsersForConversations = query({
 				conversation.participant1 === user._id
 					? conversation.participant2
 					: conversation.participant1;
-			otherUserIds.add(otherUserAuthId);
+			const roomId = `${DM_ROOM_PREFIX}${conversationId}`;
+			const online = await listOnlineUserIdsInRoom(ctx, roomId, [otherUserAuthId], 4);
+			if (online.length > 0) {
+				onlineUserIds.add(otherUserAuthId);
+			}
 		}
 
-		return await listOnlineUserIds(ctx, [...otherUserIds]);
+		return [...onlineUserIds];
 	}
 });
 
@@ -137,6 +260,7 @@ export const getOnlineUsersForCommunity = query({
 			.take(MAX_SCOPE_ITEMS);
 
 		const memberAuthIds = activeMemberships.map((membership) => membership.userAuthId);
-		return await listOnlineUserIds(ctx, memberAuthIds);
+		const roomId = `${COMMUNITY_ROOM_PREFIX}${args.communityId}`;
+		return await listOnlineUserIdsInRoom(ctx, roomId, memberAuthIds, MAX_SCOPE_ITEMS * 2);
 	}
 });

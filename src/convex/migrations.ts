@@ -1,11 +1,86 @@
 import { v } from 'convex/values';
-import { internal } from './_generated/api';
-import { internalAction } from './_generated/server';
+import { Migrations } from '@convex-dev/migrations';
+import { components, internal } from './_generated/api';
+import type { DataModel } from './_generated/dataModel';
+import { internalAction, internalQuery } from './_generated/server';
+import { trackPostInserted, trackSourceItemInserted } from './lib/aggregates';
 
 const backfillStateValidator = v.object({
 	isDone: v.boolean(),
 	continueCursor: v.union(v.string(), v.null()),
 	processed: v.number()
+});
+
+const migrationStatusValidator = v.object({
+	name: v.string(),
+	cursor: v.optional(v.union(v.string(), v.null())),
+	processed: v.number(),
+	isDone: v.boolean(),
+	error: v.optional(v.string()),
+	state: v.union(
+		v.literal('inProgress'),
+		v.literal('success'),
+		v.literal('failed'),
+		v.literal('canceled'),
+		v.literal('unknown')
+	),
+	latestStart: v.number(),
+	latestEnd: v.optional(v.number()),
+	batchSize: v.optional(v.number()),
+	next: v.optional(v.array(v.string()))
+});
+
+type AggregateMigrationStatus = {
+	name: string;
+	cursor?: string | null;
+	processed: number;
+	isDone: boolean;
+	error?: string;
+	state: 'inProgress' | 'success' | 'failed' | 'canceled' | 'unknown';
+	latestStart: number;
+	latestEnd?: number;
+	batchSize?: number;
+	next?: Array<string>;
+};
+
+const dataMigrations = new Migrations<DataModel>((components as any).migrations);
+
+export const run = dataMigrations.runner();
+
+export const backfillSourceItemCountAggregate = dataMigrations.define({
+	table: 'source_items',
+	batchSize: 250,
+	migrateOne: async (ctx, doc) => {
+		await trackSourceItemInserted(ctx, doc);
+	}
+});
+
+export const backfillPostShareAggregate = dataMigrations.define({
+	table: 'posts',
+	batchSize: 250,
+	migrateOne: async (ctx, doc) => {
+		if (!doc.sourceId) {
+			return;
+		}
+		await trackPostInserted(ctx, doc);
+	}
+});
+
+const aggregateBackfillMigrations: Array<any> = [
+	(internal as any).migrations.backfillSourceItemCountAggregate,
+	(internal as any).migrations.backfillPostShareAggregate
+];
+
+export const runAggregateBackfill = dataMigrations.runner(aggregateBackfillMigrations);
+
+export const getAggregateBackfillStatus = internalQuery({
+	args: {},
+	returns: v.array(migrationStatusValidator),
+	handler: async (ctx): Promise<Array<AggregateMigrationStatus>> => {
+		return await dataMigrations.getStatus(ctx, {
+			migrations: aggregateBackfillMigrations
+		});
+	}
 });
 
 export const runBackfillBatch = internalAction({

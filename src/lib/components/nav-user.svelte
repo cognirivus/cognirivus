@@ -13,6 +13,7 @@
 		Sparkles,
 		User,
 		FileText,
+		Archive,
 		Settings
 	} from '@lucide/svelte';
 
@@ -102,6 +103,10 @@
 						<DropdownMenu.Item onclick={() => goto(`${profileHref}/posts/manage`)}>
 							<FileText class="size-4" />
 							Manage posts
+						</DropdownMenu.Item>
+						<DropdownMenu.Item onclick={() => goto(`${profileHref}/sources/manage`)}>
+							<Archive class="size-4" />
+							Manage sources
 						</DropdownMenu.Item>
 					{/if}
 					<DropdownMenu.Item onclick={() => goto('/settings')}>

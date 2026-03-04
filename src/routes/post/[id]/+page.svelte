@@ -8,6 +8,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import CommentsSection from '$lib/components/comments/CommentsSection.svelte';
+	import { sanitizeDisplayText } from '$lib/utils';
 	import { toast } from 'svelte-sonner';
 
 	const auth = useAuth();
@@ -39,11 +40,11 @@
 		const post = postQuery.data;
 		if (!post) return;
 		if (post.body) {
-			fullBody = post.body;
+			fullBody = sanitizeDisplayText(post.body);
 			return;
 		}
 		if (!post.bodyUrl) {
-			fullBody = post.snippet;
+			fullBody = sanitizeDisplayText(post.snippet);
 			return;
 		}
 		loadingBody = true;
@@ -53,10 +54,10 @@
 				return response.text();
 			})
 			.then((text) => {
-				fullBody = text;
+				fullBody = sanitizeDisplayText(text);
 			})
 			.catch(() => {
-				fullBody = post.snippet;
+				fullBody = sanitizeDisplayText(post.snippet);
 			})
 			.finally(() => {
 				loadingBody = false;
@@ -145,7 +146,9 @@
 					{/if}
 				</div>
 
-				<h1 class="text-2xl font-semibold tracking-tight">{postQuery.data.title}</h1>
+				<h1 class="text-2xl font-semibold tracking-tight">
+					{sanitizeDisplayText(postQuery.data.title)}
+				</h1>
 				{#if postQuery.data.url}
 					<p class="mt-2 text-sm">
 						<a class="underline" href={postQuery.data.url} target="_blank" rel="noreferrer">

@@ -4,8 +4,9 @@ import { action, internalAction, internalMutation, mutation, query } from './_ge
 import { authComponent } from './auth';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { r2 } from './lib/r2';
+import { deleteR2MetadataOnly, deleteR2ObjectOnly, r2 } from './lib/r2';
 import { rateLimiter } from './lib/rateLimits';
+import { trackPostDeleted, trackPostInserted } from './lib/aggregates';
 
 const POST_BODY_INLINE_LIMIT = 1000;
 const POST_SNIPPET_LIMIT = 500;
@@ -38,6 +39,11 @@ const postDetailsValidator = v.object({
 	commentCount: v.number(),
 	tags: v.optional(v.array(v.string())),
 	sourceType: v.optional(v.string()),
+	sourceId: v.optional(v.id('sources')),
+	sourceItemId: v.optional(v.id('source_items')),
+	sourceTypeSnapshot: v.optional(v.string()),
+	sourceTitleSnapshot: v.optional(v.string()),
+	sourceUrlSnapshot: v.optional(v.string()),
 	createdAt: v.number(),
 	updatedAt: v.number(),
 	userVote: userVoteValidator,
@@ -286,6 +292,11 @@ export const createStored = internalMutation({
 		url: v.optional(v.string()),
 		tags: v.optional(v.array(v.string())),
 		sourceType: v.optional(v.string()),
+		sourceId: v.optional(v.id('sources')),
+		sourceItemId: v.optional(v.id('source_items')),
+		sourceTypeSnapshot: v.optional(v.string()),
+		sourceTitleSnapshot: v.optional(v.string()),
+		sourceUrlSnapshot: v.optional(v.string()),
 		createdAt: v.optional(v.number())
 	},
 	returns: v.id('posts'),
@@ -328,6 +339,11 @@ export const createStored = internalMutation({
 			url: args.url,
 			tags: tags.length > 0 ? tags : undefined,
 			sourceType: args.sourceType,
+			sourceId: args.sourceId,
+			sourceItemId: args.sourceItemId,
+			sourceTypeSnapshot: args.sourceTypeSnapshot,
+			sourceTitleSnapshot: args.sourceTitleSnapshot,
+			sourceUrlSnapshot: args.sourceUrlSnapshot,
 			score: 0,
 			likes: 0,
 			dislikes: 0,
@@ -342,6 +358,10 @@ export const createStored = internalMutation({
 				tagLower,
 				createdAt: args.createdAt ?? now
 			});
+		}
+		const insertedPost = await ctx.db.get(postId);
+		if (insertedPost) {
+			await trackPostInserted(ctx, insertedPost);
 		}
 
 		return postId;
@@ -406,6 +426,57 @@ export const create = action({
 			body,
 			r2Key,
 			url: args.url?.trim()
+		});
+	}
+});
+
+export const shareSourceItemAsPost = action({
+	args: {
+		sourceItemId: v.id('source_items'),
+		communityId: v.optional(v.id('communities')),
+		visibility: v.optional(v.union(v.literal('public'), v.literal('private')))
+	},
+	returns: v.id('posts'),
+	handler: async (ctx, args): Promise<Id<'posts'>> => {
+		const authUser = await requireAuthenticatedUser(ctx);
+		await ctx.runMutation(internal.profiles.ensureProfileForAuth, {
+			authId: authUser._id,
+			email: authUser.email,
+			name: authUser.name,
+			image: authUser.image
+		});
+		await rateLimiter.limit(ctx, 'createPost', { key: authUser._id, throws: true });
+
+		const sourceItem: {
+			sourceItemId: Id<'source_items'>;
+			sourceId: Id<'sources'>;
+			sourceType: 'website' | 'rss' | 'youtube' | 'bookmarks';
+			url: string;
+			title: string;
+			snippet: string;
+		} | null = await ctx.runQuery((internal as any).sources.getSourceItemForSharing, {
+			sourceItemId: args.sourceItemId,
+			userAuthId: authUser._id
+		});
+
+		if (!sourceItem) {
+			throw new Error('Source item not found.');
+		}
+
+		return await ctx.runMutation((internal as any).posts.createStored, {
+			authorAuthId: authUser._id,
+			communityId: args.communityId,
+			visibility: args.visibility ?? 'private',
+			type: 'link',
+			title: sourceItem.title,
+			snippet: sourceItem.snippet,
+			url: sourceItem.url,
+			sourceType: `source_${sourceItem.sourceType}`,
+			sourceId: sourceItem.sourceId,
+			sourceItemId: sourceItem.sourceItemId,
+			sourceTypeSnapshot: sourceItem.sourceType,
+			sourceTitleSnapshot: sourceItem.title,
+			sourceUrlSnapshot: sourceItem.url
 		});
 	}
 });
@@ -482,6 +553,11 @@ export const get = query({
 			commentCount: post.commentCount,
 			tags: post.tags,
 			sourceType: post.sourceType,
+			sourceId: post.sourceId,
+			sourceItemId: post.sourceItemId,
+			sourceTypeSnapshot: post.sourceTypeSnapshot,
+			sourceTitleSnapshot: post.sourceTitleSnapshot,
+			sourceUrlSnapshot: post.sourceUrlSnapshot,
 			createdAt: post.createdAt,
 			updatedAt: post.updatedAt,
 			userVote: (userVoteDoc?.value ?? null) as -1 | 1 | null,
@@ -735,6 +811,62 @@ export const voteComment = mutation({
 	}
 });
 
+export const setVisibility = mutation({
+	args: {
+		postId: v.id('posts'),
+		visibility: v.union(v.literal('public'), v.literal('private')),
+		communityId: v.optional(v.id('communities'))
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const authUser = await requireAuthenticatedUser(ctx);
+		await ensureProfile(ctx, authUser);
+		await rateLimiter.limit(ctx, 'createPost', { key: authUser._id, throws: true });
+
+		const post = await ctx.db.get(args.postId);
+		if (!post) {
+			throw new Error('Post not found.');
+		}
+		if (post.authorAuthId !== authUser._id) {
+			throw new Error('Only the post author can change visibility.');
+		}
+
+		if (args.visibility === 'private' && args.communityId) {
+			throw new Error('Private posts cannot belong to a community.');
+		}
+
+		const nextCommunityId = args.visibility === 'public' ? args.communityId : undefined;
+		if (nextCommunityId) {
+			const community = await ctx.db.get(nextCommunityId);
+			if (!community) {
+				throw new Error('Community not found.');
+			}
+			if (community.visibility === 'private') {
+				const membership = await ctx.db
+					.query('community_memberships')
+					.withIndex('by_communityId_and_userAuthId', (q) =>
+						q.eq('communityId', nextCommunityId).eq('userAuthId', authUser._id)
+					)
+					.unique();
+				if (!membership || membership.status !== 'active') {
+					throw new Error('Active community membership required.');
+				}
+			}
+		}
+
+		const { scopeType, visibilityScope } = deriveScope(nextCommunityId, args.visibility);
+		await ctx.db.patch(post._id, {
+			communityId: nextCommunityId,
+			visibility: args.visibility,
+			scopeType,
+			visibilityScope,
+			updatedAt: Date.now()
+		});
+
+		return null;
+	}
+});
+
 export const deletePost = mutation({
 	args: {
 		postId: v.id('posts')
@@ -798,6 +930,7 @@ export const deletePost = mutation({
 			await ctx.db.delete(postTag._id);
 		}
 
+		await trackPostDeleted(ctx, post);
 		await ctx.db.delete(post._id);
 		if (post.r2Key) {
 			await ctx.scheduler.runAfter(0, internal.posts.deleteStoredBody, {
@@ -818,7 +951,8 @@ export const deleteStoredBody = internalAction({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		try {
-			await r2.deleteObject(ctx, args.r2Key);
+			await deleteR2ObjectOnly(ctx, args.r2Key);
+			await deleteR2MetadataOnly(ctx, args.r2Key);
 		} catch (error) {
 			console.error('Failed to delete R2 object', args.r2Key, error);
 		}

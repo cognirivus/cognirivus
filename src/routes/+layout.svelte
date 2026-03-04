@@ -33,6 +33,7 @@
 		settings: 'Settings',
 		u: 'Users',
 		post: 'Post',
+		source: 'Source',
 		new: 'New',
 		manage: 'Manage',
 		members: 'Members',
@@ -40,7 +41,9 @@
 		signup: 'Sign Up',
 		username: 'Username',
 		followers: 'Followers',
-		following: 'Following'
+		following: 'Following',
+		sources: 'Sources',
+		admin: 'Admin'
 	};
 
 	const isAuthPage = $derived(page.url.pathname === '/signin' || page.url.pathname === '/signup');
