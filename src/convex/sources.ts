@@ -37,7 +37,6 @@ const BULK_UNSUBSCRIBE_BATCH_SIZE = 200;
 const RESUBSCRIBE_BACKFILL_BATCH_SIZE = 200;
 const NIGHTLY_REFRESH_BATCH_SIZE = 100;
 const FANOUT_BATCH_SIZE = 200;
-const DELIVERY_DEDUPE_SCAN_BATCH_SIZE = 128;
 const FANOUT_RETRY_MAX_ATTEMPTS = 3;
 const FANOUT_RETRY_BASE_DELAY_MS = 1000;
 const MANUAL_REFRESH_DAILY_LIMIT = 3;
@@ -117,25 +116,12 @@ const listDeliveriesForUserSourceItem = async (
 	userAuthId: string,
 	sourceItemId: Id<'source_items'>
 ) => {
-	const deliveries: any[] = [];
-	let cursor: string | null = null;
-	while (true) {
-		const page: any = await ctx.db
-			.query('user_source_items')
-			.withIndex('by_userAuthId_and_sourceItemId', (q: any) =>
-				q.eq('userAuthId', userAuthId).eq('sourceItemId', sourceItemId)
-			)
-			.paginate({
-				numItems: DELIVERY_DEDUPE_SCAN_BATCH_SIZE,
-				cursor
-			});
-		deliveries.push(...page.page);
-		if (page.isDone) {
-			break;
-		}
-		cursor = page.continueCursor;
-	}
-	return deliveries;
+	return await ctx.db
+		.query('user_source_items')
+		.withIndex('by_userAuthId_and_sourceItemId', (q: any) =>
+			q.eq('userAuthId', userAuthId).eq('sourceItemId', sourceItemId)
+		)
+		.collect();
 };
 
 const keepOldestDeliveryAndDeleteDuplicates = async (ctx: any, deliveries: any[]) => {
