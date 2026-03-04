@@ -337,7 +337,6 @@ type DeletePostPermanentlyResult = {
 	r2Deleted: boolean;
 };
 
-
 type DeletionJobTargetType = 'source' | 'source_item' | 'post';
 
 type DeletionJobClaim = {
@@ -471,6 +470,7 @@ export const listDashboard = query({
 		const now = Date.now();
 		const failedSince = now - UTC_DAY_MS;
 		const nightlyLockKey = `nightly_source_refresh:${utcRunDateKey(now)}`;
+		const DASHBOARD_SCAN_CAP = 2000;
 		const nightlyLock = (
 			await ctx.db
 				.query('scheduler_locks')
@@ -482,15 +482,15 @@ export const listDashboard = query({
 			ctx.db
 				.query('r2_retry_jobs')
 				.withIndex('by_status_and_nextRunAt', (q) => q.eq('status', 'queued'))
-				.collect(),
+				.take(DASHBOARD_SCAN_CAP),
 			ctx.db
 				.query('r2_retry_jobs')
 				.withIndex('by_status_and_nextRunAt', (q) => q.eq('status', 'running'))
-				.collect(),
+				.take(DASHBOARD_SCAN_CAP),
 			ctx.db
 				.query('r2_retry_jobs')
 				.withIndex('by_status_and_nextRunAt', (q) => q.eq('status', 'failed'))
-				.collect()
+				.take(DASHBOARD_SCAN_CAP)
 		]);
 		const invalidR2RetryRows = [...r2QueuedJobs, ...r2RunningJobs, ...r2FailedJobs].filter(
 			(job) => job.stage !== 'object_delete' && job.stage !== 'metadata_delete'
@@ -503,19 +503,22 @@ export const listDashboard = query({
 					.withIndex('by_status_and_updatedAt', (q) =>
 						q.eq('status', 'failed').gte('updatedAt', failedSince)
 					)
-					.collect(),
+					.order('desc')
+					.take(DASHBOARD_SCAN_CAP),
 				ctx.db
 					.query('deletion_jobs')
 					.withIndex('by_status_and_updatedAt', (q) =>
 						q.eq('status', 'failed').gte('updatedAt', failedSince)
 					)
-					.collect(),
+					.order('desc')
+					.take(DASHBOARD_SCAN_CAP),
 				ctx.db
 					.query('r2_retry_jobs')
 					.withIndex('by_status_and_nextRunAt', (q) =>
 						q.eq('status', 'failed').gte('nextRunAt', failedSince)
 					)
-					.collect(),
+					.order('desc')
+					.take(DASHBOARD_SCAN_CAP),
 				ctx.db
 					.query('security_events')
 					.withIndex('by_eventType_and_createdAt', (q) =>
@@ -586,14 +589,13 @@ export const listSourceItemR2RefsBatch = internalQuery({
 		continueCursor: v.union(v.string(), v.null())
 	}),
 	handler: async (ctx, args) => {
-		const page = await ctx.db
-			.query('source_items')
-			.withIndex('by_publishedAt')
+		const page = await (ctx.db.query('source_items') as any)
+			.withIndex('by_r2Key_and_publishedAt', (q: any) => q.gte('r2Key', ''))
 			.order('asc')
 			.paginate(args.paginationOpts);
 
 		return {
-			page: page.page.map((row) => ({
+			page: page.page.map((row: { _id: Id<'source_items'>; r2Key?: string }) => ({
 				_id: row._id,
 				r2Key: row.r2Key
 			})),
@@ -613,14 +615,13 @@ export const listPostR2RefsBatch = internalQuery({
 		continueCursor: v.union(v.string(), v.null())
 	}),
 	handler: async (ctx, args) => {
-		const page = await ctx.db
-			.query('posts')
-			.withIndex('by_createdAt')
+		const page = await (ctx.db.query('posts') as any)
+			.withIndex('by_r2Key_and_createdAt', (q: any) => q.gte('r2Key', ''))
 			.order('asc')
 			.paginate(args.paginationOpts);
 
 		return {
-			page: page.page.map((row) => ({
+			page: page.page.map((row: { _id: Id<'posts'>; r2Key?: string }) => ({
 				_id: row._id,
 				r2Key: row.r2Key
 			})),
@@ -1063,20 +1064,79 @@ export const deleteSourceCascadeFromDb = internalMutation({
 			};
 		}
 
-		const sourceItems = await ctx.db
-			.query('source_items')
-			.withIndex('by_sourceId_and_publishedAt', (q) => q.eq('sourceId', args.sourceId))
-			.collect();
-		const r2Keys = sourceItems.map((item) => item.r2Key).filter((key): key is string => !!key);
-
+		const r2Keys: Array<string> = [];
+		let sourceItemCount = 0;
+		let deliveryCount = 0;
 		let unlinkedPostCount = 0;
-		for (const sourceItem of sourceItems) {
-			const linkedPosts = await ctx.db
-				.query('posts')
-				.withIndex('by_sourceItemId_and_createdAt', (q) => q.eq('sourceItemId', sourceItem._id))
-				.collect();
-			for (const post of linkedPosts) {
-				const oldPost = post;
+		let subscriptionCount = 0;
+		let jobCount = 0;
+
+		while (true) {
+			const sourceItemsBatch = await ctx.db
+				.query('source_items')
+				.withIndex('by_sourceId_and_publishedAt', (q) => q.eq('sourceId', args.sourceId))
+				.take(100);
+			if (sourceItemsBatch.length === 0) {
+				break;
+			}
+
+			for (const sourceItem of sourceItemsBatch) {
+				if (sourceItem.r2Key) {
+					r2Keys.push(sourceItem.r2Key);
+				}
+
+				while (true) {
+					const linkedPosts = await ctx.db
+						.query('posts')
+						.withIndex('by_sourceItemId_and_createdAt', (q) => q.eq('sourceItemId', sourceItem._id))
+						.take(100);
+					if (linkedPosts.length === 0) {
+						break;
+					}
+					for (const post of linkedPosts) {
+						const oldPost = post;
+						await ctx.db.patch(post._id, {
+							sourceId: undefined,
+							sourceItemId: undefined,
+							updatedAt: Date.now()
+						});
+						const updatedPost = await ctx.db.get(post._id);
+						if (updatedPost) {
+							await trackPostReplaced(ctx, oldPost, updatedPost);
+						}
+						unlinkedPostCount += 1;
+					}
+				}
+
+				while (true) {
+					const deliveriesBatch = await ctx.db
+						.query('user_source_items')
+						.withIndex('by_sourceItemId', (q) => q.eq('sourceItemId', sourceItem._id))
+						.take(200);
+					if (deliveriesBatch.length === 0) {
+						break;
+					}
+					for (const delivery of deliveriesBatch) {
+						await ctx.db.delete(delivery._id);
+						deliveryCount += 1;
+					}
+				}
+
+				await trackSourceItemDeleted(ctx, sourceItem);
+				await ctx.db.delete(sourceItem._id);
+				sourceItemCount += 1;
+			}
+		}
+
+		while (true) {
+			const remainingPosts = await (ctx.db.query('posts') as any)
+				.withIndex('by_sourceId_and_createdAt', (q: any) => q.eq('sourceId', args.sourceId))
+				.take(100);
+			if (remainingPosts.length === 0) {
+				break;
+			}
+			for (const post of remainingPosts) {
+				const oldPost = post as any;
 				await ctx.db.patch(post._id, {
 					sourceId: undefined,
 					sourceItemId: undefined,
@@ -1084,58 +1144,66 @@ export const deleteSourceCascadeFromDb = internalMutation({
 				});
 				const updatedPost = await ctx.db.get(post._id);
 				if (updatedPost) {
-					await trackPostReplaced(ctx, oldPost, updatedPost);
+					await trackPostReplaced(ctx, oldPost, updatedPost as any);
 				}
 				unlinkedPostCount += 1;
 			}
 		}
 
-		const deliveries = await ctx.db
-			.query('user_source_items')
-			.withIndex('by_sourceId_and_publishedAt', (q) => q.eq('sourceId', args.sourceId))
-			.collect();
-		for (const delivery of deliveries) {
-			await ctx.db.delete(delivery._id);
+		while (true) {
+			const activeBatch = await ctx.db
+				.query('source_subscriptions')
+				.withIndex('by_sourceId_and_status', (q) =>
+					q.eq('sourceId', args.sourceId).eq('status', 'active')
+				)
+				.take(200);
+			if (activeBatch.length === 0) {
+				break;
+			}
+			for (const subscription of activeBatch) {
+				await ctx.db.delete(subscription._id);
+				subscriptionCount += 1;
+			}
 		}
 
-		const activeSubscriptions = await ctx.db
-			.query('source_subscriptions')
-			.withIndex('by_sourceId_and_status', (q) =>
-				q.eq('sourceId', args.sourceId).eq('status', 'active')
-			)
-			.collect();
-		const pausedSubscriptions = await ctx.db
-			.query('source_subscriptions')
-			.withIndex('by_sourceId_and_status', (q) =>
-				q.eq('sourceId', args.sourceId).eq('status', 'paused')
-			)
-			.collect();
-		const allSubscriptions = [...activeSubscriptions, ...pausedSubscriptions];
-		for (const subscription of allSubscriptions) {
-			await ctx.db.delete(subscription._id);
+		while (true) {
+			const pausedBatch = await ctx.db
+				.query('source_subscriptions')
+				.withIndex('by_sourceId_and_status', (q) =>
+					q.eq('sourceId', args.sourceId).eq('status', 'paused')
+				)
+				.take(200);
+			if (pausedBatch.length === 0) {
+				break;
+			}
+			for (const subscription of pausedBatch) {
+				await ctx.db.delete(subscription._id);
+				subscriptionCount += 1;
+			}
 		}
 
-		const sourceJobs = await ctx.db
-			.query('source_jobs')
-			.withIndex('by_sourceId_and_createdAt', (q) => q.eq('sourceId', args.sourceId))
-			.collect();
-		for (const sourceJob of sourceJobs) {
-			await ctx.db.delete(sourceJob._id);
-		}
-
-		for (const sourceItem of sourceItems) {
-			await trackSourceItemDeleted(ctx, sourceItem);
-			await ctx.db.delete(sourceItem._id);
+		while (true) {
+			const sourceJobsBatch = await ctx.db
+				.query('source_jobs')
+				.withIndex('by_sourceId_and_createdAt', (q) => q.eq('sourceId', args.sourceId))
+				.take(200);
+			if (sourceJobsBatch.length === 0) {
+				break;
+			}
+			for (const sourceJob of sourceJobsBatch) {
+				await ctx.db.delete(sourceJob._id);
+				jobCount += 1;
+			}
 		}
 		await ctx.db.delete(args.sourceId);
 
 		return {
 			deleted: true,
 			sourceId: args.sourceId,
-			sourceItemCount: sourceItems.length,
-			deliveryCount: deliveries.length,
-			subscriptionCount: allSubscriptions.length,
-			jobCount: sourceJobs.length,
+			sourceItemCount,
+			deliveryCount,
+			subscriptionCount,
+			jobCount,
 			unlinkedPostCount,
 			r2Keys
 		};
@@ -1158,29 +1226,43 @@ export const deleteSourceItemCascadeFromDb = internalMutation({
 			};
 		}
 
-		const linkedPosts = await ctx.db
-			.query('posts')
-			.withIndex('by_sourceItemId_and_createdAt', (q) => q.eq('sourceItemId', args.sourceItemId))
-			.collect();
-		for (const post of linkedPosts) {
-			const oldPost = post;
-			await ctx.db.patch(post._id, {
-				sourceId: undefined,
-				sourceItemId: undefined,
-				updatedAt: Date.now()
-			});
-			const updatedPost = await ctx.db.get(post._id);
-			if (updatedPost) {
-				await trackPostReplaced(ctx, oldPost, updatedPost);
+		let unlinkedPostCount = 0;
+		while (true) {
+			const linkedPosts = await ctx.db
+				.query('posts')
+				.withIndex('by_sourceItemId_and_createdAt', (q) => q.eq('sourceItemId', args.sourceItemId))
+				.take(100);
+			if (linkedPosts.length === 0) {
+				break;
+			}
+			for (const post of linkedPosts) {
+				const oldPost = post;
+				await ctx.db.patch(post._id, {
+					sourceId: undefined,
+					sourceItemId: undefined,
+					updatedAt: Date.now()
+				});
+				const updatedPost = await ctx.db.get(post._id);
+				if (updatedPost) {
+					await trackPostReplaced(ctx, oldPost, updatedPost);
+				}
+				unlinkedPostCount += 1;
 			}
 		}
 
-		const deliveries = await ctx.db
-			.query('user_source_items')
-			.withIndex('by_sourceItemId', (q) => q.eq('sourceItemId', args.sourceItemId))
-			.collect();
-		for (const delivery of deliveries) {
-			await ctx.db.delete(delivery._id);
+		let deliveryCount = 0;
+		while (true) {
+			const deliveries = await ctx.db
+				.query('user_source_items')
+				.withIndex('by_sourceItemId', (q) => q.eq('sourceItemId', args.sourceItemId))
+				.take(200);
+			if (deliveries.length === 0) {
+				break;
+			}
+			for (const delivery of deliveries) {
+				await ctx.db.delete(delivery._id);
+				deliveryCount += 1;
+			}
 		}
 
 		await trackSourceItemDeleted(ctx, sourceItem);
@@ -1194,8 +1276,8 @@ export const deleteSourceItemCascadeFromDb = internalMutation({
 		return {
 			deleted: true,
 			sourceItemId: args.sourceItemId,
-			deliveryCount: deliveries.length,
-			unlinkedPostCount: linkedPosts.length,
+			deliveryCount,
+			unlinkedPostCount,
 			r2Key: sourceItem.r2Key
 		};
 	}
@@ -1469,7 +1551,6 @@ export const getR2RetryJob = internalQuery({
 		return toR2RetryJobResponse(job);
 	}
 });
-
 
 export const markR2RetryJobAttempt = internalMutation({
 	args: {
@@ -1760,7 +1841,6 @@ const deleteR2Keys = async (
 	}
 	return deletedCount;
 };
-
 
 export const deleteSourcePermanently = action({
 	args: {

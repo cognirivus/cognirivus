@@ -45,6 +45,12 @@ const stripHtml = (html: string) =>
 		.replace(/\s+/g, ' ')
 		.trim();
 
+const extractHtmlTitle = (html: string, fallback: string) => {
+	const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+	const title = match?.[1]?.replace(/\s+/g, ' ').trim();
+	return (title && title.slice(0, SOURCE_TITLE_LIMIT)) || fallback;
+};
+
 const isIpv4Address = (value: string) => {
 	const parts = value.split('.');
 	if (parts.length !== 4) {
@@ -250,7 +256,7 @@ const assertSafeFetchUrl = async (url: string) => {
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
-const fetchRssTextWithGuards = async (url: string, timeoutMs = 15000) => {
+const fetchTextWithGuards = async (url: string, timeoutMs = 15000) => {
 	let nextUrl = url;
 	const visited = new Set<string>();
 	for (let redirectCount = 0; redirectCount <= MAX_FETCH_REDIRECTS; redirectCount += 1) {
@@ -279,11 +285,12 @@ const fetchRssTextWithGuards = async (url: string, timeoutMs = 15000) => {
 			}
 
 			if (!response.ok) {
-				throw new Error(`RSS fetch failed (${response.status}).`);
+				throw new Error(`Source fetch failed (${response.status}).`);
 			}
 
 			return {
 				finalUrl: safeUrl,
+				contentType: response.headers.get('content-type') ?? 'text/plain',
 				body: await response.text()
 			};
 		} finally {
@@ -344,7 +351,7 @@ export const syncRssSource = internalAction({
 		let lastError: unknown = null;
 		for (const candidate of candidates) {
 			try {
-				const fetched = await fetchRssTextWithGuards(candidate);
+				const fetched = await fetchTextWithGuards(candidate);
 				try {
 					parsedFeed = await parser.parseString(fetched.body);
 				} catch (parseError) {
@@ -434,5 +441,69 @@ export const syncRssSource = internalAction({
 		}
 
 		return { processed };
+	}
+});
+
+const normalizeWebsiteError = (error: unknown) => {
+	const message = error instanceof Error ? error.message : 'Source fetch failed.';
+	if (/redirect loop/i.test(message)) {
+		return 'Source fetch redirect loop detected.';
+	}
+	if (/exceeded .*redirect/i.test(message)) {
+		return `Source fetch exceeded ${MAX_FETCH_REDIRECTS} redirects.`;
+	}
+	if (/dns resolution failed/i.test(message)) {
+		return 'Source host DNS resolution failed.';
+	}
+	if (/missing location header/i.test(message)) {
+		return 'Source host returned an invalid redirect response.';
+	}
+	if (/blocked for safety|blocked address|host is blocked/i.test(message)) {
+		return 'Source host is blocked for safety.';
+	}
+	if (/\b429\b|rate-limited/i.test(message)) {
+		return 'Source website rate-limited requests (HTTP 429). Try again later.';
+	}
+	if (/\b403\b|\b401\b|access denied|forbidden/i.test(message)) {
+		return 'Access denied by source website. This site may block server-side fetches.';
+	}
+	return message;
+};
+
+export const syncWebsiteSource = internalAction({
+	args: {
+		sourceId: v.id('sources'),
+		canonicalUrl: v.string(),
+		sourceTitle: v.string()
+	},
+	returns: v.object({
+		processed: v.number()
+	}),
+	handler: async (ctx, args) => {
+		try {
+			const normalizedCanonicalUrl = normalizeHttpUrl(args.canonicalUrl);
+			const fetched = await fetchTextWithGuards(normalizedCanonicalUrl);
+			const rawText = stripHtml(fetched.body);
+			const pageTitle = extractHtmlTitle(
+				fetched.body,
+				args.sourceTitle.trim() || normalizedCanonicalUrl
+			).slice(0, SOURCE_TITLE_LIMIT);
+			const snippet = createSnippet(rawText || pageTitle || normalizedCanonicalUrl);
+			const { inlineBody, r2Key } = await maybeStoreBodyToR2(ctx, args.sourceId, rawText);
+			await ctx.runMutation((internal as any).sources.ingestSourceItemFromInput, {
+				sourceId: args.sourceId,
+				url: normalizedCanonicalUrl,
+				title: pageTitle,
+				snippet,
+				body: inlineBody,
+				r2Key,
+				publishedAt: Date.now(),
+				contentHash: sha256Hex(rawText.slice(0, 4000)),
+				contentType: fetched.contentType
+			});
+			return { processed: 1 };
+		} catch (error) {
+			throw new Error(normalizeWebsiteError(error));
+		}
 	}
 });

@@ -30,7 +30,6 @@ import {
 import { assertNightlyRunTransition, assertSourceJobTransition } from './lib/jobTransitions';
 import { toSourceJobResponse } from './lib/serializers';
 
-const SOURCE_ITEM_INLINE_LIMIT = 1000;
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
 const SOURCE_TITLE_LIMIT = 220;
 const SOURCE_URL_LIMIT = 2048;
@@ -44,7 +43,6 @@ const MANUAL_REFRESH_DAILY_LIMIT = 3;
 const UTC_DAY_MS = 24 * 60 * 60 * 1000;
 const NEW_ACCOUNT_WINDOW_MS = 7 * UTC_DAY_MS;
 const NEW_ACCOUNT_MANUAL_REFRESH_DAILY_LIMIT = 1;
-const MAX_FETCH_REDIRECTS = 15;
 
 const sourceSyncWorkpool = new Workpool((components as any).sourceSyncWorkpool, {
 	maxParallelism: 8,
@@ -196,8 +194,13 @@ const normalizeSourceInput = (
 	const host = parsed.hostname.toLowerCase();
 	const canonicalUrl = parsed.toString();
 	const pathWithQuery = `${parsed.pathname.toLowerCase()}${parsed.search.toLowerCase()}`;
+	const isYoutubeHost =
+		host === 'youtube.com' ||
+		host.endsWith('.youtube.com') ||
+		host === 'youtu.be' ||
+		host.endsWith('.youtu.be');
 
-	if (type === 'youtube' && !host.includes('youtube.com') && !host.includes('youtu.be')) {
+	if (type === 'youtube' && !isYoutubeHost) {
 		throw new Error('YouTube source must use a youtube.com or youtu.be URL.');
 	}
 
@@ -317,128 +320,6 @@ const isBlockedHostname = (hostname: string) => {
 		}
 	}
 	return false;
-};
-
-const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-
-const fetchTextWithTimeout = async (url: string, timeoutMs = 12000) => {
-	const attemptHeaders: Array<Record<string, string> | undefined> = [
-		{
-			'User-Agent':
-				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-			Accept:
-				'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, text/html;q=0.7, */*;q=0.5',
-			'Accept-Language': 'en-US,en;q=0.9',
-			'Cache-Control': 'no-cache'
-		},
-		{
-			Accept:
-				'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5'
-		},
-		undefined
-	];
-
-	let lastStatus: number | null = null;
-	let lastError: unknown = null;
-
-	for (const headers of attemptHeaders) {
-		try {
-			let nextUrl = url;
-			for (let redirectCount = 0; redirectCount <= MAX_FETCH_REDIRECTS; redirectCount += 1) {
-				const normalized = normalizeHttpUrl(nextUrl);
-				if (isBlockedHostname(normalized.hostname)) {
-					throw new Error('Source host is blocked for safety.');
-				}
-
-				const controller = new AbortController();
-				const timeout = setTimeout(() => controller.abort(), timeoutMs);
-				const response = await fetch(normalized.toString(), {
-					method: 'GET',
-					signal: controller.signal,
-					redirect: 'manual',
-					headers
-				});
-				clearTimeout(timeout);
-
-				if (REDIRECT_STATUSES.has(response.status)) {
-					const location = response.headers.get('location');
-					if (!location) {
-						throw new Error(`Source redirect (${response.status}) missing location header.`);
-					}
-					nextUrl = new URL(location, normalized.toString()).toString();
-					continue;
-				}
-
-				if (!response.ok) {
-					lastStatus = response.status;
-					if (response.status === 401 || response.status === 403) {
-						break;
-					}
-					if (response.status === 429) {
-						throw new Error('Source website rate-limited requests (HTTP 429). Try again later.');
-					}
-					throw new Error(`Source fetch failed (${response.status}).`);
-				}
-
-				const contentType = response.headers.get('content-type') ?? 'text/plain';
-				const body = await response.text();
-				return { body, contentType };
-			}
-			throw new Error(`Source fetch exceeded ${MAX_FETCH_REDIRECTS} redirects.`);
-		} catch (error: unknown) {
-			lastError = error;
-		}
-	}
-
-	if (lastStatus === 401 || lastStatus === 403) {
-		throw new Error(
-			`Access denied by source website (HTTP ${lastStatus}). This feed may block server-side fetches.`
-		);
-	}
-
-	if (lastError instanceof Error) {
-		throw lastError;
-	}
-	throw new Error('Source fetch failed.');
-};
-
-const stripHtml = (html: string) =>
-	html
-		.replace(/<script[\s\S]*?<\/script>/gi, ' ')
-		.replace(/<style[\s\S]*?<\/style>/gi, ' ')
-		.replace(/<[^>]+>/g, ' ')
-		.replace(/\s+/g, ' ')
-		.trim();
-
-const extractHtmlTitle = (html: string, fallback: string) => {
-	const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-	const title = match?.[1]?.replace(/\s+/g, ' ').trim();
-	return (title && title.slice(0, SOURCE_TITLE_LIMIT)) || fallback;
-};
-
-const maybeStoreBodyToR2 = async (
-	ctx: any,
-	sourceId: Id<'sources'>,
-	body: string
-): Promise<{ inlineBody: string | undefined; r2Key: string | undefined }> => {
-	const trimmed = body.trim();
-	if (!trimmed) {
-		return { inlineBody: undefined, r2Key: undefined };
-	}
-	if (trimmed.length <= SOURCE_ITEM_INLINE_LIMIT) {
-		return { inlineBody: trimmed, r2Key: undefined };
-	}
-	const key = `sources/${sourceId}/${Date.now()}-${Math.random().toString(36).slice(2, 9)}.txt`;
-	try {
-		await r2.store(ctx, new Blob([trimmed], { type: 'text/plain' }), { key });
-		return { inlineBody: undefined, r2Key: key };
-	} catch (error) {
-		console.error('R2 write failed for source item body, falling back to inline body.', error);
-		return {
-			inlineBody: trimmed.slice(0, SOURCE_ITEM_INLINE_LIMIT),
-			r2Key: undefined
-		};
-	}
 };
 
 const logSecurityEvent = async (
@@ -689,6 +570,47 @@ const deliverSourceItemFanoutBatchTx = async (
 	isDone: boolean;
 	continueCursor: string | null;
 }> => {
+	const dedupeAndEnsureDelivery = async (
+		userAuthId: string,
+		sourceId: Id<'sources'>,
+		sourceItemId: Id<'source_items'>,
+		publishedAt: number
+	) => {
+		const deliveries = await ctx.db
+			.query('user_source_items')
+			.withIndex('by_userAuthId_and_sourceItemId', (q: any) =>
+				q.eq('userAuthId', userAuthId).eq('sourceItemId', sourceItemId)
+			)
+			.take(8);
+
+		if (deliveries.length === 0) {
+			await ctx.db.insert('user_source_items', {
+				userAuthId,
+				sourceId,
+				sourceItemId,
+				publishedAt,
+				deliveredAt: Date.now()
+			});
+			return true;
+		}
+
+		if (deliveries.length > 1) {
+			const keep = deliveries.slice().sort((a: any, b: any) => {
+				if (a.deliveredAt !== b.deliveredAt) {
+					return a.deliveredAt - b.deliveredAt;
+				}
+				return String(a._id).localeCompare(String(b._id));
+			})[0];
+			for (const row of deliveries) {
+				if (row._id !== keep._id) {
+					await ctx.db.delete(row._id);
+				}
+			}
+		}
+
+		return false;
+	};
+
 	const sourceItem = await ctx.db.get(args.sourceItemId);
 	if (!sourceItem) {
 		return {
@@ -708,24 +630,15 @@ const deliverSourceItemFanoutBatchTx = async (
 
 	let deliveredCount = 0;
 	for (const subscription of page.page) {
-		const existing = await ctx.db
-			.query('user_source_items')
-			.withIndex('by_userAuthId_and_sourceItemId', (q: any) =>
-				q.eq('userAuthId', subscription.userAuthId).eq('sourceItemId', args.sourceItemId)
-			)
-			.unique();
-		if (existing) {
-			continue;
+		const inserted = await dedupeAndEnsureDelivery(
+			subscription.userAuthId,
+			sourceItem.sourceId,
+			args.sourceItemId,
+			sourceItem.publishedAt
+		);
+		if (inserted) {
+			deliveredCount += 1;
 		}
-
-		await ctx.db.insert('user_source_items', {
-			userAuthId: subscription.userAuthId,
-			sourceId: sourceItem.sourceId,
-			sourceItemId: args.sourceItemId,
-			publishedAt: sourceItem.publishedAt,
-			deliveredAt: Date.now()
-		});
-		deliveredCount += 1;
 	}
 
 	return {
@@ -1071,7 +984,8 @@ export const initializeNightlyRun = internalMutation({
 	},
 	returns: v.object({
 		runId: v.id('source_nightly_runs'),
-		shouldStart: v.boolean()
+		shouldStart: v.boolean(),
+		cursor: v.union(v.string(), v.null())
 	}),
 	handler: async (ctx, args) => {
 		const existing = await ctx.db
@@ -1080,9 +994,17 @@ export const initializeNightlyRun = internalMutation({
 			.unique();
 		if (existing) {
 			if (existing.status === 'running') {
-				return { runId: existing._id, shouldStart: true };
+				return {
+					runId: existing._id,
+					shouldStart: true,
+					cursor: existing.cursor ?? null
+				};
 			}
-			return { runId: existing._id, shouldStart: false };
+			return {
+				runId: existing._id,
+				shouldStart: false,
+				cursor: existing.cursor ?? null
+			};
 		}
 
 		const now = Date.now();
@@ -1094,7 +1016,7 @@ export const initializeNightlyRun = internalMutation({
 			queuedJobs: 0,
 			updatedAt: now
 		});
-		return { runId, shouldStart: true };
+		return { runId, shouldStart: true, cursor: null };
 	}
 });
 
@@ -1406,12 +1328,14 @@ export const getSourceItemForSharing = internalQuery({
 		})
 	),
 	handler: async (ctx, args) => {
-		const delivery = await ctx.db
-			.query('user_source_items')
-			.withIndex('by_userAuthId_and_sourceItemId', (q) =>
-				q.eq('userAuthId', args.userAuthId).eq('sourceItemId', args.sourceItemId)
-			)
-			.unique();
+		const delivery = (
+			await ctx.db
+				.query('user_source_items')
+				.withIndex('by_userAuthId_and_sourceItemId', (q) =>
+					q.eq('userAuthId', args.userAuthId).eq('sourceItemId', args.sourceItemId)
+				)
+				.take(1)
+		)[0];
 		if (!delivery) {
 			return null;
 		}
@@ -1445,12 +1369,14 @@ export const getSourceItem = query({
 			throw new Error('Unauthorized');
 		}
 
-		const delivery = await ctx.db
-			.query('user_source_items')
-			.withIndex('by_userAuthId_and_sourceItemId', (q) =>
-				q.eq('userAuthId', authUser._id).eq('sourceItemId', args.sourceItemId)
-			)
-			.unique();
+		const delivery = (
+			await ctx.db
+				.query('user_source_items')
+				.withIndex('by_userAuthId_and_sourceItemId', (q) =>
+					q.eq('userAuthId', authUser._id).eq('sourceItemId', args.sourceItemId)
+				)
+				.take(1)
+		)[0];
 		const ownedShareExists =
 			(
 				await ctx.db
@@ -1734,23 +1660,15 @@ export const runSourceSync = internalAction({
 				);
 				processed = rssResult.processed;
 			} else {
-				const fetched = await fetchTextWithTimeout(source.canonicalUrl);
-				const rawText = stripHtml(fetched.body);
-				const pageTitle = extractHtmlTitle(fetched.body, source.title || source.canonicalUrl);
-				const snippet = createSnippet(rawText || pageTitle || source.canonicalUrl);
-				const { inlineBody, r2Key } = await maybeStoreBodyToR2(ctx, source._id, rawText);
-				await ctx.runMutation((internal as any).sources.ingestSourceItemFromInput, {
-					sourceId: source._id,
-					url: source.canonicalUrl,
-					title: pageTitle,
-					snippet,
-					body: inlineBody,
-					r2Key,
-					publishedAt: Date.now(),
-					contentHash: await sha256Hex(rawText.slice(0, 4000)),
-					contentType: fetched.contentType
-				});
-				processed = 1;
+				const websiteResult: { processed: number } = await ctx.runAction(
+					(internal as any).sources_node.syncWebsiteSource,
+					{
+						sourceId: source._id,
+						canonicalUrl: source.canonicalUrl,
+						sourceTitle: source.title
+					}
+				);
+				processed = websiteResult.processed;
 			}
 
 			await ctx.runMutation((internal as any).sources.patchSourceSyncSuccess, {
@@ -1934,6 +1852,7 @@ export const runNightlySourceRefreshBatch = internalAction({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		let runId: Id<'source_nightly_runs'> | null = args.runId ?? null;
+		let batchCursor = args.cursor;
 		const lockOwner =
 			args.lockOwner ?? `nightly:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
 		const lockKey = `nightly_source_refresh:${utcRunDateKey()}`;
@@ -1945,7 +1864,7 @@ export const runNightlySourceRefreshBatch = internalAction({
 			} = await ctx.runMutation((internal as any).sources.acquireNightlyLock, {
 				lockKey,
 				owner: lockOwner,
-				leaseMs: 15 * 60 * 1000
+				leaseMs: 60 * 60 * 1000
 			});
 			if (!lockResult.acquired) {
 				return null;
@@ -1955,6 +1874,7 @@ export const runNightlySourceRefreshBatch = internalAction({
 				const initialized: {
 					runId: Id<'source_nightly_runs'>;
 					shouldStart: boolean;
+					cursor: string | null;
 				} = await ctx.runMutation((internal as any).sources.initializeNightlyRun, {
 					runDate: utcRunDateKey()
 				});
@@ -1962,6 +1882,9 @@ export const runNightlySourceRefreshBatch = internalAction({
 					return null;
 				}
 				runId = initialized.runId;
+				if (!batchCursor) {
+					batchCursor = initialized.cursor;
+				}
 			}
 
 			const sourceBatch: {
@@ -1971,7 +1894,7 @@ export const runNightlySourceRefreshBatch = internalAction({
 			} = await ctx.runQuery((internal as any).sources.listNightlyRefreshSources, {
 				paginationOpts: {
 					numItems: NIGHTLY_REFRESH_BATCH_SIZE,
-					cursor: args.cursor
+					cursor: batchCursor
 				}
 			});
 
@@ -2435,13 +2358,26 @@ export const deliverBackfillBatch = internalMutation({
 
 		let processed = 0;
 		for (const sourceItem of page.page) {
-			const existing = await ctx.db
+			const deliveries = await ctx.db
 				.query('user_source_items')
 				.withIndex('by_userAuthId_and_sourceItemId', (q) =>
 					q.eq('userAuthId', args.userAuthId).eq('sourceItemId', sourceItem._id)
 				)
-				.unique();
-			if (existing) {
+				.take(8);
+			if (deliveries.length > 0) {
+				if (deliveries.length > 1) {
+					const keep = deliveries.slice().sort((a: any, b: any) => {
+						if (a.deliveredAt !== b.deliveredAt) {
+							return a.deliveredAt - b.deliveredAt;
+						}
+						return String(a._id).localeCompare(String(b._id));
+					})[0];
+					for (const row of deliveries) {
+						if (row._id !== keep._id) {
+							await ctx.db.delete(row._id);
+						}
+					}
+				}
 				continue;
 			}
 			await ctx.db.insert('user_source_items', {

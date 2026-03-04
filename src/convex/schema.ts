@@ -124,6 +124,7 @@ const schema = defineSchema({
 			'sourceItemId',
 			'createdAt'
 		])
+		.index('by_sourceId_and_createdAt', ['sourceId', 'createdAt'])
 		.index('by_sourceItemId_and_createdAt', ['sourceItemId', 'createdAt'])
 		.index('by_r2Key_and_createdAt', ['r2Key', 'createdAt']),
 	sources: defineTable({
