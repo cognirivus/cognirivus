@@ -29,4 +29,11 @@ crons.cron('aggregate-parity-check', '0 2 * * *', (internal as any).admin.runAgg
 	mismatches: 0
 });
 
+crons.cron(
+	'similar-links-cache-cleanup',
+	'30 2 * * *',
+	(internal as any).similar_links.runCacheCleanup,
+	{}
+);
+
 export default crons;

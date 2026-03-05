@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
-	import { ThumbsDown, ThumbsUp, Tag, Archive } from '@lucide/svelte';
+	import { Archive, Tag, ThumbsDown, ThumbsUp } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';

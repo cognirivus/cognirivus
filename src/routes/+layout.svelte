@@ -15,6 +15,7 @@
 	import { useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import CommunityPresenceWidget from '$lib/components/CommunityPresenceWidget.svelte';
+	import SimilarLinksSidebar from '$lib/components/SimilarLinksSidebar.svelte';
 	import * as Sheet from '$lib/components/ui/sheet';
 	import { PanelRight } from '@lucide/svelte';
 
@@ -139,12 +140,14 @@
 			</div>
 			{#if !isAuthPage}
 				<aside
-					class="hidden w-64 shrink-0 overflow-y-auto border-l border-border/50 bg-background lg:block"
+					class="hidden min-h-0 w-80 shrink-0 overflow-hidden border-l border-border/50 bg-background lg:block"
 				>
 					{#if communityId && isChatPage}
 						<div class="px-4 py-6">
 							<CommunityPresenceWidget {communityId} />
 						</div>
+					{:else}
+						<SimilarLinksSidebar />
 					{/if}
 				</aside>
 			{/if}

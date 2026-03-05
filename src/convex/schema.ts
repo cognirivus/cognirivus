@@ -415,6 +415,36 @@ const schema = defineSchema({
 		model: v.string(),
 		createdAt: v.number()
 	}).index('by_entityType_and_entityId', ['entityType', 'entityId']),
+	similar_links_cache: defineTable({
+		normalizedUrl: v.string(),
+		sourceHost: v.string(),
+		status: v.union(v.literal('ready'), v.literal('empty'), v.literal('error')),
+		results: v.array(
+			v.object({
+				id: v.string(),
+				url: v.string(),
+				title: v.string(),
+				publishedDate: v.optional(v.string()),
+				author: v.optional(v.string()),
+				image: v.optional(v.string()),
+				favicon: v.optional(v.string()),
+				highlights: v.array(v.string()),
+				highlightScores: v.array(v.number())
+			})
+		),
+		lastFetchedAt: v.optional(v.number()),
+		expiresAt: v.number(),
+		lastAttemptAt: v.optional(v.number()),
+		lastError: v.optional(v.string()),
+		refreshState: v.union(v.literal('idle'), v.literal('refreshing')),
+		refreshLeaseExpiresAt: v.optional(v.number()),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_normalizedUrl', ['normalizedUrl'])
+		.index('by_expiresAt', ['expiresAt'])
+		.index('by_refreshState_and_refreshLeaseExpiresAt', ['refreshState', 'refreshLeaseExpiresAt'])
+		.index('by_status_and_updatedAt', ['status', 'updatedAt']),
 	dm_conversations: defineTable({
 		participant1: v.string(),
 		participant2: v.string(),
