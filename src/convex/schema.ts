@@ -158,6 +158,7 @@ const schema = defineSchema({
 		sourceId: v.id('sources'),
 		status: v.union(v.literal('active'), v.literal('paused')),
 		addedVia: v.optional(v.union(v.literal('manual'), v.literal('saved_link'))),
+		includeInSimilarLinks: v.optional(v.boolean()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 		unsubscribedAt: v.optional(v.number())
@@ -441,8 +442,13 @@ const schema = defineSchema({
 		createdAt: v.number()
 	}).index('by_entityType_and_entityId', ['entityType', 'entityId']),
 	similar_links_cache: defineTable({
+		viewerKey: v.string(),
 		normalizedUrl: v.string(),
+		scope: v.union(v.literal('sources'), v.literal('web')),
 		sourceHost: v.string(),
+		sourceDomainFingerprint: v.optional(v.string()),
+		sourceDomainCount: v.optional(v.number()),
+		sourceDomainsSnapshot: v.optional(v.array(v.string())),
 		status: v.union(v.literal('ready'), v.literal('empty'), v.literal('error')),
 		results: v.array(
 			v.object({
@@ -466,10 +472,18 @@ const schema = defineSchema({
 		createdAt: v.number(),
 		updatedAt: v.number()
 	})
-		.index('by_normalizedUrl', ['normalizedUrl'])
+		.index('by_viewerKey_and_normalizedUrl_and_scope', ['viewerKey', 'normalizedUrl', 'scope'])
 		.index('by_expiresAt', ['expiresAt'])
 		.index('by_refreshState_and_refreshLeaseExpiresAt', ['refreshState', 'refreshLeaseExpiresAt'])
 		.index('by_status_and_updatedAt', ['status', 'updatedAt']),
+	similar_links_domain_exclusions: defineTable({
+		userAuthId: v.string(),
+		domain: v.string(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_userAuthId_and_domain', ['userAuthId', 'domain'])
+		.index('by_userAuthId_and_updatedAt', ['userAuthId', 'updatedAt']),
 	dm_conversations: defineTable({
 		participant1: v.string(),
 		participant2: v.string(),

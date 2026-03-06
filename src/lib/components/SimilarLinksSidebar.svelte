@@ -3,13 +3,30 @@
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import type { Id } from '$convex/_generated/dataModel';
-	import { ExternalLink, Link2, Loader2, RotateCw } from '@lucide/svelte';
+	import * as Popover from '$lib/components/ui/popover';
+	import { ChevronDown, ExternalLink, Link2, Loader2, RotateCw } from '@lucide/svelte';
 
 	type SimilarLink = {
 		id: string;
 		title: string;
 		url: string;
 		favicon?: string;
+		publishedDate?: string;
+	};
+
+	type TabKey = 'sources' | 'web';
+
+	type TabView = {
+		state: string | null;
+		results: Array<SimilarLink>;
+		lastError: string | null;
+		lastFetchedAt: number | null;
+		isRefreshing: boolean;
+		hasDomainUpdates: boolean;
+		cachedDomainCount: number;
+		currentDomainCount: number;
+		newDomains: Array<string>;
+		removedDomainCount: number;
 	};
 
 	const client = useConvexClient();
@@ -20,7 +37,8 @@
 		routeId === '/source/[sourceItemId]' ? (page.params.sourceItemId as Id<'source_items'>) : null
 	);
 	const isTargetRoute = $derived(routeId === '/post/[id]' || routeId === '/source/[sourceItemId]');
-	const isAdmin = $derived(Boolean(page.data?.isAdmin));
+	const currentUserQuery = useQuery((api as any).auth.getCurrentUser, {});
+	const canRefreshSimilarLinks = $derived(Boolean(currentUserQuery.data));
 
 	const postQuery = useQuery((api as any).posts.get, () => (postId ? { postId } : 'skip'));
 	const sourceItemQuery = useQuery((api as any).sources.getSourceItem, () =>
@@ -57,23 +75,68 @@
 		sourceUrl ? { url: sourceUrl } : 'skip'
 	);
 
-	const similarLinks = $derived.by(() => {
-		const data = similarQuery.data?.results;
-		return Array.isArray(data) ? (data as Array<SimilarLink>) : [];
+	const tabViews = $derived.by(() => {
+		const tabs = similarQuery.data?.tabs;
+		const sources: TabView = {
+			state: typeof tabs?.sources?.state === 'string' ? tabs.sources.state : null,
+			results: Array.isArray(tabs?.sources?.results)
+				? (tabs.sources.results as Array<SimilarLink>)
+				: [],
+			lastError: typeof tabs?.sources?.lastError === 'string' ? tabs.sources.lastError : null,
+			lastFetchedAt:
+				typeof tabs?.sources?.lastFetchedAt === 'number' ? tabs.sources.lastFetchedAt : null,
+			isRefreshing: Boolean(tabs?.sources?.isRefreshing),
+			hasDomainUpdates: Boolean(tabs?.sources?.hasDomainUpdates),
+			cachedDomainCount:
+				typeof tabs?.sources?.cachedDomainCount === 'number' ? tabs.sources.cachedDomainCount : 0,
+			currentDomainCount:
+				typeof tabs?.sources?.currentDomainCount === 'number' ? tabs.sources.currentDomainCount : 0,
+			newDomains: Array.isArray(tabs?.sources?.newDomains)
+				? (tabs.sources.newDomains as Array<string>)
+				: [],
+			removedDomainCount:
+				typeof tabs?.sources?.removedDomainCount === 'number'
+					? tabs.sources.removedDomainCount
+					: 0
+		};
+		const web: TabView = {
+			state: typeof tabs?.web?.state === 'string' ? tabs.web.state : null,
+			results: Array.isArray(tabs?.web?.results) ? (tabs.web.results as Array<SimilarLink>) : [],
+			lastError: typeof tabs?.web?.lastError === 'string' ? tabs.web.lastError : null,
+			lastFetchedAt: typeof tabs?.web?.lastFetchedAt === 'number' ? tabs.web.lastFetchedAt : null,
+			isRefreshing: Boolean(tabs?.web?.isRefreshing),
+			hasDomainUpdates: Boolean(tabs?.web?.hasDomainUpdates),
+			cachedDomainCount:
+				typeof tabs?.web?.cachedDomainCount === 'number' ? tabs.web.cachedDomainCount : 0,
+			currentDomainCount:
+				typeof tabs?.web?.currentDomainCount === 'number' ? tabs.web.currentDomainCount : 0,
+			newDomains: Array.isArray(tabs?.web?.newDomains)
+				? (tabs.web.newDomains as Array<string>)
+				: [],
+			removedDomainCount:
+				typeof tabs?.web?.removedDomainCount === 'number' ? tabs.web.removedDomainCount : 0
+		};
+		return { sources, web };
 	});
-	const similarSeedUrl = $derived(
-		typeof similarQuery.data?.sourceUrl === 'string' ? similarQuery.data.sourceUrl : sourceUrl
-	);
-	const queryState = $derived(
-		typeof similarQuery.data?.state === 'string' ? similarQuery.data.state : null
-	);
-	const queryIsRefreshing = $derived(Boolean(similarQuery.data?.isRefreshing));
-	const queryLastFetchedAt = $derived(
-		typeof similarQuery.data?.lastFetchedAt === 'number' ? similarQuery.data.lastFetchedAt : null
-	);
-	const queryLastError = $derived(
-		typeof similarQuery.data?.lastError === 'string' ? similarQuery.data.lastError : null
-	);
+	const sourceDomains = $derived.by(() => {
+		const domains = similarQuery.data?.sourceDomains;
+		return Array.isArray(domains) ? (domains as Array<string>) : [];
+	});
+	const sourceDomainCount = $derived(sourceDomains.length);
+
+	let activeTab = $state<TabKey>('sources');
+	let hasUserChosenTab = $state(false);
+	const activeView = $derived(tabViews[activeTab]);
+	const activeResults = $derived(activeView.results);
+	const activeState = $derived(activeView.state);
+	const activeIsRefreshing = $derived(activeView.isRefreshing);
+	const activeLastFetchedAt = $derived(activeView.lastFetchedAt);
+	const activeLastError = $derived(activeView.lastError);
+	const activeHasDomainUpdates = $derived(activeView.hasDomainUpdates);
+	const activeNewDomains = $derived(activeView.newDomains);
+	const activeRemovedDomainCount = $derived(activeView.removedDomainCount);
+	const activeCachedDomainCount = $derived(activeView.cachedDomainCount);
+	const activeCurrentDomainCount = $derived(activeView.currentDomainCount);
 
 	let ensureRequestKey: string | null = null;
 	let ensureLoading = $state(false);
@@ -105,11 +168,49 @@
 		return rtf.format(Math.round(diffMs / 86_400_000), 'day');
 	};
 
+	const formatPublishedDate = (value: string | undefined) => {
+		if (!value) {
+			return null;
+		}
+		const parsed = new Date(value);
+		if (Number.isNaN(parsed.getTime())) {
+			return null;
+		}
+		return new Intl.DateTimeFormat('en', {
+			month: 'short',
+			day: 'numeric',
+			year: parsed.getFullYear() === new Date().getFullYear() ? undefined : 'numeric'
+		}).format(parsed);
+	};
+
 	$effect(() => {
 		const timer = setInterval(() => {
 			nowMs = Date.now();
 		}, 60_000);
 		return () => clearInterval(timer);
+	});
+
+	$effect(() => {
+		if (!sourceUrl) {
+			activeTab = 'sources';
+			hasUserChosenTab = false;
+			return;
+		}
+		activeTab = 'sources';
+		hasUserChosenTab = false;
+	});
+
+	$effect(() => {
+		if (hasUserChosenTab || sourceLoading || ensureLoading || similarQuery.isLoading) {
+			return;
+		}
+		if (tabViews.sources.results.length > 0) {
+			activeTab = 'sources';
+			return;
+		}
+		if (tabViews.web.results.length > 0) {
+			activeTab = 'web';
+		}
 	});
 
 	$effect(() => {
@@ -156,14 +257,15 @@
 	});
 
 	const handleManualRefresh = async () => {
-		if (!sourceUrl || !isAdmin || manualRefreshLoading) {
+		if (!sourceUrl || !canRefreshSimilarLinks || manualRefreshLoading) {
 			return;
 		}
 		manualRefreshLoading = true;
 		manualRefreshError = null;
 		try {
 			await client.action((api as any).similar_links.refreshNow, {
-				url: sourceUrl
+				url: sourceUrl,
+				scope: activeTab
 			});
 		} catch (error) {
 			manualRefreshError = toErrorMessage(error, 'Refresh failed.');
@@ -172,7 +274,7 @@
 		}
 	};
 
-	const emptyMessage = $derived.by(() => {
+	const activeEmptyMessage = $derived.by(() => {
 		if (manualRefreshError) {
 			return manualRefreshError;
 		}
@@ -182,42 +284,68 @@
 		if (similarQuery.error) {
 			return toErrorMessage(similarQuery.error, 'Failed to load similar links.');
 		}
-		if (queryLastError) {
-			return queryLastError;
+		if (activeLastError) {
+			return activeLastError;
 		}
-		return 'No similar links found.';
+		if (activeTab === 'sources') {
+			return 'No similar links found from your source domains.';
+		}
+		return 'No similar links found outside your source domains.';
 	});
 
 	const freshnessMessage = $derived.by(() => {
-		if (!queryLastFetchedAt) {
-			if (queryIsRefreshing || manualRefreshLoading) {
+		if (!activeLastFetchedAt) {
+			if (activeIsRefreshing || manualRefreshLoading) {
 				return 'Refreshing similar links...';
 			}
 			return null;
 		}
 
-		const relative = formatRelative(queryLastFetchedAt, nowMs);
+		const relative = formatRelative(activeLastFetchedAt, nowMs);
 		if (manualRefreshLoading) {
-			return `Refreshing (last updated ${relative})`;
+			return `Refreshing ${activeTab === 'sources' ? 'your sources' : 'the web'} (last updated ${relative})`;
 		}
-		if (queryState === 'error_backoff') {
-			return `Showing cached results from ${relative}`;
+		if (activeState === 'error_backoff') {
+			return `Showing cached ${activeTab === 'sources' ? 'source' : 'web'} results from ${relative}`;
 		}
-		if (queryState === 'stale' || queryIsRefreshing) {
-			return `Refreshing in background. Cached ${relative}`;
+		if (activeState === 'stale' || activeIsRefreshing) {
+			return `Refreshing ${activeTab === 'sources' ? 'source' : 'web'} results in background. Cached ${relative}`;
 		}
 		return `Updated ${relative}`;
 	});
 
 	const freshnessToneClass = $derived.by(() => {
-		if (queryState === 'error_backoff') {
+		if (activeState === 'error_backoff') {
 			return 'text-amber-600 dark:text-amber-400';
-		}
-		if (queryState === 'stale' || queryIsRefreshing || manualRefreshLoading) {
-			return 'text-muted-foreground';
 		}
 		return 'text-muted-foreground';
 	});
+
+	const domainStaleMessage = $derived.by(() => {
+		if (!activeHasDomainUpdates) {
+			return null;
+		}
+		if (activeNewDomains.length > 0) {
+			return `Your sources changed. Refresh to include ${activeNewDomains.length} new ${activeNewDomains.length === 1 ? 'domain' : 'domains'}.`;
+		}
+		if (activeRemovedDomainCount > 0) {
+			return `Your sources changed. Refresh to remove ${activeRemovedDomainCount} old ${activeRemovedDomainCount === 1 ? 'domain' : 'domains'}.`;
+		}
+		return 'Your source domains changed. Refresh to update similar links.';
+	});
+
+	const tabSummary = $derived([
+		{
+			key: 'sources' as const,
+			label: 'From your sources',
+			count: tabViews.sources.results.length
+		},
+		{
+			key: 'web' as const,
+			label: 'From web',
+			count: tabViews.web.results.length
+		}
+	]);
 </script>
 
 {#snippet domainFromUrl(url: string)}
@@ -232,18 +360,13 @@
 {/snippet}
 
 {#if isTargetRoute}
-	<div class="flex h-full min-h-0 flex-col px-4 py-5">
+	<div class="flex h-full min-h-0 flex-col px-3 py-4">
 		<div class="flex items-center justify-between gap-2">
-			<h3 class="text-[10px] font-black tracking-widest text-muted-foreground uppercase">
+			<h3 class="text-[10px] font-black tracking-[0.2em] text-muted-foreground uppercase">
 				Similar links
 			</h3>
 			<div class="flex items-center gap-2">
-				{#if similarLinks.length > 0}
-					<span class="text-[10px] text-muted-foreground tabular-nums"
-						>{similarLinks.length} found</span
-					>
-				{/if}
-				{#if isAdmin && sourceUrl}
+				{#if canRefreshSimilarLinks && sourceUrl}
 					<button
 						type="button"
 						onclick={handleManualRefresh}
@@ -257,29 +380,151 @@
 			</div>
 		</div>
 
-		{#if freshnessMessage}
-			<p class={`mt-2 text-[10px] ${freshnessToneClass}`}>{freshnessMessage}</p>
+		<div class="mt-2 flex items-center gap-1 rounded-lg border border-border/60 bg-muted/20 p-1">
+			{#each tabSummary as tab (tab.key)}
+				<button
+					type="button"
+					onclick={() => {
+						hasUserChosenTab = true;
+						activeTab = tab.key;
+						manualRefreshError = null;
+					}}
+					class={`min-w-0 flex-1 rounded-md px-2 py-1.5 text-left transition-colors ${
+						activeTab === tab.key
+							? 'bg-background text-foreground shadow-sm'
+							: 'text-muted-foreground hover:bg-background/70 hover:text-foreground'
+					}`}
+				>
+					<span class="block truncate text-[10px] font-semibold">{tab.label}</span>
+					<span class="mt-0.5 block text-[9px] tabular-nums">
+						{tab.count} {tab.count === 1 ? 'link' : 'links'}
+					</span>
+				</button>
+			{/each}
+		</div>
+
+		<div class="mt-2 flex items-center justify-between gap-2">
+			{#if freshnessMessage}
+				<p class={['min-w-0 truncate text-[10px]', freshnessToneClass]}>{freshnessMessage}</p>
+			{:else}
+				<div></div>
+			{/if}
+			{#if sourceDomainCount > 0}
+				<Popover.Root>
+					<Popover.Trigger>
+						<button
+							type="button"
+							class="inline-flex items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted"
+						>
+							View domains
+							<ChevronDown class="size-3" />
+						</button>
+					</Popover.Trigger>
+					<Popover.Content
+						class="w-[240px] border bg-background p-0 text-foreground shadow-lg"
+						align="end"
+					>
+						<div class="flex flex-col">
+							<div class="border-b px-3 py-2">
+								<p class="text-xs font-semibold">
+									{activeTab === 'sources' ? 'Included domains' : 'Excluded domains'}
+								</p>
+								<p class="mt-0.5 text-[10px] text-muted-foreground">
+									{sourceDomainCount} {sourceDomainCount === 1 ? 'domain' : 'domains'}
+								</p>
+							</div>
+							<div class="max-h-[280px] overflow-y-auto p-1">
+								{#each sourceDomains as domain (domain)}
+									<div class="rounded-sm px-2 py-1.5 text-[11px] text-foreground">
+										{domain}
+									</div>
+								{/each}
+							</div>
+						</div>
+					</Popover.Content>
+				</Popover.Root>
+			{/if}
+		</div>
+
+		{#if domainStaleMessage}
+			<div class="mt-2 rounded-lg border border-amber-300/70 bg-amber-50 px-2.5 py-2 text-amber-950">
+				<div class="flex items-start justify-between gap-2">
+					<div class="min-w-0">
+						<p class="text-[10px] font-medium">{domainStaleMessage}</p>
+						<p class="mt-1 text-[10px] text-amber-800/80">
+							Cached for {activeCachedDomainCount} domains. You now have {activeCurrentDomainCount}.
+							Manual refresh is rate-limited daily.
+						</p>
+					</div>
+					<div class="flex shrink-0 items-center gap-2">
+						{#if activeNewDomains.length > 0}
+							<Popover.Root>
+								<Popover.Trigger>
+									<button
+										type="button"
+										class="inline-flex items-center gap-1 rounded-md border border-amber-300/80 bg-white px-2 py-1 text-[10px] font-medium text-amber-900 transition-colors hover:bg-amber-100"
+									>
+										New domains
+										<ChevronDown class="size-3" />
+									</button>
+								</Popover.Trigger>
+								<Popover.Content class="w-[240px] border bg-background p-0 text-foreground shadow-lg" align="end">
+									<div class="flex flex-col">
+										<div class="border-b px-3 py-2">
+											<p class="text-xs font-semibold">New domains since last refresh</p>
+											<p class="mt-0.5 text-[10px] text-muted-foreground">
+												{activeNewDomains.length} {activeNewDomains.length === 1 ? 'domain' : 'domains'}
+											</p>
+										</div>
+										<div class="max-h-[240px] overflow-y-auto p-1">
+											{#each activeNewDomains as domain (domain)}
+												<div class="rounded-sm px-2 py-1.5 text-[11px] text-foreground">
+													{domain}
+												</div>
+											{/each}
+										</div>
+									</div>
+								</Popover.Content>
+							</Popover.Root>
+						{/if}
+						{#if canRefreshSimilarLinks}
+							<button
+								type="button"
+								onclick={handleManualRefresh}
+								disabled={manualRefreshLoading}
+								class="inline-flex items-center gap-1 rounded-md border border-amber-300/80 bg-white px-2 py-1 text-[10px] font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<RotateCw class={`size-3 ${manualRefreshLoading ? 'animate-spin' : ''}`} />
+								Refresh
+							</button>
+						{/if}
+					</div>
+				</div>
+			</div>
 		{/if}
 
-		<div class="mt-3 min-h-0 flex-1 overflow-y-auto pe-1">
+		<div class="mt-2 min-h-0 flex-1 overflow-y-auto pe-1">
 			{#if sourceLoading || ensureLoading || similarQuery.isLoading}
 				<div class="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
 					<Loader2 class="size-4 animate-spin" />
-					<span class="text-[10px] tracking-wide uppercase">Finding similar content...</span>
+					<span class="text-[10px] tracking-wide uppercase">
+						Finding similar {activeTab === 'sources' ? 'source' : 'web'} links...
+					</span>
 				</div>
-			{:else if similarLinks.length === 0}
+			{:else if activeResults.length === 0}
 				<div class="flex flex-col items-center justify-center gap-1.5 py-8 text-center">
 					<Link2 class="size-4 text-muted-foreground/50" />
-					<p class="text-[11px] text-muted-foreground">{emptyMessage}</p>
+					<p class="text-[11px] text-muted-foreground">{activeEmptyMessage}</p>
 				</div>
 			{:else}
 				<div class="space-y-1">
-					{#each similarLinks as link (link.id)}
+					{#each activeResults as link (link.id)}
+						{@const publishedLabel = formatPublishedDate(link.publishedDate)}
 						<a
 							href={link.url}
 							target="_blank"
 							rel="noreferrer"
-							class="group flex items-start gap-2.5 rounded-lg p-2 transition-colors hover:bg-muted/50"
+							class="group flex items-start gap-2.5 rounded-md px-2 py-2 transition-colors hover:bg-muted/50"
 						>
 							<div
 								class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded bg-muted/60"
@@ -302,19 +547,24 @@
 								{/if}
 							</div>
 
-							<div class="flex min-w-0 flex-1 flex-col gap-0.5">
+							<div class="flex min-w-0 flex-1 flex-col gap-1">
 								<span
 									class="line-clamp-2 text-[12px] leading-snug font-medium group-hover:text-foreground"
 								>
 									{link.title}
 								</span>
-								<span class="text-[10px] text-muted-foreground/70">
-									{@render domainFromUrl(link.url)}
-								</span>
+								<div class="flex flex-col gap-0.5">
+									<span class="truncate text-[10px] text-muted-foreground/75">
+										{@render domainFromUrl(link.url)}
+									</span>
+									{#if publishedLabel}
+										<span class="text-[10px] text-muted-foreground/55">{publishedLabel}</span>
+									{/if}
+								</div>
 							</div>
 
 							<ExternalLink
-								class="mt-1 size-3 shrink-0 text-transparent transition-colors group-hover:text-muted-foreground"
+								class="mt-0.5 size-3 shrink-0 text-transparent transition-colors group-hover:text-muted-foreground"
 							/>
 						</a>
 					{/each}

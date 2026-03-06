@@ -36,6 +36,7 @@ import {
 	normalizeHttpUrl,
 	sourceHostForDisplay
 } from './lib/sourceUrls';
+import { dedupeDomains } from './lib/similarLinks';
 
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
 const SOURCE_TITLE_LIMIT = 220;
@@ -97,6 +98,21 @@ const savedSuggestionValidator = v.object({
 	createdAt: v.number(),
 	updatedAt: v.number(),
 	isFollowing: v.boolean()
+});
+
+const similarLinkDomainContributorValidator = v.object({
+	label: v.string(),
+	url: v.string(),
+	kind: v.union(v.literal('source'), v.literal('saved_link'))
+});
+
+const similarLinkDomainRowValidator = v.object({
+	domain: v.string(),
+	included: v.boolean(),
+	sourceCount: v.number(),
+	savedLinkCount: v.number(),
+	totalCount: v.number(),
+	contributors: v.array(similarLinkDomainContributorValidator)
 });
 
 const isFetchableSourceType = (type: 'website' | 'rss' | 'youtube' | 'bookmarks') =>
@@ -387,6 +403,7 @@ const sourceSummaryValidator = v.object({
 	type: sourceTypeValidator,
 	status: sourceStatusValidator,
 	addedVia: v.optional(addedViaValidator),
+	includeInSimilarLinks: v.boolean(),
 	canonicalUrl: v.string(),
 	lastFetchedAt: v.optional(v.number()),
 	lastSuccessAt: v.optional(v.number()),
@@ -692,6 +709,10 @@ export const ensureSourceAndSubscription = internalMutation({
 					source.type === 'bookmarks'
 						? existingSubscription.addedVia
 						: (existingSubscription.addedVia ?? args.addedVia),
+				includeInSimilarLinks:
+					source.type === 'bookmarks'
+						? existingSubscription.includeInSimilarLinks
+						: (existingSubscription.includeInSimilarLinks ?? true),
 				unsubscribedAt: undefined,
 				updatedAt: now
 			});
@@ -701,6 +722,7 @@ export const ensureSourceAndSubscription = internalMutation({
 				sourceId: source._id,
 				status: 'active',
 				addedVia: source.type === 'bookmarks' ? undefined : args.addedVia,
+				includeInSimilarLinks: source.type === 'bookmarks' ? undefined : true,
 				createdAt: now,
 				updatedAt: now
 			});
@@ -762,6 +784,7 @@ export const ensureUserBookmarkSource = internalMutation({
 		if (subscription) {
 			await ctx.db.patch(subscription._id, {
 				status: 'active',
+				includeInSimilarLinks: subscription.includeInSimilarLinks,
 				unsubscribedAt: undefined,
 				updatedAt: now
 			});
@@ -770,6 +793,7 @@ export const ensureUserBookmarkSource = internalMutation({
 				userAuthId: args.userAuthId,
 				sourceId: source._id,
 				status: 'active',
+				includeInSimilarLinks: undefined,
 				createdAt: now,
 				updatedAt: now
 			});
@@ -1917,6 +1941,7 @@ export const addSource = action({
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
+		const isAdmin = isAdminRole(authUser.role);
 		const identity = await ctx.auth.getUserIdentity();
 		const rawSessionId = (identity as { sessionId?: unknown } | null)?.sessionId;
 		const rawIpAddress = (identity as { ipAddress?: unknown; ip?: unknown } | null)?.ipAddress;
@@ -1932,32 +1957,34 @@ export const addSource = action({
 		const ipRateLimitKey = fallbackIpAddress ? await sha256Hex(fallbackIpAddress) : null;
 
 		const normalizedInput = normalizeSourceInput(args.type, args.inputUrlOrId);
-		await rateLimiter.limit(ctx, 'addSource', { key: authUser._id, throws: true });
-		await rateLimiter.limit(ctx, 'addSourcePerNormalizedKey', {
-			key: `${authUser._id}:${normalizedInput.normalizedKey}`,
-			throws: true
-		});
-		await rateLimiter.limit(ctx, 'addSourcePerSession', {
-			key: sessionRateLimitKey,
-			throws: true
-		});
-		if (ipRateLimitKey) {
-			await rateLimiter.limit(ctx, 'addSourcePerIp', {
-				key: ipRateLimitKey,
+		if (!isAdmin) {
+			await rateLimiter.limit(ctx, 'addSource', { key: authUser._id, throws: true });
+			await rateLimiter.limit(ctx, 'addSourcePerNormalizedKey', {
+				key: `${authUser._id}:${normalizedInput.normalizedKey}`,
 				throws: true
 			});
-		}
-		const profileCreatedAt: number | null = await ctx.runQuery(
-			(internal as any).sources.getUserProfileCreatedAt,
-			{
-				userAuthId: authUser._id
+			await rateLimiter.limit(ctx, 'addSourcePerSession', {
+				key: sessionRateLimitKey,
+				throws: true
+			});
+			if (ipRateLimitKey) {
+				await rateLimiter.limit(ctx, 'addSourcePerIp', {
+					key: ipRateLimitKey,
+					throws: true
+				});
 			}
-		);
-		if (isNewAccount(profileCreatedAt)) {
-			await rateLimiter.limit(ctx, 'addSourceNewAccount', {
-				key: authUser._id,
-				throws: true
-			});
+			const profileCreatedAt: number | null = await ctx.runQuery(
+				(internal as any).sources.getUserProfileCreatedAt,
+				{
+					userAuthId: authUser._id
+				}
+			);
+			if (isNewAccount(profileCreatedAt)) {
+				await rateLimiter.limit(ctx, 'addSourceNewAccount', {
+					key: authUser._id,
+					throws: true
+				});
+			}
 		}
 
 		const resolvedWebsiteTarget =
@@ -2207,6 +2234,7 @@ export const followSavedSourceSuggestion = action({
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
+		const isAdmin = isAdminRole(authUser.role);
 
 		const suggestion = await ctx.runQuery(
 			(internal as any).sources.getSavedSourceSuggestionForUser,
@@ -2219,11 +2247,13 @@ export const followSavedSourceSuggestion = action({
 			throw new Error('Suggestion not found.');
 		}
 
-		await rateLimiter.limit(ctx, 'addSource', { key: authUser._id, throws: true });
-		await rateLimiter.limit(ctx, 'addSourcePerNormalizedKey', {
-			key: `${authUser._id}:${suggestion.normalizedKey}`,
-			throws: true
-		});
+		if (!isAdmin) {
+			await rateLimiter.limit(ctx, 'addSource', { key: authUser._id, throws: true });
+			await rateLimiter.limit(ctx, 'addSourcePerNormalizedKey', {
+				key: `${authUser._id}:${suggestion.normalizedKey}`,
+				throws: true
+			});
+		}
 		const resolvedWebsiteTarget = await resolveWebsiteFollowTarget(ctx, suggestion.canonicalUrl);
 		const ensureResult: {
 			sourceId: Id<'sources'>;
@@ -2699,6 +2729,7 @@ export const listMySources = query({
 			type: 'website' | 'rss' | 'youtube' | 'bookmarks';
 			status: 'active' | 'paused' | 'error' | 'deleting';
 			addedVia?: 'manual' | 'saved_link';
+			includeInSimilarLinks: boolean;
 			canonicalUrl: string;
 			lastFetchedAt?: number;
 			lastSuccessAt?: number;
@@ -2730,6 +2761,7 @@ export const listMySources = query({
 				type: source.type,
 				status: subscription.status === 'paused' ? 'paused' : source.status,
 				addedVia: subscription.addedVia,
+				includeInSimilarLinks: subscription.includeInSimilarLinks ?? true,
 				canonicalUrl: source.canonicalUrl,
 				lastFetchedAt: source.lastFetchedAt,
 				lastSuccessAt: source.lastSuccessAt,
@@ -2746,6 +2778,46 @@ export const listMySources = query({
 			isDone: subscriptions.isDone,
 			continueCursor: subscriptions.continueCursor
 		};
+	}
+});
+
+export const listMySimilarLinkDomains = query({
+	args: {},
+	returns: v.array(similarLinkDomainRowValidator),
+	handler: async (ctx): Promise<
+		Array<{
+			domain: string;
+			included: boolean;
+			sourceCount: number;
+			savedLinkCount: number;
+			totalCount: number;
+			contributors: Array<{
+				label: string;
+				url: string;
+				kind: 'source' | 'saved_link';
+			}>;
+		}>
+	> => {
+		const authUser = await authComponent.getAuthUser(ctx);
+		if (!authUser) {
+			throw new Error('Unauthorized');
+		}
+
+		const rows: Array<{
+			domain: string;
+			included: boolean;
+			sourceCount: number;
+			savedLinkCount: number;
+			totalCount: number;
+			contributors: Array<{
+				label: string;
+				url: string;
+				kind: 'source' | 'saved_link';
+			}>;
+		}> = await ctx.runQuery((internal as any).similar_links.getUserSourceDomainRows, {
+			userAuthId: authUser._id
+		});
+		return rows;
 	}
 });
 
@@ -2864,6 +2936,54 @@ export const resumeSource = mutation({
 		await ctx.db.patch(subscription._id, {
 			status: 'active',
 			updatedAt: Date.now()
+		});
+		return null;
+	}
+});
+
+export const setSimilarLinkDomainInclusion = mutation({
+	args: {
+		domain: v.string(),
+		included: v.boolean()
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const authUser = await authComponent.getAuthUser(ctx);
+		if (!authUser) {
+			throw new Error('Unauthorized');
+		}
+		const normalizedDomain = dedupeDomains([args.domain])[0];
+		if (!normalizedDomain) {
+			throw new Error('Invalid domain.');
+		}
+
+		const existingExclusion = await ctx.db
+			.query('similar_links_domain_exclusions')
+			.withIndex('by_userAuthId_and_domain', (q: any) =>
+				q.eq('userAuthId', authUser._id).eq('domain', normalizedDomain)
+			)
+			.unique();
+
+		if (args.included) {
+			if (existingExclusion) {
+				await ctx.db.delete(existingExclusion._id);
+			}
+			return null;
+		}
+
+		const now = Date.now();
+		if (existingExclusion) {
+			await ctx.db.patch(existingExclusion._id, {
+				updatedAt: now
+			});
+			return null;
+		}
+
+		await ctx.db.insert('similar_links_domain_exclusions', {
+			userAuthId: authUser._id,
+			domain: normalizedDomain,
+			createdAt: now,
+			updatedAt: now
 		});
 		return null;
 	}

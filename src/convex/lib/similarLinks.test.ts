@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+	buildExaDomainFilters,
+	createSourceDomainFingerprint,
+	dedupeDomains,
+	diffSourceDomains,
+	filterResultsByScopeDomains,
 	getCacheViewState,
 	normalizeExaResults,
+	normalizeDomain,
 	normalizeUrl,
 	shouldDoSynchronousRefresh,
 	shouldScheduleBackgroundRefresh
@@ -32,6 +38,67 @@ describe('similarLinks helpers', () => {
 		expect(results[0]?.url).toBe('https://example.com/post?a=2&b=1');
 		expect(results[0]?.highlights).toEqual(['line one']);
 		expect(results[1]?.url).toBe('https://example.com/post-2');
+	});
+
+	it('normalizes and deduplicates domains for Exa filters', () => {
+		expect(normalizeDomain('https://www.CollabFund.com/blog')).toBe('collabfund.com');
+		expect(
+			dedupeDomains(['https://www.collabfund.com', 'collabfund.com', 'https://finshots.in/rss'])
+		).toEqual(['collabfund.com', 'finshots.in']);
+	});
+
+	it('builds include/exclude domain filters per scope', () => {
+		expect(buildExaDomainFilters('sources', ['collabfund.com', 'finshots.in'])).toEqual({
+			includeDomains: ['collabfund.com', 'finshots.in']
+		});
+		expect(buildExaDomainFilters('web', ['collabfund.com'])).toEqual({
+			excludeDomains: ['collabfund.com']
+		});
+		expect(buildExaDomainFilters('sources', [])).toEqual({});
+	});
+
+	it('creates domain fingerprints and diffs domain snapshots', () => {
+		expect(
+			createSourceDomainFingerprint(['collabfund.com', 'www.collabfund.com', 'finshots.in'])
+		).toBe('collabfund.com|finshots.in');
+		expect(
+			diffSourceDomains(['collabfund.com'], ['collabfund.com', 'finshots.in', 'strat.co'])
+		).toEqual({
+			newDomains: ['finshots.in', 'strat.co'],
+			removedDomains: []
+		});
+	});
+
+	it('filters normalized results by source-domain scope', () => {
+		const results = [
+			{
+				id: '1',
+				url: 'https://collabfund.com/post',
+				title: 'Collab Fund',
+				highlights: [],
+				highlightScores: []
+			},
+			{
+				id: '2',
+				url: 'https://blog.collabfund.com/post',
+				title: 'Collab Fund Blog',
+				highlights: [],
+				highlightScores: []
+			},
+			{
+				id: '3',
+				url: 'https://other.com/post',
+				title: 'Other',
+				highlights: [],
+				highlightScores: []
+			}
+		];
+
+		expect(filterResultsByScopeDomains(results, 'sources', ['collabfund.com'])).toHaveLength(2);
+		expect(filterResultsByScopeDomains(results, 'web', ['collabfund.com'])).toEqual([
+			results[2]
+		]);
+		expect(filterResultsByScopeDomains(results, 'sources', [])).toEqual([]);
 	});
 
 	it('computes freshness states correctly', () => {

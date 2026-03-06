@@ -29,6 +29,13 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
 		capacity: 10,
 		start: 0
 	},
+	manualSimilarLinksRefresh: {
+		kind: 'fixed window',
+		rate: 8,
+		period: DAY,
+		capacity: 8,
+		start: 0
+	},
 	manualSourceRefresh: {
 		kind: 'fixed window',
 		rate: 3,

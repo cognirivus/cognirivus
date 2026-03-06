@@ -4,6 +4,7 @@ export const EXA_FIND_SIMILAR_ENDPOINT = 'https://api.exa.ai/findSimilar';
 export const EXA_TIMEOUT_MS = 12000;
 export const EXA_MAX_RESULTS = 6;
 export const EXA_MAX_HIGHLIGHT_CHARACTERS = 280;
+export const EXA_MAX_DOMAIN_FILTERS = 1200;
 
 export const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const ERROR_RETRY_MS = 6 * 60 * 60 * 1000;
@@ -24,6 +25,8 @@ export const similarLinkResultValidator = v.object({
 
 export type SimilarLinkCacheRowStatus = 'ready' | 'empty' | 'error';
 export type SimilarLinksRefreshState = 'idle' | 'refreshing';
+export const SIMILAR_LINKS_SCOPES = ['sources', 'web'] as const;
+export type SimilarLinksScope = (typeof SIMILAR_LINKS_SCOPES)[number];
 
 export type NormalizedSimilarLink = {
 	id: string;
@@ -54,7 +57,39 @@ export type SimilarLinksRowLike = {
 	lastFetchedAt?: number;
 };
 
+export const createSourceDomainFingerprint = (domains: Array<string>) => dedupeDomains(domains).join('|');
+
+export const diffSourceDomains = (cached: Array<string>, current: Array<string>) => {
+	const cachedSet = new Set(dedupeDomains(cached));
+	const currentSet = new Set(dedupeDomains(current));
+
+	return {
+		newDomains: Array.from(currentSet).filter((domain) => !cachedSet.has(domain)),
+		removedDomains: Array.from(cachedSet).filter((domain) => !currentSet.has(domain))
+	};
+};
+
 const normalizeWhitespace = (value: string) => value.replace(/\s+/g, ' ').trim();
+
+export const normalizeDomain = (value: string) => {
+	const trimmed = value.trim();
+	if (!trimmed) {
+		return null;
+	}
+
+	const candidate =
+		/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(trimmed) || trimmed.startsWith('//')
+			? trimmed
+			: `https://${trimmed}`;
+
+	try {
+		const parsed = new URL(candidate);
+		const hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
+		return hostname || null;
+	} catch {
+		return null;
+	}
+};
 
 export const normalizeUrl = (value: string) => {
 	let normalized = value.trim();
@@ -88,6 +123,54 @@ export const normalizeUrl = (value: string) => {
 export const sourceHostFromUrl = (normalizedUrl: string) => {
 	const host = new URL(normalizedUrl).hostname.toLowerCase();
 	return host.replace(/^www\./, '');
+};
+
+export const dedupeDomains = (values: Iterable<string | null | undefined>) => {
+	const deduped = new Set<string>();
+	for (const value of values) {
+		if (!value) {
+			continue;
+		}
+		const normalized = normalizeDomain(value);
+		if (!normalized) {
+			continue;
+		}
+		deduped.add(normalized);
+		if (deduped.size >= EXA_MAX_DOMAIN_FILTERS) {
+			break;
+		}
+	}
+	return Array.from(deduped);
+};
+
+const matchesDomain = (host: string, domain: string) => host === domain || host.endsWith(`.${domain}`);
+
+export const buildExaDomainFilters = (scope: SimilarLinksScope, domains: Array<string>) => {
+	const normalizedDomains = dedupeDomains(domains);
+	if (scope === 'sources') {
+		return normalizedDomains.length > 0 ? { includeDomains: normalizedDomains } : {};
+	}
+	return normalizedDomains.length > 0 ? { excludeDomains: normalizedDomains } : {};
+};
+
+export const filterResultsByScopeDomains = (
+	results: Array<NormalizedSimilarLink>,
+	scope: SimilarLinksScope,
+	domains: Array<string>
+) => {
+	const normalizedDomains = dedupeDomains(domains);
+	if (normalizedDomains.length === 0) {
+		return scope === 'sources' ? [] : results;
+	}
+
+	return results.filter((result) => {
+		const host = normalizeDomain(result.url);
+		if (!host) {
+			return false;
+		}
+		const matches = normalizedDomains.some((domain) => matchesDomain(host, domain));
+		return scope === 'sources' ? matches : !matches;
+	});
 };
 
 const normalizeHighlights = (value: unknown) => {
