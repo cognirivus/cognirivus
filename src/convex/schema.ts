@@ -157,6 +157,7 @@ const schema = defineSchema({
 		userAuthId: v.string(),
 		sourceId: v.id('sources'),
 		status: v.union(v.literal('active'), v.literal('paused')),
+		addedVia: v.optional(v.union(v.literal('manual'), v.literal('saved_link'))),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 		unsubscribedAt: v.optional(v.number())
@@ -177,13 +178,37 @@ const schema = defineSchema({
 		createdAt: v.number(),
 		updatedAt: v.number(),
 		contentHash: v.optional(v.string()),
-		contentType: v.optional(v.string())
+		contentType: v.optional(v.string()),
+		originHost: v.optional(v.string()),
+		originSiteUrl: v.optional(v.string()),
+		suggestedSourceType: v.optional(v.string()),
+		suggestedSourceNormalizedKey: v.optional(v.string()),
+		suggestedSourceCanonicalUrl: v.optional(v.string())
 	})
 		.index('by_sourceId_and_publishedAt', ['sourceId', 'publishedAt'])
 		.index('by_sourceId_and_externalId', ['sourceId', 'externalId'])
 		.index('by_sourceId_and_urlHash', ['sourceId', 'urlHash'])
+		.index('by_sourceId_and_suggestedSourceNormalizedKey', [
+			'sourceId',
+			'suggestedSourceNormalizedKey'
+		])
 		.index('by_r2Key_and_publishedAt', ['r2Key', 'publishedAt'])
 		.index('by_publishedAt', ['publishedAt']),
+	saved_source_suggestions: defineTable({
+		userAuthId: v.string(),
+		sourceType: v.literal('website'),
+		normalizedKey: v.string(),
+		canonicalUrl: v.string(),
+		originHost: v.string(),
+		itemCount: v.number(),
+		latestSavedUrl: v.string(),
+		latestSavedTitle: v.string(),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		lastSavedAt: v.number()
+	})
+		.index('by_userAuthId_and_normalizedKey', ['userAuthId', 'normalizedKey'])
+		.index('by_userAuthId_and_updatedAt', ['userAuthId', 'updatedAt']),
 	user_source_items: defineTable({
 		userAuthId: v.string(),
 		sourceId: v.id('sources'),

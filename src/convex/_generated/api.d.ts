@@ -28,6 +28,7 @@ import type * as lib_r2 from "../lib/r2.js";
 import type * as lib_rateLimits from "../lib/rateLimits.js";
 import type * as lib_serializers from "../lib/serializers.js";
 import type * as lib_similarLinks from "../lib/similarLinks.js";
+import type * as lib_sourceUrls from "../lib/sourceUrls.js";
 import type * as migrations from "../migrations.js";
 import type * as personalization from "../personalization.js";
 import type * as posts from "../posts.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimits": typeof lib_rateLimits;
   "lib/serializers": typeof lib_serializers;
   "lib/similarLinks": typeof lib_similarLinks;
+  "lib/sourceUrls": typeof lib_sourceUrls;
   migrations: typeof migrations;
   personalization: typeof personalization;
   posts: typeof posts;

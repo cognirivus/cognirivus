@@ -10,6 +10,7 @@
 	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import ImportBookmarks from '$lib/components/ImportBookmarks.svelte';
 	import {
+		Bookmark,
 		Globe,
 		Link,
 		Loader2,
@@ -40,6 +41,9 @@
 	let sourceInput = $state('');
 	let sourceTitle = $state('');
 	let addingSource = $state(false);
+	let saveUrl = $state('');
+	let saveTitle = $state('');
+	let savingLink = $state(false);
 
 	$effect(() => {
 		if (!meQuery.isLoading && !meQuery.data) {
@@ -87,8 +91,12 @@
 				title: sourceTitle || undefined
 			});
 			const status = result?.subscriptionStatus as 'active' | 'already_subscribed' | undefined;
-			if (status === 'already_subscribed') {
+			if (status === 'already_subscribed' && result?.savedSeedItemId) {
+				toast.success('Source already followed. Article saved to your private links.');
+			} else if (status === 'already_subscribed') {
 				toast.info('You are already subscribed to this source.');
+			} else if (result?.savedSeedItemId) {
+				toast.success('Source followed. The pasted article was also saved privately.');
 			} else {
 				toast.success('Source subscribed. Sync job queued.');
 			}
@@ -99,6 +107,29 @@
 			toast.error(error?.message ?? 'Failed to add source');
 		} finally {
 			addingSource = false;
+		}
+	}
+
+	async function saveLink(event: Event) {
+		event.preventDefault();
+		savingLink = true;
+		try {
+			const result = await client.mutation((api as any).sources.saveWebsiteLink, {
+				url: saveUrl,
+				title: saveTitle || undefined
+			});
+			if (result.alreadySaved) {
+				toast.info('This link is already saved.');
+			} else {
+				toast.success('Link saved to your private feed.');
+			}
+			saveUrl = '';
+			saveTitle = '';
+			goto('/feed?scope=you');
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to save link');
+		} finally {
+			savingLink = false;
 		}
 	}
 
@@ -115,7 +146,7 @@
 	] as const;
 
 	const sourceTypes = [
-		{ value: 'website', label: 'Website', icon: Globe, description: 'Track a webpage' },
+		{ value: 'website', label: 'Website', icon: Globe, description: 'Follow a site or feed' },
 		{ value: 'rss', label: 'RSS', icon: Rss, description: 'Track a feed URL' },
 		{ value: 'youtube', label: 'YouTube', icon: Youtube, description: 'Track a channel/page URL' },
 		{ value: 'bookmarks', label: 'Bookmarks', icon: FileUp, description: 'Import bookmarks file' }
@@ -130,15 +161,19 @@
 	<div class="mb-6">
 		<h1 class="text-2xl font-semibold tracking-tight">Submit</h1>
 		<p class="mt-1 text-sm text-muted-foreground">
-			Create a discussion post or subscribe to content sources for your private feed.
+			Create a post, save a link privately, or follow a source for future updates.
 		</p>
 	</div>
 
 	<Tabs bind:value={activeTab} class="w-full">
-		<TabsList class="mb-6 grid w-full grid-cols-2">
+		<TabsList class="mb-6 grid w-full grid-cols-3">
 			<TabsTrigger value="create" class="gap-2">
 				<PenLine class="size-4" />
 				Create Post
+			</TabsTrigger>
+			<TabsTrigger value="save" class="gap-2">
+				<Bookmark class="size-4" />
+				Save Link
 			</TabsTrigger>
 			<TabsTrigger value="source" class="gap-2">
 				<Link class="size-4" />
@@ -275,12 +310,61 @@
 			</form>
 		</TabsContent>
 
+		<TabsContent value="save">
+			<form
+				class="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
+				onsubmit={saveLink}
+			>
+				<div class="space-y-1">
+					<h2 class="text-base font-semibold">Save a Website Link</h2>
+					<p class="text-sm text-muted-foreground">
+						Store the exact page privately. This does not create a post.
+					</p>
+				</div>
+
+				<div class="space-y-2">
+					<Label for="saveUrl">Link URL</Label>
+					<Input
+						id="saveUrl"
+						type="url"
+						bind:value={saveUrl}
+						required
+						placeholder="https://example.com/article"
+					/>
+				</div>
+
+				<div class="space-y-2">
+					<Label for="saveTitle">Custom Title (optional)</Label>
+					<Input
+						id="saveTitle"
+						bind:value={saveTitle}
+						maxlength={220}
+						placeholder="Override the saved title"
+					/>
+				</div>
+
+				<div class="flex items-center gap-3 border-t border-border pt-4">
+					<Button type="submit" disabled={savingLink} class="gap-2">
+						{#if savingLink}
+							<Loader2 class="size-4 animate-spin" />
+							Saving...
+						{:else}
+							<Bookmark class="size-4" />
+							Save Link
+						{/if}
+					</Button>
+					<Button type="button" variant="ghost" href="/feed?scope=you">Go to My Feed</Button>
+				</div>
+			</form>
+		</TabsContent>
+
 		<TabsContent value="source">
 			<div class="space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6">
 				<div class="space-y-1">
 					<h2 class="text-base font-semibold">Add a Source</h2>
 					<p class="text-sm text-muted-foreground">
-						Subscribe to websites, feeds, or channels. New source items appear in your private feed.
+						Follow websites, feeds, or channels for future updates. Pasting an article URL follows
+						the site and saves that article privately.
 					</p>
 				</div>
 
@@ -324,7 +408,7 @@
 									? 'https://example.com/feed.xml'
 									: sourceType === 'youtube'
 										? 'https://www.youtube.com/@channel'
-										: 'https://example.com'}
+										: 'https://example.com/article'}
 							/>
 						</div>
 						<div class="space-y-2">

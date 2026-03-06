@@ -8,6 +8,7 @@ import { internalAction } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { r2 } from './lib/r2';
+import { deriveWebsiteSourceInput } from './lib/sourceUrls';
 
 const SOURCE_ITEM_INLINE_LIMIT = 1000;
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
@@ -187,6 +188,29 @@ const coerceItemUrl = (rawUrl: string, baseUrl: string) => {
 	} catch {
 		return null;
 	}
+};
+
+const extractAlternateFeedUrl = (html: string, baseUrl: string) => {
+	const linkPattern = /<link\b[^>]*>/gi;
+	const relPattern = /\brel\s*=\s*["']([^"']+)["']/i;
+	const typePattern = /\btype\s*=\s*["']([^"']+)["']/i;
+	const hrefPattern = /\bhref\s*=\s*["']([^"']+)["']/i;
+	const tags = html.match(linkPattern) ?? [];
+
+	for (const tag of tags) {
+		const relValue = relPattern.exec(tag)?.[1]?.toLowerCase() ?? '';
+		const typeValue = typePattern.exec(tag)?.[1]?.toLowerCase() ?? '';
+		const hrefValue = hrefPattern.exec(tag)?.[1];
+		if (!hrefValue || !relValue.includes('alternate')) {
+			continue;
+		}
+		if (!typeValue.includes('rss') && !typeValue.includes('atom') && !typeValue.includes('xml')) {
+			continue;
+		}
+		return coerceItemUrl(hrefValue, baseUrl);
+	}
+
+	return null;
 };
 
 const maybeStoreBodyToR2 = async (
@@ -469,6 +493,54 @@ const normalizeWebsiteError = (error: unknown) => {
 	}
 	return message;
 };
+
+export const discoverWebsiteFollowTarget = internalAction({
+	args: {
+		siteUrl: v.string()
+	},
+	returns: v.object({
+		sourceType: v.union(v.literal('website'), v.literal('rss')),
+		canonicalUrl: v.string(),
+		normalizedKey: v.string()
+	}),
+	handler: async (_ctx, args) => {
+		const websiteInput = deriveWebsiteSourceInput(args.siteUrl);
+		try {
+			const fetched = await fetchTextWithGuards(websiteInput.canonicalUrl);
+			const lowerContentType = fetched.contentType.toLowerCase();
+			const looksLikeFeed =
+				lowerContentType.includes('rss') ||
+				lowerContentType.includes('atom') ||
+				(lowerContentType.includes('xml') && !lowerContentType.includes('html'));
+			if (looksLikeFeed) {
+				const canonicalUrl = normalizeHttpUrl(fetched.finalUrl);
+				return {
+					sourceType: 'rss' as const,
+					canonicalUrl,
+					normalizedKey: `rss:${canonicalUrl.toLowerCase()}`
+				};
+			}
+
+			const alternateFeedUrl = extractAlternateFeedUrl(fetched.body, fetched.finalUrl);
+			if (alternateFeedUrl) {
+				const canonicalUrl = normalizeHttpUrl(alternateFeedUrl);
+				return {
+					sourceType: 'rss' as const,
+					canonicalUrl,
+					normalizedKey: `rss:${canonicalUrl.toLowerCase()}`
+				};
+			}
+		} catch {
+			// Fall back to site-level website tracking when discovery fails.
+		}
+
+		return {
+			sourceType: 'website' as const,
+			canonicalUrl: websiteInput.canonicalUrl,
+			normalizedKey: websiteInput.normalizedKey
+		};
+	}
+});
 
 export const syncWebsiteSource = internalAction({
 	args: {

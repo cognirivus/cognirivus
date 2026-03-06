@@ -167,7 +167,7 @@
 
 	async function shareSourceItem(
 		sourceItemId: string,
-		visibility: 'private' | 'public',
+		visibility: 'public',
 		communityId?: string
 	): Promise<boolean> {
 		if (!auth.isAuthenticated) {
@@ -204,12 +204,35 @@
 		}
 	}
 
-	async function toggleSavedSourceItem(sourceItemId: string, savedPostId?: string) {
-		if (savedPostId) {
-			await unshareSourcePost(savedPostId);
+	async function toggleSavedSourceItem(
+		sourceItemId: string,
+		isSaved: boolean,
+		savedBookmarkItemId?: string,
+		legacySavedPostId?: string
+	) {
+		if (savedBookmarkItemId) {
+			try {
+				await client.mutation((api as any).sources.unsaveBookmarkItem, {
+					bookmarkItemId: savedBookmarkItemId
+				});
+				toast.success('Unsaved');
+			} catch (error: any) {
+				toast.error(error?.message ?? 'Failed to unsave link');
+			}
 			return;
 		}
-		await shareSourceItem(sourceItemId, 'private');
+		if (legacySavedPostId) {
+			await unshareSourcePost(legacySavedPostId);
+			return;
+		}
+		if (!isSaved) {
+			try {
+				await client.mutation((api as any).sources.saveSourceItemToBookmarks, { sourceItemId });
+				toast.success('Saved');
+			} catch (error: any) {
+				toast.error(error?.message ?? 'Failed to save link');
+			}
+		}
 	}
 
 	async function togglePublicSourceItem(sourceItemId: string, publicPostId?: string) {
@@ -571,9 +594,15 @@
 										size="sm"
 										variant="outline"
 										disabled={!auth.isAuthenticated}
-										onclick={() => toggleSavedSourceItem(item._id, item.savedPostId)}
+										onclick={() =>
+											toggleSavedSourceItem(
+												item._id,
+												item.isSaved,
+												item.savedBookmarkItemId,
+												item.legacySavedPostId
+											)}
 									>
-										{item.savedPostId ? 'Unsave' : 'Save'}
+										{item.isSaved ? 'Unsave' : 'Save'}
 									</Button>
 									<Button
 										size="sm"

@@ -9,6 +9,7 @@ import {
 	windowStartFromBucket,
 	type FeedTab
 } from './lib/feedRanking';
+import { normalizeHttpUrl } from './lib/sourceUrls';
 
 const tabValidator = v.union(v.literal('new'), v.literal('top'), v.literal('discussed'));
 const windowValidator = v.union(
@@ -81,7 +82,9 @@ const sourceFeedItemValidator = v.object({
 	createdAt: v.number(),
 	updatedAt: v.number(),
 	shareCount: v.number(),
-	savedPostId: v.optional(v.id('posts')),
+	isSaved: v.boolean(),
+	savedBookmarkItemId: v.optional(v.id('source_items')),
+	legacySavedPostId: v.optional(v.id('posts')),
 	publicPostId: v.optional(v.id('posts')),
 	communityShares: v.array(sourceCommunityShareValidator)
 });
@@ -117,6 +120,61 @@ const normalizeTags = (tags?: Array<string>) => {
 		throw new Error(`At most ${MAX_FILTER_TAGS} tags can be used for feed filtering.`);
 	}
 	return uniqueTags;
+};
+
+const textEncoder = new TextEncoder();
+
+const toHex = (buffer: ArrayBuffer) =>
+	Array.from(new Uint8Array(buffer))
+		.map((byte) => byte.toString(16).padStart(2, '0'))
+		.join('');
+
+const urlHash = async (url: string) => {
+	if (!globalThis.crypto?.subtle) {
+		throw new Error('SHA-256 hashing is unavailable in this runtime.');
+	}
+	const normalizedUrl = normalizeHttpUrl(url).toString();
+	const digest = await globalThis.crypto.subtle.digest(
+		'SHA-256',
+		textEncoder.encode(normalizedUrl.toLowerCase())
+	);
+	return toHex(digest);
+};
+
+const getBookmarkSourceForUser = async (ctx: QueryCtx, userAuthId: string) => {
+	return await ctx.db
+		.query('sources')
+		.withIndex('by_normalizedKey', (q) => q.eq('normalizedKey', `bookmarks:${userAuthId}`))
+		.unique();
+};
+
+const getActiveBookmarkSaveState = async (ctx: QueryCtx, userAuthId: string, url: string) => {
+	const bookmarkSource = await getBookmarkSourceForUser(ctx, userAuthId);
+	if (!bookmarkSource) {
+		return null;
+	}
+	const bookmarkUrlHash = await urlHash(url);
+	const bookmarkItem = await ctx.db
+		.query('source_items')
+		.withIndex('by_sourceId_and_urlHash', (q) =>
+			q.eq('sourceId', bookmarkSource._id).eq('urlHash', bookmarkUrlHash)
+		)
+		.unique();
+	if (!bookmarkItem) {
+		return null;
+	}
+	const delivery = (
+		await ctx.db
+			.query('user_source_items')
+			.withIndex('by_userAuthId_and_sourceItemId', (q) =>
+				q.eq('userAuthId', userAuthId).eq('sourceItemId', bookmarkItem._id)
+			)
+			.take(1)
+	)[0];
+	if (!delivery) {
+		return null;
+	}
+	return bookmarkItem;
 };
 
 const candidateLimitFor = (numItems: number) =>
@@ -439,7 +497,9 @@ const loadUserSourceFeedItems = async (
 				createdAt: sourceItem.publishedAt,
 				updatedAt: sourceItem.updatedAt,
 				shareCount: 0,
-				savedPostId: undefined,
+				isSaved: false,
+				savedBookmarkItemId: undefined,
+				legacySavedPostId: undefined,
 				publicPostId: undefined,
 				communityShares: []
 			};
@@ -470,7 +530,9 @@ const enrichSourceItemsWithShareCount = async (
 				createdAt: number;
 				updatedAt: number;
 				shareCount: number;
-				savedPostId?: Id<'posts'>;
+				isSaved: boolean;
+				savedBookmarkItemId?: Id<'source_items'>;
+				legacySavedPostId?: Id<'posts'>;
 				publicPostId?: Id<'posts'>;
 				communityShares: Array<{
 					communityId: Id<'communities'>;
@@ -491,7 +553,10 @@ const enrichSourceItemsWithShareCount = async (
 				q.eq('authorAuthId', userAuthId).eq('sourceItemId', item._id)
 			)
 			.collect();
-		const savedShare = shares.find((share) => (share.visibility ?? 'private') === 'private');
+		const bookmarkMatch = await getActiveBookmarkSaveState(ctx, userAuthId, item.url);
+		const legacySavedShare = shares.find(
+			(share) => (share.visibility ?? 'private') === 'private' && !share.communityId
+		);
 		const publicShare = shares.find(
 			(share) => (share.visibility ?? 'private') === 'public' && !share.communityId
 		);
@@ -506,8 +571,10 @@ const enrichSourceItemsWithShareCount = async (
 		}
 		enriched.push({
 			...item,
-			shareCount: shares.length,
-			savedPostId: savedShare?._id,
+			shareCount: (publicShare ? 1 : 0) + communityShareById.size,
+			isSaved: !!bookmarkMatch || !!legacySavedShare,
+			savedBookmarkItemId: bookmarkMatch?._id,
+			legacySavedPostId: legacySavedShare?._id,
 			publicPostId: publicShare?._id,
 			communityShares: Array.from(communityShareById.entries()).map(([communityId, postId]) => ({
 				communityId,
