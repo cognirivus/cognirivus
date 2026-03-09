@@ -109,7 +109,7 @@
 	}
 </script>
 
-<main class="mx-auto w-full max-w-4xl overflow-x-hidden px-4 py-6 sm:px-6">
+<main class="mx-auto w-full max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6">
 	{#if communityQuery.isLoading}
 		<div class="flex flex-col items-center justify-center py-20">
 			<Loader2 class="size-6 animate-spin text-muted-foreground" />

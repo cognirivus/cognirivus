@@ -3,8 +3,8 @@
 	import { Button } from '$lib/components/ui/button'
 	import { Separator } from '$lib/components/ui/separator'
 	import {
-		ArrowLeft,
 		Globe,
+		LayoutList,
 		MessageSquare,
 		Settings,
 		ShieldCheck,
@@ -56,7 +56,7 @@
 
 	const navItems = $derived.by(() => {
 		const items: Array<{ value: string; label: string; href: string; icon: any }> = [
-			{ value: 'feed', label: 'Feed', href: `/c/${community.slug}`, icon: ArrowLeft }
+			{ value: 'feed', label: 'Feed', href: `/c/${community.slug}`, icon: LayoutList }
 		]
 		items.push({
 			value: 'members',

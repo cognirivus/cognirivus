@@ -360,8 +360,8 @@
 {/snippet}
 
 {#if isTargetRoute}
-	<div class="flex h-full min-h-0 flex-col px-3 py-4">
-		<div class="flex items-center justify-between gap-2">
+	<div class="flex h-full min-h-0 flex-col">
+		<div class="flex items-center justify-between gap-2 px-3 pt-4 pb-2">
 			<h3 class="text-[10px] font-black tracking-[0.2em] text-muted-foreground uppercase">
 				Similar links
 			</h3>
@@ -380,7 +380,7 @@
 			</div>
 		</div>
 
-		<div class="mt-2 flex items-center gap-1 rounded-lg border border-border/60 bg-muted/20 p-1">
+		<div class="flex items-center border-b border-border/60">
 			{#each tabSummary as tab (tab.key)}
 				<button
 					type="button"
@@ -389,21 +389,18 @@
 						activeTab = tab.key;
 						manualRefreshError = null;
 					}}
-					class={`min-w-0 flex-1 rounded-md px-2 py-1.5 text-left transition-colors ${
+					class={`min-w-0 flex-1 px-2 py-1.5 text-center text-[10px] font-semibold transition-colors ${
 						activeTab === tab.key
-							? 'bg-background text-foreground shadow-sm'
-							: 'text-muted-foreground hover:bg-background/70 hover:text-foreground'
+							? 'text-foreground border-b-2 border-foreground'
+							: 'text-muted-foreground hover:text-foreground'
 					}`}
 				>
-					<span class="block truncate text-[10px] font-semibold">{tab.label}</span>
-					<span class="mt-0.5 block text-[9px] tabular-nums">
-						{tab.count} {tab.count === 1 ? 'link' : 'links'}
-					</span>
+					{tab.label}
 				</button>
 			{/each}
 		</div>
 
-		<div class="mt-2 flex items-center justify-between gap-2">
+		<div class="mt-2 flex items-center justify-between gap-2 px-3">
 			{#if freshnessMessage}
 				<p class={['min-w-0 truncate text-[10px]', freshnessToneClass]}>{freshnessMessage}</p>
 			{:else}
@@ -447,7 +444,7 @@
 		</div>
 
 		{#if domainStaleMessage}
-			<div class="mt-2 rounded-lg border border-amber-300/70 bg-amber-50 px-2.5 py-2 text-amber-950">
+			<div class="mx-3 mt-2 rounded-lg border border-amber-300/70 bg-amber-50 px-2.5 py-2 text-amber-950">
 				<div class="flex items-start justify-between gap-2">
 					<div class="min-w-0">
 						<p class="text-[10px] font-medium">{domainStaleMessage}</p>
@@ -503,7 +500,7 @@
 			</div>
 		{/if}
 
-		<div class="mt-2 min-h-0 flex-1 overflow-y-auto pe-1">
+		<div class="mt-2 min-h-0 flex-1 overflow-y-auto px-3 pe-2">
 			{#if sourceLoading || ensureLoading || similarQuery.isLoading}
 				<div class="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
 					<Loader2 class="size-4 animate-spin" />

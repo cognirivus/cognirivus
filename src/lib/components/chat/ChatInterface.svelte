@@ -4,7 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Avatar from '$lib/components/ui/avatar';
-	import { ArrowDown, Pencil, Reply, SendHorizontal, Trash2, X, Check } from '@lucide/svelte';
+	import { ArrowDown, MessageSquare, Pencil, Reply, SendHorizontal, Trash2, X, Check } from '@lucide/svelte';
 
 	interface Message {
 		_id: string;
@@ -448,15 +448,17 @@
 	<div
 		bind:this={scrollContainer}
 		onscroll={handleScroll}
-		class="relative flex-1 space-y-2 overflow-y-auto bg-background/95 pt-4 pb-10 sm:pt-6"
+		class="relative min-h-0 flex-1 space-y-2 overflow-y-auto px-4 pt-4 pb-4 sm:px-6 sm:pt-6"
 	>
 		{#if isLoading}
 			<div class="flex h-full items-center justify-center text-sm text-muted-foreground">
 				Loading...
 			</div>
 		{:else if messages.length === 0}
-			<div class="flex h-full items-center justify-center text-sm text-muted-foreground">
-				No messages yet.
+			<div class="flex h-full flex-col items-center justify-center gap-2 text-center">
+				<MessageSquare class="size-8 text-muted-foreground/30" />
+				<p class="text-sm text-muted-foreground">No messages yet</p>
+				<p class="text-xs text-muted-foreground/60">Be the first to start the conversation.</p>
 			</div>
 		{:else}
 			{#each groupedMessages as group (group.label)}
@@ -776,27 +778,27 @@
 		</button>
 	{/if}
 
-	<div class="border-t border-border/40 bg-background/95 p-4 sm:px-6">
+	<div class="shrink-0 border-t border-border/40 px-4 py-3 sm:px-6">
 		{#if replyingToMessage}
 			<div
-				class="mb-2 flex items-center justify-between gap-3 rounded-lg border bg-background/50 px-3 py-2"
+				class="mb-2 flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-1.5"
 			>
 				<div class="flex min-w-0 items-center gap-2">
-					<Reply class="size-3.5 text-primary" />
-					<div class="truncate text-xs">
-						<span class="font-bold text-primary">Replying to {replyingToMessage.senderName}:</span>
+					<Reply class="size-3 text-primary" />
+					<span class="truncate text-xs text-muted-foreground">
+						<span class="font-semibold text-foreground">{replyingToMessage.senderName}</span>
 						{replyingToMessage.body}
-					</div>
+					</span>
 				</div>
 				<button
 					onclick={() => (replyingToMessage = null)}
-					class="text-muted-foreground hover:text-foreground"><X class="size-4" /></button
+					class="text-muted-foreground hover:text-foreground"><X class="size-3.5" /></button
 				>
 			</div>
 		{/if}
 
 		<div
-			class="flex items-end gap-2 rounded-2xl border border-border/60 bg-muted/20 px-3 py-2 transition-colors focus-within:bg-background"
+			class="flex items-end gap-2 rounded-xl border border-border/50 bg-muted/10 px-3 py-1.5 transition-colors focus-within:border-border focus-within:bg-background"
 		>
 			<textarea
 				bind:this={inputEl}
@@ -805,17 +807,15 @@
 				oninput={autoResizeTextarea}
 				placeholder="Type a message..."
 				rows={1}
-				class="max-h-32 flex-1 resize-none bg-transparent p-1 text-sm outline-none"
+				class="max-h-28 flex-1 resize-none bg-transparent py-1 text-sm leading-snug outline-none placeholder:text-muted-foreground/50"
 			></textarea>
-			<Button
+			<button
 				onclick={send}
 				disabled={!newMessage.trim() || isSendingMessage}
-				size="icon"
-				variant="ghost"
-				class="h-9 w-9 text-primary hover:bg-primary/10"
+				class="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
 			>
-				<SendHorizontal class="size-5" />
-			</Button>
+				<SendHorizontal class="size-4" />
+			</button>
 		</div>
 	</div>
 </div>

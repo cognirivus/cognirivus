@@ -6,20 +6,9 @@
 	import { api } from '$convex/_generated/api';
 	import ChatInterface from '$lib/components/chat/ChatInterface.svelte';
 	import { Button } from '$lib/components/ui/button';
-	import { ArrowLeft, LoaderCircle, MessageSquare, Settings, Users } from '@lucide/svelte';
+	import { LoaderCircle } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
-
-	const AVATAR_COLORS = [
-		'bg-rose-500', 'bg-blue-500', 'bg-emerald-500', 'bg-amber-500',
-		'bg-violet-500', 'bg-cyan-500', 'bg-pink-500', 'bg-indigo-500'
-	];
-	function avatarColor(s: string): string {
-		let hash = 0;
-		for (let i = 0; i < s.length; i++) {
-			hash = s.charCodeAt(i) + ((hash << 5) - hash);
-		}
-		return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-	}
+	import CommunitySubpageHeader from '$lib/components/community/CommunitySubpageHeader.svelte';
 
 	type ChatStatus = 'loading' | 'ready' | 'error';
 
@@ -108,7 +97,7 @@
 	}
 </script>
 
-<main class="mx-auto flex h-[calc(100vh-3rem)] w-full max-w-3xl flex-col">
+<main class="mx-auto flex h-[calc(100vh-3rem)] w-full max-w-6xl flex-col px-4 py-6 sm:px-6">
 	{#if status === 'loading'}
 		<div class="flex flex-1 items-center justify-center">
 			<LoaderCircle class="h-6 w-6 animate-spin text-muted-foreground" />
@@ -124,6 +113,10 @@
 			<p class="text-sm font-medium text-destructive">Community not found.</p>
 		</div>
 	{:else}
+		<CommunitySubpageHeader communityData={communityResult} activeNav="chat" />
+
+		<div class="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border">
+			<div class="flex min-h-0 flex-1 flex-col">
 		<ChatInterface
 			messages={messages.map((m) => ({
 				_id: m._id,
@@ -350,53 +343,16 @@
 			}}
 		>
 			{#snippet header()}
-				{@const navItems = [
-					{ value: 'feed', label: 'Feed', href: `/c/${communityResult.community.slug}`, icon: ArrowLeft },
-					{ value: 'members', label: 'Members', href: `/c/${communityResult.community.slug}/members`, icon: Users },
-					{ value: 'chat', label: 'Chat', href: `/c/${communityResult.community.slug}/chat`, icon: MessageSquare },
-					...(communityResult.isManager
-						? [{ value: 'manage', label: 'Manage', href: `/c/${communityResult.community.slug}/manage`, icon: Settings }]
-						: [])
-				]}
-				<nav class="flex items-center gap-2 border-b border-border/60 px-3 py-1.5 sm:px-4">
-					<a href="/c/{communityResult.community.slug}" class="flex shrink-0 items-center gap-2">
-						<div
-							class="{avatarColor(communityResult.community.slug)} flex size-6 items-center justify-center rounded-full text-[10px] font-bold text-white"
-						>
-							{communityResult.community.slug.charAt(0).toUpperCase()}
-						</div>
-						<span class="text-xs font-semibold hover:underline">
-							c/{communityResult.community.slug}
-						</span>
-					</a>
-
-					<div class="mx-1 h-4 w-px bg-border/60"></div>
-
-					<div class="flex items-center gap-0.5 overflow-x-auto">
-						{#each navItems as item (item.value)}
-							{@const isActive = item.value === 'chat'}
-							<a
-								href={item.href}
-								class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors
-									{isActive
-									? 'bg-muted text-foreground'
-									: 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}"
-							>
-								<item.icon class="size-3.5" />
-								{item.label}
-							</a>
-						{/each}
+				{#if !isMember}
+					<div class="flex items-center justify-end border-b border-border/60 px-3 py-1.5 sm:px-4">
+						<Button size="sm" variant="outline" class="h-7 text-xs" onclick={requestJoin} disabled={!isAuthenticated}>
+							{communityResult.membershipStatus === 'pending' ? 'Request pending' : 'Join to chat'}
+						</Button>
 					</div>
-
-					{#if !isMember}
-						<div class="ml-auto shrink-0">
-							<Button size="sm" variant="outline" class="h-7 text-xs" onclick={requestJoin} disabled={!isAuthenticated}>
-								{communityResult.membershipStatus === 'pending' ? 'Request pending' : 'Join to chat'}
-							</Button>
-						</div>
-					{/if}
-				</nav>
+				{/if}
 			{/snippet}
 		</ChatInterface>
+			</div>
+		</div>
 	{/if}
 </main>
