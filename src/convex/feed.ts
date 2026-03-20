@@ -18,6 +18,21 @@ const windowValidator = v.union(
 	v.literal('7d'),
 	v.literal('30d')
 );
+const sourceFilterValidator = v.union(
+	v.literal('all'),
+	v.literal('posts'),
+	v.literal('source_updates'),
+	v.literal('website'),
+	v.literal('rss'),
+	v.literal('youtube'),
+	v.literal('bookmarks')
+);
+const visibilityFilterValidator = v.union(
+	v.literal('all'),
+	v.literal('private'),
+	v.literal('public'),
+	v.literal('community')
+);
 
 const MAX_CANDIDATE_LIMIT = 2000;
 const MIN_CANDIDATE_LIMIT = 300;
@@ -26,6 +41,16 @@ const TAG_SCAN_LIMIT = 350;
 const MAX_FILTER_TAGS = 10;
 
 type GlobalScope = 'all' | 'public' | 'community' | 'you' | 'me';
+type FeedSourceFilter =
+	| 'all'
+	| 'posts'
+	| 'source_updates'
+	| 'website'
+	| 'rss'
+	| 'youtube'
+	| 'bookmarks';
+type FeedVisibilityFilter = 'all' | 'private' | 'public' | 'community';
+type SourceType = 'website' | 'rss' | 'youtube' | 'bookmarks';
 type ViewerAuthId = string | null;
 
 const postFeedItemValidator = v.object({
@@ -120,6 +145,85 @@ const normalizeTags = (tags?: Array<string>) => {
 		throw new Error(`At most ${MAX_FILTER_TAGS} tags can be used for feed filtering.`);
 	}
 	return uniqueTags;
+};
+
+const isSourceType = (value: string): value is SourceType =>
+	value === 'website' || value === 'rss' || value === 'youtube' || value === 'bookmarks';
+
+const getPostSourceType = (
+	post: Pick<Doc<'posts'>, 'sourceType' | 'sourceTypeSnapshot'>
+): SourceType | null => {
+	const normalized =
+		post.sourceTypeSnapshot?.trim().toLowerCase() ??
+		post.sourceType
+			?.trim()
+			.toLowerCase()
+			.replace(/^source_/, '');
+	return normalized && isSourceType(normalized) ? normalized : null;
+};
+
+const matchesPostSourceFilter = (
+	post: Pick<Doc<'posts'>, 'sourceType' | 'sourceTypeSnapshot'>,
+	source: FeedSourceFilter
+) => {
+	if (source === 'all' || source === 'posts') {
+		return true;
+	}
+	if (source === 'source_updates') {
+		return false;
+	}
+	return getPostSourceType(post) === source;
+};
+
+const matchesSourceItemSourceFilter = (
+	item: { sourceType: SourceType },
+	source: FeedSourceFilter
+) => {
+	if (source === 'all' || source === 'source_updates') {
+		return true;
+	}
+	if (source === 'posts') {
+		return false;
+	}
+	return item.sourceType === source;
+};
+
+const matchesPostVisibilityFilter = (
+	post: Pick<Doc<'posts'>, 'visibility' | 'communityId' | 'visibilityScope'>,
+	visibility: FeedVisibilityFilter,
+	scope: GlobalScope
+) => {
+	if (visibility === 'all') {
+		return true;
+	}
+
+	if (scope === 'you') {
+		if (visibility === 'private') {
+			return (post.visibility ?? 'private') === 'private';
+		}
+		if (visibility === 'community') {
+			return (post.visibility ?? 'private') === 'public' && !!post.communityId;
+		}
+		return (post.visibility ?? 'private') === 'public' && !post.communityId;
+	}
+
+	if (visibility === 'community') {
+		return post.visibilityScope === 'public_community';
+	}
+	if (visibility === 'public') {
+		return post.visibilityScope === 'public_global';
+	}
+	return false;
+};
+
+const matchesSelectedSourceId = (
+	item: Pick<Doc<'posts'>, 'sourceId'> | Pick<Doc<'source_items'>, 'sourceId'>,
+	sourceId: Id<'sources'> | undefined
+) => {
+	if (!sourceId) {
+		return true;
+	}
+	return item.sourceId === sourceId;
 };
 
 const textEncoder = new TextEncoder();
@@ -591,8 +695,12 @@ const rankAndPaginate = async (
 	tab: FeedTab,
 	windowStart: number,
 	viewerAuthId: ViewerAuthId,
+	scope: GlobalScope,
 	search: string | undefined,
 	tags: Array<string> | undefined,
+	source: FeedSourceFilter,
+	visibility: FeedVisibilityFilter,
+	selectedSourceId: Id<'sources'> | undefined,
 	cursor: string | null,
 	numItems: number
 ) => {
@@ -622,6 +730,15 @@ const rankAndPaginate = async (
 				continue;
 			}
 		}
+		if (!matchesPostSourceFilter(post, source)) {
+			continue;
+		}
+		if (!matchesPostVisibilityFilter(post, visibility, scope)) {
+			continue;
+		}
+		if (!matchesSelectedSourceId(post, selectedSourceId)) {
+			continue;
+		}
 		filtered.push(post);
 	}
 
@@ -643,12 +760,15 @@ const listYouFeed = async (
 	windowStart: number,
 	search: string | undefined,
 	tags: Array<string> | undefined,
+	source: FeedSourceFilter,
+	visibility: FeedVisibilityFilter,
+	selectedSourceId: Id<'sources'> | undefined,
 	cursor: string | null,
 	numItems: number,
 	candidateLimit: number
 ) => {
-	const privatePosts = await queryPostsByAuthor(ctx, viewerAuthId, tab, candidateLimit, 'private');
-	const scopedPosts = privatePosts.filter((post) => {
+	const authorPosts = await queryPostsByAuthor(ctx, viewerAuthId, tab, candidateLimit);
+	const scopedPosts = authorPosts.filter((post) => {
 		if (post.createdAt < windowStart) {
 			return false;
 		}
@@ -665,13 +785,31 @@ const listYouFeed = async (
 				return false;
 			}
 		}
+		if (!matchesPostSourceFilter(post, source)) {
+			return false;
+		}
+		if (!matchesPostVisibilityFilter(post, visibility, 'you')) {
+			return false;
+		}
+		if (!matchesSelectedSourceId(post, selectedSourceId)) {
+			return false;
+		}
 		return true;
 	});
 	const mappedPosts = await mapFeedPosts(ctx, scopedPosts, viewerAuthId);
-	const sourceItems =
+	const rawSourceItems =
 		tags && tags.length > 0
 			? []
 			: await loadUserSourceFeedItems(ctx, viewerAuthId, candidateLimit, windowStart, search);
+	const sourceItems = rawSourceItems.filter((item) => {
+		if (!matchesSourceItemSourceFilter(item, source)) {
+			return false;
+		}
+		if (!matchesSelectedSourceId(item, selectedSourceId)) {
+			return false;
+		}
+		return visibility === 'all' || visibility === 'private';
+	});
 
 	const merged = [...mappedPosts, ...sourceItems].sort((a, b) => b.createdAt - a.createdAt);
 	const paged = paginateByCursor(merged, cursor, numItems);
@@ -732,6 +870,9 @@ export const listGlobal = query({
 		window: v.optional(windowValidator),
 		search: v.optional(v.string()),
 		tags: v.optional(v.array(v.string())),
+		source: v.optional(sourceFilterValidator),
+		sourceId: v.optional(v.id('sources')),
+		visibility: v.optional(visibilityFilterValidator),
 		paginationOpts: paginationOptsValidator
 	},
 	returns: pagedFeedValidator,
@@ -742,6 +883,9 @@ export const listGlobal = query({
 		const windowStart = scope === 'me' ? 0 : windowStartFromBucket(args.window ?? '24h');
 		const search = normalizeSearch(args.search);
 		const tags = normalizeTags(args.tags);
+		const source = args.source ?? 'all';
+		const selectedSourceId = args.sourceId;
+		const visibility = args.visibility ?? (scope === 'you' ? 'private' : 'all');
 		const candidateLimit = candidateLimitFor(args.paginationOpts.numItems);
 
 		if (scope === 'you') {
@@ -759,6 +903,9 @@ export const listGlobal = query({
 				windowStart,
 				search,
 				tags,
+				source,
+				visibility,
+				selectedSourceId,
 				args.paginationOpts.cursor,
 				args.paginationOpts.numItems,
 				candidateLimit
@@ -788,8 +935,12 @@ export const listGlobal = query({
 			args.tab,
 			windowStart,
 			viewerAuthId,
+			scope,
 			search,
 			tags,
+			source,
+			visibility,
+			selectedSourceId,
 			args.paginationOpts.cursor,
 			args.paginationOpts.numItems
 		);
@@ -855,8 +1006,12 @@ export const listCommunity = query({
 			args.tab,
 			windowStart,
 			viewerAuthId,
+			'community',
 			search,
 			tags,
+			'all',
+			'all',
+			undefined,
 			args.paginationOpts.cursor,
 			args.paginationOpts.numItems
 		);
@@ -909,8 +1064,12 @@ export const listUser = query({
 			args.tab,
 			windowStart,
 			viewerAuthId,
+			'public',
 			search,
 			tags,
+			'all',
+			'all',
+			undefined,
 			args.paginationOpts.cursor,
 			args.paginationOpts.numItems
 		);

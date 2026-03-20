@@ -16,10 +16,10 @@
 	--foreground: oklch(0.18 0 0);
 
 	/* Surfaces */
-	--card: oklch(1 0 0 / 70%);
+	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.18 0 0);
 
-	--popover: oklch(1 0 0 / 80%);
+	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.18 0 0);
 
 	/* Core */
@@ -116,10 +116,10 @@
 	--background: oklch(0.16 0 0);
 	--foreground: oklch(0.92 0 0);
 
-	--card: oklch(0.22 0 0 / 75%);
+	--card: oklch(0.22 0 0);
 	--card-foreground: oklch(0.92 0 0);
 
-	--popover: oklch(0.24 0 0 / 85%);
+	--popover: oklch(0.24 0 0);
 	--popover-foreground: oklch(0.92 0 0);
 
 	--primary: oklch(0.92 0 0);

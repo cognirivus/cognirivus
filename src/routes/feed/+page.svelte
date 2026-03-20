@@ -5,6 +5,7 @@
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import {
 		Calendar,
+		ChevronDown,
 		Globe,
 		MessageSquare,
 		ThumbsDown,
@@ -23,6 +24,15 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import {
+		DropdownMenu,
+		DropdownMenuContent,
+		DropdownMenuLabel,
+		DropdownMenuRadioGroup,
+		DropdownMenuRadioItem,
+		DropdownMenuSeparator,
+		DropdownMenuTrigger
+	} from '$lib/components/ui/dropdown-menu';
 	import { Input } from '$lib/components/ui/input';
 	import { toast } from 'svelte-sonner';
 	import TagMultiSelect from '$lib/components/TagMultiSelect.svelte';
@@ -31,6 +41,15 @@
 	type FeedTab = 'new' | 'top' | 'discussed';
 	type FeedWindow = 'all' | '24h' | '7d' | '30d';
 	type FeedScope = 'you' | 'public' | 'community';
+	type SourceFilter =
+		| 'all'
+		| 'posts'
+		| 'source_updates'
+		| 'website'
+		| 'rss'
+		| 'youtube'
+		| 'bookmarks';
+	type VisibilityFilter = 'all' | 'private' | 'public' | 'community';
 
 	const auth = useAuth();
 	const client = useConvexClient();
@@ -44,6 +63,14 @@
 			(auth.isAuthenticated ? 'you' : 'public')
 	);
 	const search = $derived(page.url.searchParams.get('search') ?? '');
+	const sourceFilter = $derived(
+		(page.url.searchParams.get('source') as SourceFilter | null) ?? 'all'
+	);
+	const selectedSourceId = $derived(page.url.searchParams.get('sourceId'));
+	const visibilityFilter = $derived(
+		(page.url.searchParams.get('visibility') as VisibilityFilter | null) ??
+			(scope === 'you' ? 'private' : 'all')
+	);
 	const selectedTags = $derived(
 		page.url.searchParams.get('tags')?.split(',').filter(Boolean) ?? []
 	);
@@ -54,8 +81,8 @@
 	const scopeMeta: Record<FeedScope, { label: string; title: string; description: string }> = {
 		you: {
 			label: 'You',
-			title: 'My Private Feed',
-			description: 'Your link collection and private notes.'
+			title: 'My Feed',
+			description: 'Your links, source updates, and shared posts.'
 		},
 		public: {
 			label: 'Public',
@@ -68,6 +95,43 @@
 			description: 'Posts from communities you follow, tuned for discovery.'
 		}
 	};
+	const sourceFilterMeta: Record<SourceFilter, { label: string }> = {
+		all: { label: 'All' },
+		posts: { label: 'Posts' },
+		source_updates: { label: 'Source updates' },
+		website: { label: 'Website' },
+		rss: { label: 'RSS' },
+		youtube: { label: 'YouTube' },
+		bookmarks: { label: 'Bookmarks' }
+	};
+	const visibilityFilterMeta: Record<VisibilityFilter, { label: string }> = {
+		all: { label: 'All' },
+		private: { label: 'Private' },
+		public: { label: 'Public' },
+		community: { label: 'Community' }
+	};
+	const PRIVATE_SOURCE_OPTIONS: SourceFilter[] = [
+		'all',
+		'posts',
+		'source_updates',
+		'website',
+		'rss',
+		'youtube',
+		'bookmarks'
+	];
+	const SHARED_SOURCE_OPTIONS: SourceFilter[] = [
+		'all',
+		'posts',
+		'website',
+		'rss',
+		'youtube',
+		'bookmarks'
+	];
+	const VISIBILITY_OPTIONS: VisibilityFilter[] = ['private', 'all', 'public', 'community'];
+	const sourceFilterOptions = $derived(
+		scope === 'you' ? PRIVATE_SOURCE_OPTIONS : SHARED_SOURCE_OPTIONS
+	);
+	const showVisibilityFilter = $derived(scope === 'you' && sourceFilter !== 'source_updates');
 
 	let searchInput = $state('');
 
@@ -79,6 +143,8 @@
 	const feedQuery = useQuery((api as any).feed.listGlobal, () => {
 		const s = search;
 		const ts = selectedTags;
+		const sf = sourceFilter;
+		const vf = visibilityFilter;
 		const base = {
 			paginationOpts: {
 				numItems: 20,
@@ -91,7 +157,10 @@
 			scope,
 			window: windowBucket,
 			search: s || undefined,
-			tags: ts.length > 0 ? ts : undefined
+			tags: ts.length > 0 ? ts : undefined,
+			source: sf === 'all' ? undefined : sf,
+			sourceId: selectedSourceId || undefined,
+			visibility: scope === 'you' && sf !== 'source_updates' && vf !== 'private' ? vf : undefined
 		};
 	});
 	const communitiesQuery = useQuery((api as any).communities.listPublic, { limit: 100 });
@@ -113,6 +182,9 @@
 		tab?: FeedTab;
 		window?: FeedWindow;
 		search?: string | null;
+		source?: SourceFilter | null;
+		sourceId?: string | null;
+		visibility?: VisibilityFilter | null;
 		tags?: string[] | null;
 		cursor?: string | null;
 	}) {
@@ -134,6 +206,28 @@
 			else params.search = next.search;
 			delete params.cursor;
 		}
+		if (next.source !== undefined) {
+			if (next.source === null || next.source === 'all') delete params.source;
+			else params.source = next.source;
+			delete params.cursor;
+		}
+		if (next.sourceId !== undefined) {
+			if (next.sourceId === null || next.sourceId === '') delete params.sourceId;
+			else params.sourceId = next.sourceId;
+			delete params.cursor;
+		}
+		if (next.visibility !== undefined) {
+			const activeScope = (next.scope ??
+				(params.scope as FeedScope | undefined) ??
+				scope) as FeedScope;
+			const defaultVisibility = activeScope === 'you' ? 'private' : 'all';
+			if (next.visibility === null || next.visibility === defaultVisibility) {
+				delete params.visibility;
+			} else {
+				params.visibility = next.visibility;
+			}
+			delete params.cursor;
+		}
 		if (next.tags !== undefined) {
 			if (next.tags === null || next.tags.length === 0) delete params.tags;
 			else params.tags = next.tags.join(',');
@@ -142,10 +236,56 @@
 		if (next.cursor) params.cursor = next.cursor;
 		else if (next.cursor === null) delete params.cursor;
 
+		const activeScope = (params.scope as FeedScope | undefined) ?? scope;
+		const activeSource = (params.source as SourceFilter | undefined) ?? 'all';
+		if (next.scope !== undefined) {
+			delete params.sourceId;
+		}
+		if (activeScope !== 'you') {
+			delete params.visibility;
+			if (activeSource === 'source_updates') {
+				delete params.source;
+			}
+		}
+		if (activeSource === 'source_updates') {
+			delete params.visibility;
+		}
+
 		const queryString = new URLSearchParams(params).toString();
 		const target = queryString.length > 0 ? `/feed?${queryString}` : '/feed';
 		goto(target, { noScroll: true, keepFocus: true });
 	}
+
+	const availableSpecificSources = $derived.by(() => {
+		const sourceMap: Record<string, { id: string; label: string }> = {};
+		for (const item of feedQuery.data?.page ?? []) {
+			if (item.kind === 'source_item') {
+				if (!sourceMap[item.sourceId]) {
+					sourceMap[item.sourceId] = {
+						id: item.sourceId,
+						label: decodeHtmlEntities(item.sourceTitle)
+					};
+				}
+				continue;
+			}
+			if (item.sourceId && item.sourceTitleSnapshot && !sourceMap[item.sourceId]) {
+				sourceMap[item.sourceId] = {
+					id: item.sourceId,
+					label: sanitizeDisplayText(item.sourceTitleSnapshot)
+				};
+			}
+		}
+		return Object.values(sourceMap).sort((a, b) => a.label.localeCompare(b.label));
+	});
+
+	const currentSpecificSourceLabel = $derived(
+		availableSpecificSources.find((source) => source.id === selectedSourceId)?.label ??
+			(selectedSourceId ? 'Selected source' : 'All sources')
+	);
+
+	const showSpecificSourceFilter = $derived(
+		availableSpecificSources.length > 0 || selectedSourceId !== null
+	);
 
 	function selectScope(nextScope: FeedScope) {
 		if (nextScope === scope) {
@@ -393,13 +533,98 @@
 			{/if}
 		</div>
 
-		<TagMultiSelect
-			availableTags={Array.from(
-				new Set((feedQuery.data?.page ?? []).flatMap((p: any) => p.tags ?? []))
-			)}
-			{selectedTags}
-			onSelect={(tags: string[]) => updateParams({ tags: tags, cursor: null })}
-		/>
+		<div class="flex flex-wrap items-center gap-2 sm:justify-end">
+			{#if showSpecificSourceFilter}
+				<DropdownMenu>
+					<DropdownMenuTrigger>
+						<Button variant="outline" size="sm" class="h-9 gap-2">
+							<Globe class="size-4 text-muted-foreground" />
+							<span class="text-xs">Source: {currentSpecificSourceLabel}</span>
+							<ChevronDown class="size-4 text-muted-foreground" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" class="w-56">
+						<DropdownMenuLabel>Source</DropdownMenuLabel>
+						<DropdownMenuSeparator />
+						<DropdownMenuRadioGroup value={selectedSourceId ?? ''}>
+							<DropdownMenuRadioItem
+								value=""
+								onclick={() => updateParams({ sourceId: null, cursor: null })}
+							>
+								All sources
+							</DropdownMenuRadioItem>
+							{#each availableSpecificSources as sourceOption (sourceOption.id)}
+								<DropdownMenuRadioItem
+									value={sourceOption.id}
+									onclick={() => updateParams({ sourceId: sourceOption.id, cursor: null })}
+								>
+									{sourceOption.label}
+								</DropdownMenuRadioItem>
+							{/each}
+						</DropdownMenuRadioGroup>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			{/if}
+
+			<DropdownMenu>
+				<DropdownMenuTrigger>
+					<Button variant="outline" size="sm" class="h-9 gap-2">
+						<Archive class="size-4 text-muted-foreground" />
+						<span class="text-xs">Source Type: {sourceFilterMeta[sourceFilter].label}</span>
+						<ChevronDown class="size-4 text-muted-foreground" />
+					</Button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" class="w-52">
+					<DropdownMenuLabel>Source Type</DropdownMenuLabel>
+					<DropdownMenuSeparator />
+					<DropdownMenuRadioGroup value={sourceFilter}>
+						{#each sourceFilterOptions as option (option)}
+							<DropdownMenuRadioItem
+								value={option}
+								onclick={() => updateParams({ source: option, cursor: null })}
+							>
+								{sourceFilterMeta[option].label}
+							</DropdownMenuRadioItem>
+						{/each}
+					</DropdownMenuRadioGroup>
+				</DropdownMenuContent>
+			</DropdownMenu>
+
+			{#if showVisibilityFilter}
+				<DropdownMenu>
+					<DropdownMenuTrigger>
+						<Button variant="outline" size="sm" class="h-9 gap-2">
+							<Lock class="size-4 text-muted-foreground" />
+							<span class="text-xs">Visibility: {visibilityFilterMeta[visibilityFilter].label}</span
+							>
+							<ChevronDown class="size-4 text-muted-foreground" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" class="w-52">
+						<DropdownMenuLabel>Visibility</DropdownMenuLabel>
+						<DropdownMenuSeparator />
+						<DropdownMenuRadioGroup value={visibilityFilter}>
+							{#each VISIBILITY_OPTIONS as option (option)}
+								<DropdownMenuRadioItem
+									value={option}
+									onclick={() => updateParams({ visibility: option, cursor: null })}
+								>
+									{visibilityFilterMeta[option].label}
+								</DropdownMenuRadioItem>
+							{/each}
+						</DropdownMenuRadioGroup>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			{/if}
+
+			<TagMultiSelect
+				availableTags={Array.from(
+					new Set((feedQuery.data?.page ?? []).flatMap((p: any) => p.tags ?? []))
+				)}
+				{selectedTags}
+				onSelect={(tags: string[]) => updateParams({ tags: tags, cursor: null })}
+			/>
+		</div>
 	</div>
 
 	{#if feedQuery.isLoading}
