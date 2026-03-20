@@ -9,9 +9,18 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { Textarea } from '$lib/components/ui/textarea';
-	import { decodeHtmlEntities, sanitizeDisplayText } from '$lib/utils';
-	import { ArrowLeft, ExternalLink, Globe, Loader2, Lock, Trash2, Users } from '@lucide/svelte';
+	import { decodeHtmlEntities, sanitizeDisplayText, splitReadableParagraphs } from '$lib/utils';
+	import {
+		ArrowLeft,
+		Calendar,
+		ExternalLink,
+		Globe,
+		Loader2,
+		Lock,
+		NotebookText,
+		Trash2,
+		Users
+	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	type SourceShare = {
@@ -35,6 +44,8 @@
 	let shareCommunityDialogOpen = $state(false);
 	let deleteShareDialogOpen = $state(false);
 	let pendingDeleteSharePostId = $state<Id<'posts'> | null>(null);
+	const bodyText = $derived(fullBody || decodeHtmlEntities(detailsQuery.data?.body ?? ''));
+	const bodyParagraphs = $derived(splitReadableParagraphs(bodyText));
 
 	$effect(() => {
 		if (!shareCommunityId && (communitiesQuery.data?.length ?? 0) > 0) {
@@ -49,6 +60,9 @@
 		loadingBody = true;
 		try {
 			const response = await fetch(detailsQuery.data.bodyUrl);
+			if (!response.ok) {
+				throw new Error('Failed to fetch content');
+			}
 			fullBody = sanitizeDisplayText(decodeHtmlEntities(await response.text()));
 		} catch {
 			toast.error('Failed to load full content');
@@ -235,47 +249,83 @@
 			</CardContent>
 		</Card>
 	{:else}
-		<Card class="mb-4">
-			<CardContent class="space-y-3 py-5">
-				<div class="flex flex-wrap items-center gap-2">
-					<Badge variant="outline" class="uppercase">{detailsQuery.data.sourceType}</Badge>
-					<Badge variant="outline" class="gap-1">
-						<Globe class="size-3.5" />
-						{decodeHtmlEntities(detailsQuery.data.sourceTitle)}
-					</Badge>
-				</div>
-				<h2 class="text-xl font-semibold">{decodeHtmlEntities(detailsQuery.data.title)}</h2>
-				<p class="text-sm text-muted-foreground">{decodeHtmlEntities(detailsQuery.data.snippet)}</p>
-				<div class="flex flex-wrap items-center gap-2">
-					<Button variant="outline" size="sm" href={detailsQuery.data.url} target="_blank">
-						<ExternalLink class="mr-1 size-4" />
-						Open Original
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						href={detailsQuery.data.sourceCanonicalUrl}
-						target="_blank"
-					>
-						Visit Source
-					</Button>
-				</div>
-				{#if detailsQuery.data.body}
-					<Textarea value={decodeHtmlEntities(detailsQuery.data.body)} readonly rows={8} />
-				{:else if detailsQuery.data.bodyUrl}
-					<div class="space-y-2">
-						<Button variant="outline" size="sm" onclick={loadBody} disabled={loadingBody}>
-							{#if loadingBody}
-								<Loader2 class="mr-2 size-4 animate-spin" />
-								Loading...
-							{:else}
-								Load Full Content
-							{/if}
-						</Button>
-						{#if fullBody}
-							<Textarea value={fullBody} readonly rows={10} />
-						{/if}
+		<Card class="mb-4 overflow-hidden border-border/80 shadow-sm">
+			<CardContent class="py-0">
+				<section class="space-y-5 py-6 sm:py-7">
+					<div class="flex flex-wrap items-center gap-2">
+						<Badge variant="outline" class="uppercase">{detailsQuery.data.sourceType}</Badge>
+						<Badge variant="outline" class="gap-1">
+							<Globe class="size-3.5" />
+							{decodeHtmlEntities(detailsQuery.data.sourceTitle)}
+						</Badge>
 					</div>
+					<div class="space-y-3">
+						<h2 class="max-w-4xl text-2xl font-semibold tracking-tight">
+							{decodeHtmlEntities(detailsQuery.data.title)}
+						</h2>
+						<p class="max-w-3xl text-sm leading-7 text-muted-foreground">
+							{decodeHtmlEntities(detailsQuery.data.snippet)}
+						</p>
+					</div>
+					<div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+						<span class="inline-flex items-center gap-1.5">
+							<Calendar class="size-3.5" />
+							Published {new Date(detailsQuery.data.publishedAt).toLocaleString()}
+						</span>
+						<span class="inline-flex items-center gap-1.5">
+							<NotebookText class="size-3.5" />
+							Extracted reading view
+						</span>
+					</div>
+					<div class="flex flex-wrap items-center gap-2">
+						<Button variant="outline" size="sm" href={detailsQuery.data.url} target="_blank">
+							<ExternalLink class="mr-1 size-4" />
+							Open Original
+						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							href={detailsQuery.data.sourceCanonicalUrl}
+							target="_blank"
+						>
+							Visit Source
+						</Button>
+					</div>
+				</section>
+
+				{#if detailsQuery.data.body || detailsQuery.data.bodyUrl}
+					<section class="border-t border-border/70 py-6 sm:py-7">
+						<div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+							<div>
+								<h3 class="text-sm font-semibold tracking-wide text-foreground">Reading View</h3>
+								<p class="text-sm text-muted-foreground">
+									Cleaned article text from the source, formatted for reading.
+								</p>
+							</div>
+							{#if !bodyText && detailsQuery.data.bodyUrl}
+								<Button variant="outline" size="sm" onclick={loadBody} disabled={loadingBody}>
+									{#if loadingBody}
+										<Loader2 class="mr-2 size-4 animate-spin" />
+										Loading...
+									{:else}
+										Load Full Content
+									{/if}
+								</Button>
+							{/if}
+						</div>
+
+						{#if loadingBody}
+							<p class="text-sm text-muted-foreground">Loading extracted content...</p>
+						{:else if bodyParagraphs.length > 0}
+							<article class="pt-1">
+								<div class="mx-auto max-w-3xl space-y-5 text-[15px] leading-8 text-foreground/95">
+									{#each bodyParagraphs as paragraph, index (`${index}-${paragraph.slice(0, 24)}`)}
+										<p class="text-pretty">{paragraph}</p>
+									{/each}
+								</div>
+							</article>
+						{/if}
+					</section>
 				{/if}
 			</CardContent>
 		</Card>

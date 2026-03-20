@@ -82,6 +82,77 @@ export const decodeHtmlEntities = (value: string) => {
 	);
 };
 
+const splitFlatTextIntoParagraphs = (value: string) => {
+	const sentences =
+		value
+			.match(/[^.!?\n]+(?:[.!?]+["')\]]*)?|[^.!?\n]+$/g)
+			?.map((part) => part.trim())
+			.filter(Boolean) ?? [];
+	if (sentences.length <= 2) {
+		return [value];
+	}
+
+	const paragraphs: Array<string> = [];
+	let current = '';
+	let sentenceCount = 0;
+
+	for (const sentence of sentences) {
+		const next = current ? `${current} ${sentence}` : sentence;
+		if (current && (next.length >= 360 || sentenceCount >= 4)) {
+			paragraphs.push(current);
+			current = sentence;
+			sentenceCount = 1;
+			continue;
+		}
+		current = next;
+		sentenceCount += 1;
+	}
+
+	if (current) {
+		paragraphs.push(current);
+	}
+
+	return paragraphs;
+};
+
+export const splitReadableParagraphs = (value: string) => {
+	const normalized = sanitizeDisplayText(value)
+		.replace(/\r\n?/g, '\n')
+		.split('\n')
+		.map((line) => line.replace(/[ \t]+/g, ' ').trim())
+		.join('\n')
+		.replace(/\n{3,}/g, '\n\n')
+		.trim();
+
+	if (!normalized) {
+		return [];
+	}
+
+	const explicitParagraphs = normalized
+		.split(/\n\s*\n/g)
+		.map((paragraph) =>
+			paragraph
+				.split('\n')
+				.map((line) => line.trim())
+				.join(' ')
+				.trim()
+		)
+		.filter(Boolean);
+
+	if (explicitParagraphs.length > 1) {
+		return explicitParagraphs;
+	}
+
+	if (normalized.includes('\n')) {
+		return normalized
+			.split('\n')
+			.map((line) => line.trim())
+			.filter(Boolean);
+	}
+
+	return splitFlatTextIntoParagraphs(normalized.replace(/\s+/g, ' '));
+};
+
 /**
  * Utility to determine if an error is authentication related.
  * Useful for JWT caching and error boundaries.

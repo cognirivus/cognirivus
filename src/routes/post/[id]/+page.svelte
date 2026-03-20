@@ -9,7 +9,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import CommentsSection from '$lib/components/comments/CommentsSection.svelte';
-	import { sanitizeDisplayText } from '$lib/utils';
+	import { sanitizeDisplayText, splitReadableParagraphs } from '$lib/utils';
 	import { toast } from 'svelte-sonner';
 
 	const auth = useAuth();
@@ -23,6 +23,7 @@
 	let fullBody = $state('');
 	let loadingBody = $state(false);
 	let deletePostDialogOpen = $state(false);
+	const bodyParagraphs = $derived(splitReadableParagraphs(fullBody));
 	const signInHref = $derived(
 		`/signin?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
 	);
@@ -186,11 +187,15 @@
 						</Badge>
 					{/if}
 				</div>
-				<div class="mt-4 text-sm leading-6 whitespace-pre-wrap">
+				<div class="mt-5 pt-1">
 					{#if loadingBody}
-						Loading body...
+						<p class="text-sm text-muted-foreground">Loading body...</p>
 					{:else}
-						{fullBody}
+						<div class="mx-auto max-w-3xl space-y-5 text-[15px] leading-8 text-foreground/95">
+							{#each bodyParagraphs as paragraph, index (`${index}-${paragraph.slice(0, 24)}`)}
+								<p class="text-pretty">{paragraph}</p>
+							{/each}
+						</div>
 					{/if}
 				</div>
 

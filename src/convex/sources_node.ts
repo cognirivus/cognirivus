@@ -42,8 +42,16 @@ const stripHtml = (html: string) =>
 	html
 		.replace(/<script[\s\S]*?<\/script>/gi, ' ')
 		.replace(/<style[\s\S]*?<\/style>/gi, ' ')
+		.replace(/<(br|hr)\s*\/?>/gi, '\n')
+		.replace(/<li\b[^>]*>/gi, '\n- ')
+		.replace(
+			/<\/(p|div|section|article|header|footer|aside|main|blockquote|pre|ul|ol|li|h[1-6]|table|tr)>/gi,
+			'\n\n'
+		)
 		.replace(/<[^>]+>/g, ' ')
-		.replace(/\s+/g, ' ')
+		.replace(/[ \t\f\v]+/g, ' ')
+		.replace(/ *\n */g, '\n')
+		.replace(/\n{3,}/g, '\n\n')
 		.trim();
 
 const extractHtmlTitle = (html: string, fallback: string) => {
