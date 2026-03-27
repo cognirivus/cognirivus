@@ -440,11 +440,12 @@ export const listMembers = query({
 			throw new Error('Community not found.');
 		}
 
+		const authUser = await getOptionalAuthUser(ctx);
+		if (!authUser) {
+			throw new Error('Authentication required to view members of a community.');
+		}
+
 		if (community.visibility === 'private') {
-			const authUser = await getOptionalAuthUser(ctx);
-			if (!authUser) {
-				throw new Error('Authentication required to view members of a private community.');
-			}
 			const membership = await getMembership(ctx, args.communityId, authUser._id);
 			if (!membership || membership.status !== 'active') {
 				throw new Error('You must be a member to view members of a private community.');
