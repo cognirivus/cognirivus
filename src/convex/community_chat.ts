@@ -3,6 +3,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/s
 import type { Id } from './_generated/dataModel';
 import { getAnyUserById, getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
+import { requireUserWithUsername } from './lib/usernameGate';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '🎉', '😮', '😢', '👀'] as const;
 type AllowedReaction = (typeof ALLOWED_REACTIONS)[number];
@@ -146,8 +147,7 @@ export const sendMessage = mutation({
 	},
 	returns: v.id('community_chat_messages'),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) throw new Error('Not authenticated');
+		const user = await requireUserWithUsername(ctx);
 
 		await rateLimiter.limit(ctx, 'communityChatMessage', { key: user._id, throws: true });
 		await requireActiveMembership(ctx, user._id, args.communityId);
@@ -175,8 +175,7 @@ export const editMessage = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) throw new Error('Not authenticated');
+		const user = await requireUserWithUsername(ctx);
 
 		await requireActiveMembership(ctx, user._id, args.communityId);
 		const message = await requireMessageAuthor(ctx, user._id, args.communityId, args.messageId);
@@ -211,8 +210,7 @@ export const deleteMessage = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) throw new Error('Not authenticated');
+		const user = await requireUserWithUsername(ctx);
 
 		await requireActiveMembership(ctx, user._id, args.communityId);
 		const message = await requireMessageAuthor(ctx, user._id, args.communityId, args.messageId);
@@ -246,7 +244,6 @@ export const getMessages = query({
 	returns: v.array(messageWithReactionsValidator),
 	handler: async (ctx, args) => {
 		const user = await getAuthUser(ctx);
-		if (!user) throw new Error('Not authenticated');
 
 		await requireActiveMembership(ctx, user._id, args.communityId);
 		const limit = normalizeMessagesLimit(args.limit);
@@ -403,8 +400,7 @@ export const toggleReaction = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) throw new Error('Not authenticated');
+		const user = await requireUserWithUsername(ctx);
 
 		await rateLimiter.limit(ctx, 'communityChatReaction', { key: user._id, throws: true });
 		await requireActiveMembership(ctx, user._id, args.communityId);

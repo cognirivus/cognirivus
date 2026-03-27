@@ -1,8 +1,8 @@
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { mutation } from './_generated/server';
-import { getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
+import { requireUserWithUsername } from './lib/usernameGate';
 
 const MAX_IMPORT_BATCH = 200;
 const MAX_TITLE_LENGTH = 220;
@@ -96,10 +96,7 @@ export const importSelectedBookmarks = mutation({
 	},
 	returns: importResultValidator,
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 
 		await rateLimiter.limit(ctx, 'bookmarkImport', { key: authUser._id, throws: true });
 

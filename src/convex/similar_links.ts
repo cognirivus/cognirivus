@@ -29,6 +29,7 @@ import {
 } from './lib/similarLinks';
 import { rateLimiter } from './lib/rateLimits';
 import { isAdminRole } from '../lib/shared/adminRole';
+import { requireUserWithUsername } from './lib/usernameGate';
 
 const CACHE_CLEANUP_BATCH_SIZE = 200;
 const CACHE_CLEANUP_MAX_BATCHES = 25;
@@ -876,10 +877,10 @@ export const ensureForUrl = action({
 			};
 		}
 
-		const authUser = await getAuthUser(ctx);
-		const viewerKey = getViewerKey(authUser?._id);
+		const authUser = await requireUserWithUsername(ctx);
+		const viewerKey = getViewerKey(authUser._id);
 		const sourceHost = sourceHostFromUrl(normalizedUrl);
-		const domains = await getSourceDomains(ctx, authUser?._id ?? null);
+		const domains = await getSourceDomains(ctx, authUser._id);
 		const sourceDomainFingerprint = createSourceDomainFingerprint(domains);
 		const existingRows = await ctx.runQuery(
 			(internal as any).similar_links.getCacheRowsByViewerAndNormalizedUrl,
@@ -919,10 +920,7 @@ export const refreshNow = action({
 	},
 	returns: actionResponseValidator,
 	handler: async (ctx, args): Promise<SimilarLinksActionResponse> => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 		const isAdmin = isAdminRole(authUser.role);
 
 		const normalizedUrl = normalizeUrlSafely(args.url);

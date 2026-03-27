@@ -30,7 +30,7 @@
 
 	const resolvePath = resolve as unknown as (path: string) => string;
 	const sidebar = useSidebar();
-	const profileHref = $derived(user.username ? `/u/${user.username}` : '/settings/username');
+	const profileHref = $derived(user.username ? `/u/${user.username}` : '/profile');
 
 	function signOut() {
 		window.location.assign(resolve('/logout'));

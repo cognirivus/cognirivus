@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
@@ -47,7 +48,9 @@
 
 	$effect(() => {
 		if (!meQuery.isLoading && !meQuery.data) {
-			goto(`/signin?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`);
+			goto(
+				`${resolve('/signin')}?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
+			);
 		}
 	});
 
@@ -64,12 +67,12 @@
 				communityId: (visibility === 'public' && communityId) || undefined
 			});
 			toast.success('Post created');
-			goto(`/post/${postId}`);
+			goto(resolve(`/post/${postId}`));
 		} catch (error: any) {
 			const message = error?.message ?? 'Failed to create post';
-			if (message.includes('/settings/username')) {
+			if (message.includes('/profile')) {
 				toast.error('Set your username first');
-				goto('/settings/username');
+				goto(resolve('/profile'));
 				return;
 			}
 			toast.error(message);
@@ -102,7 +105,7 @@
 			}
 			sourceInput = '';
 			sourceTitle = '';
-			goto('/feed?scope=you');
+			goto(`${resolve('/feed')}?scope=you`);
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Failed to add source');
 		} finally {
@@ -125,7 +128,7 @@
 			}
 			saveUrl = '';
 			saveTitle = '';
-			goto('/feed?scope=you');
+			goto(`${resolve('/feed')}?scope=you`);
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Failed to save link');
 		} finally {

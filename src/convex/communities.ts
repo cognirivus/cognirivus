@@ -2,9 +2,9 @@ import { v } from 'convex/values';
 import { paginationOptsValidator } from 'convex/server';
 import { mutation, query } from './_generated/server';
 import { getAuthUser } from './auth';
-import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { rateLimiter } from './lib/rateLimits';
+import { requireUserWithUsername } from './lib/usernameGate';
 
 const COMMUNITY_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 
@@ -79,19 +79,6 @@ const requireAuthenticatedUser = async (ctx: any): Promise<AuthenticatedUser> =>
 };
 
 const normalizeSlug = (slug: string) => slug.trim().toLowerCase();
-
-const ensureUsername = async (ctx: any, authUser: AuthenticatedUser): Promise<void> => {
-	const profileId = await ctx.runMutation(internal.profiles.ensureProfileForAuth, {
-		authId: authUser._id,
-		email: authUser.email,
-		name: authUser.name,
-		image: authUser.image
-	});
-	const profile = await ctx.db.get(profileId);
-	if (!profile || !profile.username) {
-		throw new Error('Please set your username in /settings/username first.');
-	}
-};
 
 const getMembership = async (ctx: any, communityId: Id<'communities'>, userAuthId: string) => {
 	return await ctx.db
@@ -168,9 +155,8 @@ export const create = mutation({
 	},
 	returns: v.id('communities'),
 	handler: async (ctx, args): Promise<Id<'communities'>> => {
-		const authUser = await requireAuthenticatedUser(ctx);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'createCommunity', { key: authUser._id, throws: true });
-		await ensureUsername(ctx, authUser);
 
 		const slug = normalizeSlug(args.slug);
 		if (!COMMUNITY_SLUG_PATTERN.test(slug)) {
@@ -220,9 +206,8 @@ export const requestJoin = mutation({
 		status: v.union(v.literal('active'), v.literal('pending'))
 	}),
 	handler: async (ctx, args): Promise<{ status: 'active' | 'pending' }> => {
-		const authUser = await requireAuthenticatedUser(ctx);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'requestJoin', { key: authUser._id, throws: true });
-		await ensureUsername(ctx, authUser);
 
 		const community = await ctx.db.get(args.communityId);
 		if (!community) {
@@ -293,7 +278,7 @@ export const approveJoin = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await requireAuthenticatedUser(ctx);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'moderateJoin', { key: authUser._id, throws: true });
 
 		const membership = await ctx.db.get(args.membershipId);
@@ -321,7 +306,7 @@ export const rejectJoin = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await requireAuthenticatedUser(ctx);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'moderateJoin', { key: authUser._id, throws: true });
 
 		const membership = await ctx.db.get(args.membershipId);

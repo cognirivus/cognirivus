@@ -2,6 +2,7 @@ import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import {
+	internalQuery,
 	internalMutation,
 	mutation,
 	query,
@@ -212,6 +213,21 @@ export const getMyProfile = query({
 		}
 		const profile = await toProfileSummary(ctx, authUser._id);
 		return profile;
+	}
+});
+
+export const getUsernameForAuth = internalQuery({
+	args: {
+		authId: v.string()
+	},
+	returns: v.union(v.null(), v.string()),
+	handler: async (ctx, args) => {
+		const profile = await ctx.db
+			.query('users_profile')
+			.withIndex('by_authId', (q) => q.eq('authId', args.authId))
+			.unique();
+
+		return profile?.username ?? null;
 	}
 });
 

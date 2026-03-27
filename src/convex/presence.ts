@@ -4,6 +4,7 @@ import { components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
+import { requireUserWithUsername } from './lib/usernameGate';
 import { Presence } from '@convex-dev/presence';
 
 const MAX_SCOPE_ITEMS = 200;
@@ -135,8 +136,7 @@ export const heartbeat = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) throw new Error('Not authenticated');
+		const user = await requireUserWithUsername(ctx);
 		if (args.userId && args.userId !== user._id) {
 			throw new Error('Invalid heartbeat identity');
 		}

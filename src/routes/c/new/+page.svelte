@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
@@ -23,7 +24,9 @@
 
 	$effect(() => {
 		if (!meQuery.isLoading && !meQuery.data) {
-			goto(`/signin?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`);
+			goto(
+				`${resolve('/signin')}?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
+			);
 		}
 	});
 
@@ -38,12 +41,12 @@
 				visibility
 			});
 			toast.success('Community created');
-			goto(`/c/${normalizeSlug(slug)}`);
+			goto(resolve(`/c/${normalizeSlug(slug)}`));
 		} catch (error: any) {
 			const message = error?.message ?? 'Failed to create community';
-			if (message.includes('/settings/username')) {
+			if (message.includes('/profile')) {
 				toast.error('Set your username first');
-				goto('/settings/username');
+				goto(resolve('/profile'));
 				return;
 			}
 			toast.error(message);
@@ -57,7 +60,7 @@
 	<!-- Header -->
 	<div class="mb-6">
 		<a
-			href="/c"
+			href={resolve('/c')}
 			class="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
 		>
 			<ArrowLeft class="size-4" />

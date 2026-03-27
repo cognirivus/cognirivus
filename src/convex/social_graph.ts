@@ -2,30 +2,13 @@ import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
 import { getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
+import { requireUserWithUsername } from './lib/usernameGate';
 
 const getOptionalAuthUser = async (ctx: any) => {
 	try {
 		return await getAuthUser(ctx);
 	} catch {
 		return null;
-	}
-};
-
-const requireAuthenticatedUser = async (ctx: any) => {
-	const authUser = await getOptionalAuthUser(ctx);
-	if (!authUser) {
-		throw new Error('Authentication required');
-	}
-	return authUser;
-};
-
-const ensureUsername = async (ctx: any, authUserId: string) => {
-	const profile = await ctx.db
-		.query('users_profile')
-		.withIndex('by_authId', (q: any) => q.eq('authId', authUserId))
-		.unique();
-	if (!profile || !profile.username) {
-		throw new Error('Please set your username in /settings/username first.');
 	}
 };
 
@@ -59,8 +42,7 @@ export const followUser = mutation({
 		following: v.boolean()
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await requireAuthenticatedUser(ctx);
-		await ensureUsername(ctx, authUser._id);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'followUser', { key: authUser._id, throws: true });
 
 		if (authUser._id === args.targetAuthId) {
@@ -96,8 +78,7 @@ export const followCommunity = mutation({
 		following: v.boolean()
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await requireAuthenticatedUser(ctx);
-		await ensureUsername(ctx, authUser._id);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'followCommunity', { key: authUser._id, throws: true });
 
 		const community = await ctx.db.get(args.communityId);

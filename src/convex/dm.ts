@@ -10,6 +10,7 @@ import {
 import type { Doc, Id } from './_generated/dataModel';
 import { getAnyUserById, getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
+import { requireUserWithUsername } from './lib/usernameGate';
 
 const ALLOWED_REACTIONS = [
 	'\u{1F44D}',
@@ -206,10 +207,7 @@ export const createOrGetConversation = mutation({
 	},
 	returns: v.id('dm_conversations'),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) {
-			throw new Error('Not authenticated');
-		}
+		const user = await requireUserWithUsername(ctx);
 
 		await rateLimiter.limit(ctx, 'dmMessage', { key: user._id, throws: true });
 
@@ -275,9 +273,6 @@ export const listConversations = query({
 	),
 	handler: async (ctx) => {
 		const user = await getAuthUser(ctx);
-		if (!user) {
-			throw new Error('Not authenticated');
-		}
 
 		const participantRows = await ctx.db
 			.query('dm_participants')
@@ -378,9 +373,6 @@ export const getMessages = query({
 	returns: v.array(messageWithReactionsValidator),
 	handler: async (ctx, args) => {
 		const user = await getAuthUser(ctx);
-		if (!user) {
-			throw new Error('Not authenticated');
-		}
 
 		await requireConversationParticipant(ctx, user._id, args.conversationId);
 		const limit = normalizeMessagesLimit(args.limit);
@@ -524,9 +516,6 @@ export const getConversationByUsername = query({
 	returns: v.union(v.null(), v.id('dm_conversations')),
 	handler: async (ctx, args) => {
 		const user = await getAuthUser(ctx);
-		if (!user) {
-			throw new Error('Not authenticated');
-		}
 
 		const profile = await ctx.db
 			.query('users_profile')
@@ -557,10 +546,7 @@ export const sendMessage = mutation({
 	},
 	returns: v.id('dm_messages'),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) {
-			throw new Error('Not authenticated');
-		}
+		const user = await requireUserWithUsername(ctx);
 
 		await rateLimiter.limit(ctx, 'dmMessage', { key: user._id, throws: true });
 		const conversation = await requireConversationParticipant(ctx, user._id, args.conversationId);
@@ -621,10 +607,7 @@ export const editMessage = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) {
-			throw new Error('Not authenticated');
-		}
+		const user = await requireUserWithUsername(ctx);
 
 		const message = await ctx.db.get(args.messageId);
 		if (!message) {
@@ -661,10 +644,7 @@ export const deleteMessage = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) {
-			throw new Error('Not authenticated');
-		}
+		const user = await requireUserWithUsername(ctx);
 
 		const message = await ctx.db.get(args.messageId);
 		if (!message) {
@@ -700,10 +680,7 @@ export const toggleReaction = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) {
-			throw new Error('Not authenticated');
-		}
+		const user = await requireUserWithUsername(ctx);
 
 		await rateLimiter.limit(ctx, 'dmReaction', { key: user._id, throws: true });
 
@@ -748,10 +725,7 @@ export const markAsRead = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await getAuthUser(ctx);
-		if (!user) {
-			throw new Error('Not authenticated');
-		}
+		const user = await requireUserWithUsername(ctx);
 
 		const conversation = await requireConversationParticipant(ctx, user._id, args.conversationId);
 		const otherUserAuthId =

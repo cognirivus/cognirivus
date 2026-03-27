@@ -36,9 +36,7 @@
 		keepPreviousData: true
 	}));
 	const currentUser = $derived(currentUserQuery.data);
-	const profileHref = $derived(
-		currentUser?.username ? `/u/${currentUser.username}` : '/settings/username'
-	);
+	const profileHref = $derived(currentUser?.username ? `/u/${currentUser.username}` : '/profile');
 	const redirectTo = $derived(encodeURIComponent(page.url.pathname + page.url.search));
 
 	function isRouteActive(href: string) {

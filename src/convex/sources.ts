@@ -14,6 +14,7 @@ import type { Id } from './_generated/dataModel';
 import { rateLimiter } from './lib/rateLimits';
 import { r2 } from './lib/r2';
 import { isAdminRole } from '../lib/shared/adminRole';
+import { requireUserWithUsername } from './lib/usernameGate';
 import { Workpool } from '@convex-dev/workpool';
 import {
 	countAuthorSharedPostsForSource,
@@ -1755,9 +1756,6 @@ export const getSourceItem = query({
 	returns: v.union(v.null(), sourceItemDetailsValidator),
 	handler: async (ctx, args) => {
 		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
 
 		const delivery = (
 			await ctx.db
@@ -1937,10 +1935,7 @@ export const addSource = action({
 		resolvedCanonicalUrl: v.string()
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 		const isAdmin = isAdminRole(authUser.role);
 		const identity = await ctx.auth.getUserIdentity();
 		const rawSessionId = (identity as { sessionId?: unknown } | null)?.sessionId;
@@ -2091,10 +2086,7 @@ export const saveWebsiteLink = mutation({
 		alreadySaved: v.boolean()
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 
 		const normalizedUrl = normalizeHttpUrl(args.url).toString();
 		const title = (args.title?.trim() || normalizedUrl).slice(0, SOURCE_TITLE_LIMIT);
@@ -2128,10 +2120,7 @@ export const saveSourceItemToBookmarks = mutation({
 		alreadySaved: v.boolean()
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 
 		const sourceItem: {
 			sourceItemId: Id<'source_items'>;
@@ -2173,10 +2162,7 @@ export const unsaveBookmarkItem = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 
 		const bookmarkSource = await getBookmarkSourceByUserAuthId(ctx, authUser._id);
 		if (!bookmarkSource) {
@@ -2230,10 +2216,7 @@ export const followSavedSourceSuggestion = action({
 		resolvedCanonicalUrl: v.string()
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 		const isAdmin = isAdminRole(authUser.role);
 
 		const suggestion = await ctx.runQuery(
@@ -2434,10 +2417,7 @@ export const refreshSource = action({
 	},
 	returns: v.id('source_jobs'),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 
 		const sourceForRefresh: {
 			sourceId: Id<'sources'>;
@@ -2520,9 +2500,6 @@ export const getMyRefreshQuota = query({
 	returns: refreshQuotaValidator,
 	handler: async (ctx) => {
 		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
 
 		if (isAdminRole(authUser.role)) {
 			return {
@@ -2711,9 +2688,6 @@ export const listMySources = query({
 	}),
 	handler: async (ctx, args) => {
 		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
 
 		const subscriptions = await ctx.db
 			.query('source_subscriptions')
@@ -2801,9 +2775,6 @@ export const listMySimilarLinkDomains = query({
 		}>
 	> => {
 		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
 
 		const rows: Array<{
 			domain: string;
@@ -2834,9 +2805,6 @@ export const listSavedSourceSuggestions = query({
 	}),
 	handler: async (ctx, args) => {
 		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
 
 		const suggestions = await ctx.db
 			.query('saved_source_suggestions')
@@ -2897,10 +2865,7 @@ export const pauseSource = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 		const subscription = await ctx.db
 			.query('source_subscriptions')
 			.withIndex('by_userAuthId_and_sourceId', (q) =>
@@ -2924,10 +2889,7 @@ export const resumeSource = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 		const subscription = await ctx.db
 			.query('source_subscriptions')
 			.withIndex('by_userAuthId_and_sourceId', (q) =>
@@ -2952,10 +2914,7 @@ export const setSimilarLinkDomainInclusion = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 		const normalizedDomain = dedupeDomains([args.domain])[0];
 		if (!normalizedDomain) {
 			throw new Error('Invalid domain.');
@@ -3049,10 +3008,7 @@ export const unsubscribeSource = action({
 	},
 	returns: v.id('source_jobs'),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'unsubscribeSource', { key: authUser._id, throws: true });
 		return await enqueueBulkUnsubscribeJob(ctx, authUser._id, [args.sourceId]);
 	}
@@ -3064,10 +3020,7 @@ export const bulkUnsubscribeSources = action({
 	},
 	returns: v.id('source_jobs'),
 	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-		if (!authUser) {
-			throw new Error('Unauthorized');
-		}
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'unsubscribeSource', { key: authUser._id, throws: true });
 		const uniqueSourceIds = [...new Set(args.sourceIds)];
 		if (uniqueSourceIds.length === 0) {

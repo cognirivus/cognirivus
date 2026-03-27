@@ -7,6 +7,7 @@ import type { Id } from './_generated/dataModel';
 import { deleteR2MetadataOnly, deleteR2ObjectOnly, r2 } from './lib/r2';
 import { rateLimiter } from './lib/rateLimits';
 import { trackPostDeleted, trackPostInserted } from './lib/aggregates';
+import { requireUserWithUsername } from './lib/usernameGate';
 
 const POST_BODY_INLINE_LIMIT = 1000;
 const POST_SNIPPET_LIMIT = 500;
@@ -74,14 +75,6 @@ const getOptionalAuthUser = async (ctx: any) => {
 	}
 };
 
-const requireAuthenticatedUser = async (ctx: any) => {
-	const authUser = await getOptionalAuthUser(ctx);
-	if (!authUser) {
-		throw new Error('Authentication required');
-	}
-	return authUser;
-};
-
 const normalizeTitle = (title: string) => title.trim();
 const normalizeBody = (body: string) => body.trim();
 const createSnippet = (input: string) => input.trim().slice(0, POST_SNIPPET_LIMIT);
@@ -133,43 +126,6 @@ const normalizeTagsForBackfill = (tags?: Array<string>) =>
 			(tags ?? []).map((tag) => normalizeTag(tag).slice(0, MAX_TAG_LENGTH)).filter(Boolean)
 		)
 	].slice(0, MAX_TAGS_PER_POST);
-
-const ensureProfile = async (ctx: any, authUser: any) => {
-	const existing = await ctx.db
-		.query('users_profile')
-		.withIndex('by_authId', (q: any) => q.eq('authId', authUser._id))
-		.unique();
-
-	if (existing) {
-		if (!existing.username) {
-			throw new Error('Please set your username in /settings/username before posting.');
-		}
-		if (existing.nameLower !== authUser.name.trim().toLowerCase()) {
-			await ctx.db.patch(existing._id, {
-				nameLower: authUser.name.trim().toLowerCase(),
-				updatedAt: Date.now()
-			});
-		}
-		return existing;
-	}
-
-	const now = Date.now();
-	const insertedId = await ctx.db.insert('users_profile', {
-		authId: authUser._id,
-		email: authUser.email,
-		name: authUser.name,
-		nameLower: authUser.name.trim().toLowerCase(),
-		image: authUser.image,
-		createdAt: now,
-		updatedAt: now
-	});
-
-	const inserted = await ctx.db.get(insertedId);
-	if (!inserted || !inserted.username) {
-		throw new Error('Please set your username in /settings/username before posting.');
-	}
-	return inserted;
-};
 
 const canAccessPost = async (ctx: any, post: any, authUserId: string | null) => {
 	if (authUserId === post.authorAuthId) {
@@ -379,13 +335,7 @@ export const create = action({
 	},
 	returns: v.id('posts'),
 	handler: async (ctx, args): Promise<Id<'posts'>> => {
-		const authUser = await requireAuthenticatedUser(ctx);
-		await ctx.runMutation(internal.profiles.ensureProfileForAuth, {
-			authId: authUser._id,
-			email: authUser.email,
-			name: authUser.name,
-			image: authUser.image
-		});
+		const authUser = await requireUserWithUsername(ctx);
 
 		const title = normalizeTitle(args.title);
 		if (title.length < 4 || title.length > 220) {
@@ -438,13 +388,7 @@ export const shareSourceItemAsPost = action({
 	},
 	returns: v.id('posts'),
 	handler: async (ctx, args): Promise<Id<'posts'>> => {
-		const authUser = await requireAuthenticatedUser(ctx);
-		await ctx.runMutation(internal.profiles.ensureProfileForAuth, {
-			authId: authUser._id,
-			email: authUser.email,
-			name: authUser.name,
-			image: authUser.image
-		});
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'createPost', { key: authUser._id, throws: true });
 
 		const sourceItem: {
@@ -634,8 +578,7 @@ export const addComment = mutation({
 	},
 	returns: v.id('post_comments'),
 	handler: async (ctx, args) => {
-		const authUser = await requireAuthenticatedUser(ctx);
-		await ensureProfile(ctx, authUser);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'createComment', { key: authUser._id, throws: true });
 
 		const post = await ctx.db.get(args.postId);
@@ -691,8 +634,7 @@ export const vote = mutation({
 		userVote: userVoteValidator
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await requireAuthenticatedUser(ctx);
-		await ensureProfile(ctx, authUser);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'votePost', { key: authUser._id, throws: true });
 
 		const post = await ctx.db.get(args.postId);
@@ -755,8 +697,7 @@ export const voteComment = mutation({
 		userVote: userVoteValidator
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await requireAuthenticatedUser(ctx);
-		await ensureProfile(ctx, authUser);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'voteComment', { key: authUser._id, throws: true });
 
 		const comment = await ctx.db.get(args.commentId);
@@ -819,8 +760,7 @@ export const setVisibility = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await requireAuthenticatedUser(ctx);
-		await ensureProfile(ctx, authUser);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'createPost', { key: authUser._id, throws: true });
 
 		const post = await ctx.db.get(args.postId);
@@ -873,8 +813,7 @@ export const deletePost = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await requireAuthenticatedUser(ctx);
-		await ensureProfile(ctx, authUser);
+		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'deletePost', { key: authUser._id, throws: true });
 
 		const post = await ctx.db.get(args.postId);

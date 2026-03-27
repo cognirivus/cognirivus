@@ -91,10 +91,12 @@ const getIdentityRecord = async (ctx: any): Promise<IdentityRecord | null> => {
 };
 
 const getProfileByAuthId = async (ctx: any, authId: string) =>
-	await ctx.db
-		.query('users_profile')
-		.withIndex('by_authId', (q: any) => q.eq('authId', authId))
-		.unique();
+	ctx.db
+		? await ctx.db
+				.query('users_profile')
+				.withIndex('by_authId', (q: any) => q.eq('authId', authId))
+				.unique()
+		: null;
 
 const buildAuthUser = async (ctx: any, identity: IdentityRecord): Promise<AuthUser> => {
 	const profile = await getProfileByAuthId(ctx, identity.subject);
