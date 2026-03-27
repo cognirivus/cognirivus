@@ -1,11 +1,11 @@
 import { mutation, query } from './_generated/server';
 import { v } from 'convex/values';
-import { authComponent } from './auth';
+import { getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
 
 const getOptionalAuthUser = async (ctx: any) => {
 	try {
-		return await authComponent.getAuthUser(ctx);
+		return await getAuthUser(ctx);
 	} catch {
 		return null;
 	}

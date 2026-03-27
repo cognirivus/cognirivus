@@ -8,7 +8,7 @@ import {
 	mutation,
 	query
 } from './_generated/server';
-import { authComponent } from './auth';
+import { getAuthUser } from './auth';
 import { components, internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { rateLimiter } from './lib/rateLimits';
@@ -1754,7 +1754,7 @@ export const getSourceItem = query({
 	},
 	returns: v.union(v.null(), sourceItemDetailsValidator),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -1937,7 +1937,7 @@ export const addSource = action({
 		resolvedCanonicalUrl: v.string()
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2091,7 +2091,7 @@ export const saveWebsiteLink = mutation({
 		alreadySaved: v.boolean()
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2128,7 +2128,7 @@ export const saveSourceItemToBookmarks = mutation({
 		alreadySaved: v.boolean()
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2173,7 +2173,7 @@ export const unsaveBookmarkItem = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2230,7 +2230,7 @@ export const followSavedSourceSuggestion = action({
 		resolvedCanonicalUrl: v.string()
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2434,7 +2434,7 @@ export const refreshSource = action({
 	},
 	returns: v.id('source_jobs'),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2519,7 +2519,7 @@ export const getMyRefreshQuota = query({
 	args: {},
 	returns: refreshQuotaValidator,
 	handler: async (ctx) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2710,7 +2710,7 @@ export const listMySources = query({
 		continueCursor: v.union(v.string(), v.null())
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2784,7 +2784,9 @@ export const listMySources = query({
 export const listMySimilarLinkDomains = query({
 	args: {},
 	returns: v.array(similarLinkDomainRowValidator),
-	handler: async (ctx): Promise<
+	handler: async (
+		ctx
+	): Promise<
 		Array<{
 			domain: string;
 			included: boolean;
@@ -2798,7 +2800,7 @@ export const listMySimilarLinkDomains = query({
 			}>;
 		}>
 	> => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2831,7 +2833,7 @@ export const listSavedSourceSuggestions = query({
 		continueCursor: v.union(v.string(), v.null())
 	}),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2842,48 +2844,50 @@ export const listSavedSourceSuggestions = query({
 			.order('desc')
 			.paginate(args.paginationOpts);
 
-	const subscriptions = await ctx.db
-		.query('source_subscriptions')
-		.withIndex('by_userAuthId_and_updatedAt', (q) => q.eq('userAuthId', authUser._id))
-		.collect();
-	const activeSubscriptions = subscriptions.filter((subscription) => subscription.status === 'active');
-	const activeSourceIds = activeSubscriptions.map((subscription) => subscription.sourceId);
-	const sourceDocs = await Promise.all(activeSourceIds.map((sourceId) => ctx.db.get(sourceId)));
-	const activeSources = sourceDocs.filter(
-		(source): source is NonNullable<typeof source> => !!source && source.type !== 'bookmarks'
-	);
-	const activeHosts = new Set(activeSources.map((source) => sourceHostForDisplay(source.canonicalUrl)));
-	const activeSavedLinkTitles = new Set(
-		activeSources
-			.map((source) => source.title.trim().toLowerCase())
-			.filter(Boolean)
-	);
+		const subscriptions = await ctx.db
+			.query('source_subscriptions')
+			.withIndex('by_userAuthId_and_updatedAt', (q) => q.eq('userAuthId', authUser._id))
+			.collect();
+		const activeSubscriptions = subscriptions.filter(
+			(subscription) => subscription.status === 'active'
+		);
+		const activeSourceIds = activeSubscriptions.map((subscription) => subscription.sourceId);
+		const sourceDocs = await Promise.all(activeSourceIds.map((sourceId) => ctx.db.get(sourceId)));
+		const activeSources = sourceDocs.filter(
+			(source): source is NonNullable<typeof source> => !!source && source.type !== 'bookmarks'
+		);
+		const activeHosts = new Set(
+			activeSources.map((source) => sourceHostForDisplay(source.canonicalUrl))
+		);
+		const activeSavedLinkTitles = new Set(
+			activeSources.map((source) => source.title.trim().toLowerCase()).filter(Boolean)
+		);
 
-	return {
-		page: suggestions.page
-			.map((suggestion) => {
-				const isFollowing =
-					activeHosts.has(suggestion.originHost) ||
-					activeSavedLinkTitles.has(suggestion.originHost.toLowerCase());
-				return {
-					_id: suggestion._id,
-					sourceType: suggestion.sourceType,
-					normalizedKey: suggestion.normalizedKey,
-					canonicalUrl: suggestion.canonicalUrl,
-					originHost: suggestion.originHost,
-					itemCount: suggestion.itemCount,
-					latestSavedUrl: suggestion.latestSavedUrl,
-					latestSavedTitle: suggestion.latestSavedTitle,
-					lastSavedAt: suggestion.lastSavedAt,
-					createdAt: suggestion.createdAt,
-					updatedAt: suggestion.updatedAt,
-					isFollowing
-				};
-			})
-			.filter((suggestion) => !suggestion.isFollowing),
-		isDone: suggestions.isDone,
-		continueCursor: suggestions.continueCursor
-	};
+		return {
+			page: suggestions.page
+				.map((suggestion) => {
+					const isFollowing =
+						activeHosts.has(suggestion.originHost) ||
+						activeSavedLinkTitles.has(suggestion.originHost.toLowerCase());
+					return {
+						_id: suggestion._id,
+						sourceType: suggestion.sourceType,
+						normalizedKey: suggestion.normalizedKey,
+						canonicalUrl: suggestion.canonicalUrl,
+						originHost: suggestion.originHost,
+						itemCount: suggestion.itemCount,
+						latestSavedUrl: suggestion.latestSavedUrl,
+						latestSavedTitle: suggestion.latestSavedTitle,
+						lastSavedAt: suggestion.lastSavedAt,
+						createdAt: suggestion.createdAt,
+						updatedAt: suggestion.updatedAt,
+						isFollowing
+					};
+				})
+				.filter((suggestion) => !suggestion.isFollowing),
+			isDone: suggestions.isDone,
+			continueCursor: suggestions.continueCursor
+		};
 	}
 });
 
@@ -2893,7 +2897,7 @@ export const pauseSource = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2920,7 +2924,7 @@ export const resumeSource = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -2948,7 +2952,7 @@ export const setSimilarLinkDomainInclusion = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -3045,7 +3049,7 @@ export const unsubscribeSource = action({
 	},
 	returns: v.id('source_jobs'),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -3060,7 +3064,7 @@ export const bulkUnsubscribeSources = action({
 	},
 	returns: v.id('source_jobs'),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}
@@ -3351,7 +3355,7 @@ export const getJobStatus = query({
 	},
 	returns: v.union(v.null(), sourceJobValidator),
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}

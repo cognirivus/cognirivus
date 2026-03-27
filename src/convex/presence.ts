@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { components } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { authComponent } from './auth';
+import { getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
 import { Presence } from '@convex-dev/presence';
 
@@ -75,7 +75,11 @@ const getConversationFromRoom = async (ctx: QueryCtx | MutationCtx, roomId: stri
 	}
 };
 
-const assertRoomAccess = async (ctx: QueryCtx | MutationCtx, roomId: string, userAuthId: string) => {
+const assertRoomAccess = async (
+	ctx: QueryCtx | MutationCtx,
+	roomId: string,
+	userAuthId: string
+) => {
 	if (roomId.startsWith(COMMUNITY_ROOM_PREFIX)) {
 		const community = await getCommunityFromRoom(ctx, roomId);
 		if (!community) {
@@ -131,7 +135,7 @@ export const heartbeat = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
 		if (args.userId && args.userId !== user._id) {
 			throw new Error('Invalid heartbeat identity');
@@ -187,7 +191,7 @@ export const getOnlineUsersForConversations = query({
 	},
 	returns: v.array(v.string()),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -230,7 +234,7 @@ export const getOnlineUsersForCommunity = query({
 	},
 	returns: v.array(v.string()),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}

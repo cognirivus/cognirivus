@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { mutation } from './_generated/server';
-import { authComponent } from './auth';
+import { getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
 
 const MAX_IMPORT_BATCH = 200;
@@ -96,7 +96,7 @@ export const importSelectedBookmarks = mutation({
 	},
 	returns: importResultValidator,
 	handler: async (ctx, args) => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}

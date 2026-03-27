@@ -1,7 +1,7 @@
 declare global {
 	namespace App {
 		interface Locals {
-			token: string | undefined;
+			auth: import('@workos/authkit-sveltekit').AuthKitAuth;
 		}
 		interface PageData {
 			currentUser?: {
@@ -9,12 +9,18 @@ declare global {
 				email: string;
 				name: string;
 				image?: string | null;
-				role?: unknown;
+				role?: string;
 				username: string | null;
 				hasUsername: boolean;
 			} | null;
 			isAdmin?: boolean;
-			authState?: import('@mmailaender/convex-better-auth-svelte/sveltekit').AuthState;
+			authUser?: {
+				id: string;
+				email: string;
+				firstName: string | null;
+				lastName: string | null;
+				profilePictureUrl: string | null;
+			} | null;
 		}
 	}
 }

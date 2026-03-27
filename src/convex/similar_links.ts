@@ -6,7 +6,7 @@ import {
 	internalQuery,
 	query
 } from './_generated/server';
-import { authComponent } from './auth';
+import { getAuthUser } from './auth';
 import { internal } from './_generated/api';
 import {
 	CACHE_TTL_MS,
@@ -190,11 +190,13 @@ const emptyTabView = (lastError: string | null = null): SimilarLinksTabView => (
 });
 
 const toTabViewState = (
-	row: (SimilarLinksRowLike & {
-		sourceDomainFingerprint?: string;
-		sourceDomainCount?: number;
-		sourceDomainsSnapshot?: Array<string>;
-	}) | null,
+	row:
+		| (SimilarLinksRowLike & {
+				sourceDomainFingerprint?: string;
+				sourceDomainCount?: number;
+				sourceDomainsSnapshot?: Array<string>;
+		  })
+		| null,
 	currentDomains: Array<string>,
 	currentDomainFingerprint: string,
 	now: number
@@ -309,10 +311,13 @@ const getCurrentView = async (
 	viewerKey: string,
 	normalizedUrl: string
 ): Promise<SimilarLinksCacheView> => {
-	const rows = await ctx.runQuery((internal as any).similar_links.getCacheRowsByViewerAndNormalizedUrl, {
-		viewerKey,
-		normalizedUrl
-	});
+	const rows = await ctx.runQuery(
+		(internal as any).similar_links.getCacheRowsByViewerAndNormalizedUrl,
+		{
+			viewerKey,
+			normalizedUrl
+		}
+	);
 	const sourceDomains = await getSourceDomains(
 		ctx,
 		viewerKey === ANONYMOUS_VIEWER_KEY ? null : viewerKey
@@ -834,7 +839,7 @@ export const getCachedByUrl = query({
 			return toCombinedView([], args.url, [], Date.now(), 'Invalid URL.');
 		}
 
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		const viewerKey = getViewerKey(authUser?._id);
 		const sourceDomains = await getSourceDomains(ctx, authUser?._id ?? null);
 		const rows = await ctx.db
@@ -871,7 +876,7 @@ export const ensureForUrl = action({
 			};
 		}
 
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		const viewerKey = getViewerKey(authUser?._id);
 		const sourceHost = sourceHostFromUrl(normalizedUrl);
 		const domains = await getSourceDomains(ctx, authUser?._id ?? null);
@@ -914,7 +919,7 @@ export const refreshNow = action({
 	},
 	returns: actionResponseValidator,
 	handler: async (ctx, args): Promise<SimilarLinksActionResponse> => {
-		const authUser = await authComponent.getAuthUser(ctx);
+		const authUser = await getAuthUser(ctx);
 		if (!authUser) {
 			throw new Error('Unauthorized');
 		}

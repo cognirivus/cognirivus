@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
-import { authComponent } from './auth';
+import { getAnyUserById, getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '🎉', '😮', '😢', '👀'] as const;
@@ -146,7 +146,7 @@ export const sendMessage = mutation({
 	},
 	returns: v.id('community_chat_messages'),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
 
 		await rateLimiter.limit(ctx, 'communityChatMessage', { key: user._id, throws: true });
@@ -175,7 +175,7 @@ export const editMessage = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
 
 		await requireActiveMembership(ctx, user._id, args.communityId);
@@ -211,7 +211,7 @@ export const deleteMessage = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
 
 		await requireActiveMembership(ctx, user._id, args.communityId);
@@ -245,7 +245,7 @@ export const getMessages = query({
 	},
 	returns: v.array(messageWithReactionsValidator),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
 
 		await requireActiveMembership(ctx, user._id, args.communityId);
@@ -273,9 +273,7 @@ export const getMessages = query({
 		const allReactions = reactionsPerMessage.flat();
 
 		const uniqueUserIds = [...new Set(allReactions.map((r) => r.userAuthId))];
-		const userProfiles = await Promise.all(
-			uniqueUserIds.map((id) => authComponent.getAnyUserById(ctx, id))
-		);
+		const userProfiles = await Promise.all(uniqueUserIds.map((id) => getAnyUserById(ctx, id)));
 		const userMap: Record<
 			string,
 			{
@@ -405,7 +403,7 @@ export const toggleReaction = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) throw new Error('Not authenticated');
 
 		await rateLimiter.limit(ctx, 'communityChatReaction', { key: user._id, throws: true });

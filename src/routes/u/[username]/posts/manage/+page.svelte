@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import type { Id } from '$convex/_generated/dataModel';
 	import { api } from '$convex/_generated/api';
@@ -31,7 +31,7 @@
 	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
-	const auth = useAuth();
+	const auth = useAppAuth();
 	const client = useConvexClient();
 	const username = $derived(page.params.username);
 

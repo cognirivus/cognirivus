@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 import { paginationOptsValidator } from 'convex/server';
 import { mutation, query } from './_generated/server';
-import { authComponent } from './auth';
+import { getAuthUser } from './auth';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { rateLimiter } from './lib/rateLimits';
@@ -59,7 +59,7 @@ type AuthenticatedUser = {
 
 const getOptionalAuthUser = async (ctx: any) => {
 	try {
-		return await authComponent.getAuthUser(ctx);
+		return await getAuthUser(ctx);
 	} catch {
 		return null;
 	}

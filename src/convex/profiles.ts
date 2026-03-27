@@ -9,7 +9,7 @@ import {
 	type QueryCtx
 } from './_generated/server';
 import type { Id } from './_generated/dataModel';
-import { authComponent } from './auth';
+import { getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
 
 const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
@@ -46,7 +46,7 @@ const profileSummaryValidator = v.object({
 
 const getOptionalAuthUser = async (ctx: QueryCtx | MutationCtx) => {
 	try {
-		return await authComponent.getAuthUser(ctx);
+		return await getAuthUser(ctx);
 	} catch {
 		return null;
 	}

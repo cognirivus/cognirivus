@@ -1,6 +1,7 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import {
@@ -24,34 +25,11 @@
 		...restProps
 	}: ComponentProps<typeof Sidebar.Root> = $props();
 
-	const auth = useAuth();
+	const auth = useAppAuth();
 
 	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
 	const currentUser = $derived(currentUserQuery.data);
-	const isAdmin = $derived.by(() => {
-		const role = currentUser?.role;
-		if (typeof role === 'string') {
-			const normalizedRole = role.toLowerCase();
-			return (
-				normalizedRole === 'admin' ||
-				normalizedRole === 'system-admin' ||
-				normalizedRole === 'superadmin' ||
-				normalizedRole === 'owner'
-			);
-		}
-		if (Array.isArray(role)) {
-			const roleValues = role as Array<unknown>;
-			return roleValues.some(
-				(entry: unknown) =>
-					typeof entry === 'string' &&
-					(entry.toLowerCase() === 'admin' ||
-						entry.toLowerCase() === 'system-admin' ||
-						entry.toLowerCase() === 'superadmin' ||
-						entry.toLowerCase() === 'owner')
-			);
-		}
-		return false;
-	});
+	const isAdmin = $derived(auth.isAdmin);
 
 	const myCommunitiesQuery = useQuery((api as any).communities.listMine, {});
 	const myCommunities = $derived(myCommunitiesQuery.data ?? []);
@@ -88,7 +66,7 @@
 			<Sidebar.MenuItem>
 				<Sidebar.MenuButton size="lg">
 					{#snippet child({ props })}
-						<a href="/" {...props}>
+						<a href={resolve('/')} {...props}>
 							<Logo size="sm" />
 						</a>
 					{/snippet}
@@ -136,7 +114,7 @@
 							<Sidebar.MenuItem>
 								<Sidebar.MenuButton isActive={isActive(`/c/${item.community.slug}`)}>
 									{#snippet child({ props })}
-										<a href={`/c/${item.community.slug}`} {...props}>
+										<a href={resolve(`/c/${item.community.slug}`)} {...props}>
 											<Users />
 											<span>c/{item.community.slug}</span>
 										</a>

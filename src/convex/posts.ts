@@ -1,7 +1,7 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { action, internalAction, internalMutation, mutation, query } from './_generated/server';
-import { authComponent } from './auth';
+import { getAuthUser } from './auth';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { deleteR2MetadataOnly, deleteR2ObjectOnly, r2 } from './lib/r2';
@@ -68,7 +68,7 @@ const commentValidator = v.object({
 
 const getOptionalAuthUser = async (ctx: any) => {
 	try {
-		return await authComponent.getAuthUser(ctx);
+		return await getAuthUser(ctx);
 	} catch {
 		return null;
 	}

@@ -8,7 +8,7 @@ import {
 	type QueryCtx
 } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { authComponent } from './auth';
+import { getAnyUserById, getAuthUser } from './auth';
 import { rateLimiter } from './lib/rateLimits';
 
 const ALLOWED_REACTIONS = [
@@ -206,7 +206,7 @@ export const createOrGetConversation = mutation({
 	},
 	returns: v.id('dm_conversations'),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -217,7 +217,7 @@ export const createOrGetConversation = mutation({
 			throw new Error('Cannot start a conversation with yourself');
 		}
 
-		const targetUser = await authComponent.getAnyUserById(ctx, args.targetAuthId);
+		const targetUser = await getAnyUserById(ctx, args.targetAuthId);
 		if (!targetUser) {
 			throw new Error('Target user not found');
 		}
@@ -274,7 +274,7 @@ export const listConversations = query({
 		})
 	),
 	handler: async (ctx) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -377,7 +377,7 @@ export const getMessages = query({
 	},
 	returns: v.array(messageWithReactionsValidator),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -406,7 +406,7 @@ export const getMessages = query({
 
 		const uniqueUserIds = [...new Set(allReactions.map((reaction) => reaction.userAuthId))];
 		const profiles = await Promise.all(
-			uniqueUserIds.map((userAuthId) => authComponent.getAnyUserById(ctx, userAuthId))
+			uniqueUserIds.map((userAuthId) => getAnyUserById(ctx, userAuthId))
 		);
 		const profileByUserId = new Map(
 			uniqueUserIds.map((userAuthId, index) => [userAuthId, profiles[index]])
@@ -523,7 +523,7 @@ export const getConversationByUsername = query({
 	},
 	returns: v.union(v.null(), v.id('dm_conversations')),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -557,7 +557,7 @@ export const sendMessage = mutation({
 	},
 	returns: v.id('dm_messages'),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -621,7 +621,7 @@ export const editMessage = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -661,7 +661,7 @@ export const deleteMessage = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -700,7 +700,7 @@ export const toggleReaction = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -748,7 +748,7 @@ export const markAsRead = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -784,7 +784,7 @@ export const searchUsers = query({
 		})
 	),
 	handler: async (ctx, args) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}
@@ -863,7 +863,7 @@ export const getUnreadCount = query({
 	args: {},
 	returns: v.number(),
 	handler: async (ctx) => {
-		const user = await authComponent.getAuthUser(ctx);
+		const user = await getAuthUser(ctx);
 		if (!user) {
 			throw new Error('Not authenticated');
 		}

@@ -52,7 +52,6 @@
 	"dependencies": {
 		"@convex-dev/action-retrier": "^0.3.0",
 		"@convex-dev/aggregate": "^0.2.1",
-		"@convex-dev/better-auth": "^0.10.10",
 		"@convex-dev/crons": "^0.2.0",
 		"@convex-dev/migrations": "^0.3.1",
 		"@convex-dev/presence": "^0.3.0",
@@ -61,9 +60,8 @@
 		"@convex-dev/rate-limiter": "^0.3.2",
 		"@convex-dev/workflow": "^0.3.4",
 		"@convex-dev/workpool": "^0.3.2",
-		"@mmailaender/convex-better-auth-svelte": "^0.5.0",
 		"@openrouter/ai-sdk-provider": "^1.5.4",
-		"better-auth": "1.4.9",
+		"@workos/authkit-sveltekit": "^0.1.0",
 		"convex": "^1.31.7",
 		"convex-svelte": "^0.0.12",
 		"isomorphic-dompurify": "^2.35.0",

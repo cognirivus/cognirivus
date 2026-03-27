@@ -2,7 +2,7 @@ import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { query, type QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { authComponent } from './auth';
+import { getAuthUser } from './auth';
 import {
 	applyFeedRanking,
 	paginateByCursor,
@@ -122,7 +122,7 @@ const pagedFeedValidator = v.object({
 
 const getOptionalAuthUser = async (ctx: QueryCtx) => {
 	try {
-		return await authComponent.getAuthUser(ctx);
+		return await getAuthUser(ctx);
 	} catch {
 		return null;
 	}

@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { Button } from '$lib/components/ui/button';
 
-	const auth = useAuth();
+	const auth = useAppAuth();
 </script>
 
 <main class="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6 sm:py-24">

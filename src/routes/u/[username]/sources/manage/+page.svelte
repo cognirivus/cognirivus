@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import type { Id } from '$convex/_generated/dataModel';
 	import { api } from '$convex/_generated/api';
@@ -22,7 +22,7 @@
 	import { ArrowLeft, Link2, Loader2, Pause, Play, RefreshCw, Trash2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
-	const auth = useAuth();
+	const auth = useAppAuth();
 	const client = useConvexClient();
 	const username = $derived(page.params.username);
 
@@ -178,9 +178,7 @@
 				included
 			});
 			toast.success(
-				included
-					? 'Domain included in similar links.'
-					: 'Domain excluded from similar links.'
+				included ? 'Domain included in similar links.' : 'Domain excluded from similar links.'
 			);
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Failed to update similar-links setting');
@@ -324,7 +322,10 @@
 								<TableHeader>
 									<TableRow>
 										<TableHead class="w-12">
-											<Checkbox checked={allSelected} onCheckedChange={(v) => toggleSelectAll(!!v)} />
+											<Checkbox
+												checked={allSelected}
+												onCheckedChange={(v) => toggleSelectAll(!!v)}
+											/>
 										</TableHead>
 										<TableHead>Source</TableHead>
 										<TableHead>Type</TableHead>
@@ -411,7 +412,9 @@
 													<Button
 														variant="outline"
 														size="icon-sm"
-														disabled={busySourceId === row.sourceId || isRefreshLimited || !canRefresh}
+														disabled={busySourceId === row.sourceId ||
+															isRefreshLimited ||
+															!canRefresh}
 														onclick={() => refreshSource(row.sourceId)}
 														title={refreshTitle}
 													>
@@ -450,8 +453,8 @@
 							<div>
 								<h2 class="text-base font-semibold">Similar Search Domains</h2>
 								<p class="text-sm text-muted-foreground">
-									These are the domains used to filter similar links. Changes apply the next
-									time you refresh similar links.
+									These are the domains used to filter similar links. Changes apply the next time
+									you refresh similar links.
 								</p>
 							</div>
 
@@ -502,7 +505,8 @@
 														<Switch
 															checked={row.included}
 															disabled={busySimilarDomain === row.domain}
-															onCheckedChange={(checked) => updateSimilarLinkDomain(row.domain, !!checked)}
+															onCheckedChange={(checked) =>
+																updateSimilarLinkDomain(row.domain, !!checked)}
 														/>
 													</div>
 												</TableCell>

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { useSidebar } from '$lib/components/ui/sidebar/index.js';
-	import { authClient } from '$lib/auth-client';
 	import {
 		BadgeCheck,
 		Bell,
@@ -28,13 +28,12 @@
 		};
 	} = $props();
 
+	const resolvePath = resolve as unknown as (path: string) => string;
 	const sidebar = useSidebar();
 	const profileHref = $derived(user.username ? `/u/${user.username}` : '/settings/username');
 
-	async function signOut() {
-		await authClient.signOut();
-		await invalidateAll();
-		goto('/');
+	function signOut() {
+		window.location.assign(resolve('/logout'));
 	}
 </script>
 
@@ -95,21 +94,23 @@
 				</DropdownMenu.Group>
 				<DropdownMenu.Separator />
 				<DropdownMenu.Group>
-					<DropdownMenu.Item onclick={() => goto(profileHref)}>
+					<DropdownMenu.Item onclick={() => goto(resolvePath(profileHref))}>
 						<User class="size-4" />
 						Profile
 					</DropdownMenu.Item>
 					{#if user.username}
-						<DropdownMenu.Item onclick={() => goto(`${profileHref}/posts/manage`)}>
+						<DropdownMenu.Item onclick={() => goto(resolvePath(`${profileHref}/posts/manage`))}>
 							<FileText class="size-4" />
 							Manage posts
 						</DropdownMenu.Item>
-						<DropdownMenu.Item onclick={() => goto(`${profileHref}/sources/manage`)}>
+						<DropdownMenu.Item
+							onclick={() => goto(resolvePath(`${profileHref}/sources/manage`))}
+						>
 							<Archive class="size-4" />
 							Manage sources
 						</DropdownMenu.Item>
 					{/if}
-					<DropdownMenu.Item onclick={() => goto('/settings')}>
+					<DropdownMenu.Item onclick={() => goto(resolve('/settings'))}>
 						<Settings class="size-4" />
 						Account Settings
 					</DropdownMenu.Item>

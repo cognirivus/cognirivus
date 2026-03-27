@@ -1,8 +1,8 @@
 <script lang="ts">
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
-	import { createSvelteAuthClient } from '@mmailaender/convex-better-auth-svelte/svelte';
-	import { authClient } from '$lib/auth-client';
+	import { browser } from '$app/environment';
+	import { PUBLIC_CONVEX_URL } from '$env/static/public';
 	import { ModeWatcher } from 'mode-watcher';
 	import AppSidebar from '$lib/components/app-sidebar.svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
@@ -12,7 +12,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import ThemeToggle from '$lib/components/theme-toggle.svelte';
 	import { page } from '$app/state';
-	import { useQuery } from 'convex-svelte';
+	import { setupConvex, useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import CommunityPresenceWidget from '$lib/components/CommunityPresenceWidget.svelte';
 	import SimilarLinksSidebar from '$lib/components/SimilarLinksSidebar.svelte';
@@ -21,10 +21,20 @@
 
 	let { children, data } = $props();
 
-	createSvelteAuthClient({
-		authClient,
-		getServerState: () => data.authState
-	});
+	setupConvex(PUBLIC_CONVEX_URL);
+	const client = useConvexClient();
+
+	if (browser) {
+		client.setAuth(async () => {
+			const response = await fetch('/api/auth/convex-token');
+			if (!response.ok) {
+				return null;
+			}
+
+			const payload = (await response.json()) as { token?: string | null };
+			return payload.token ?? null;
+		});
+	}
 
 	const routeLabels: Record<string, string> = {
 		'': 'Home',

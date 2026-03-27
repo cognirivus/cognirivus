@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { Compass, Globe, Plus, Search, Settings, ShieldCheck, Users } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
@@ -12,7 +12,7 @@
 	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
 	import { toast } from 'svelte-sonner';
 
-	const auth = useAuth();
+	const auth = useAppAuth();
 	const client = useConvexClient();
 
 	const publicCommunitiesQuery = useQuery((api as any).communities.listPublic, { limit: 100 });
@@ -81,8 +81,7 @@
 		if (!searchQuery.trim()) return communities;
 		const q = searchQuery.toLowerCase();
 		return communities.filter(
-			(c: any) =>
-				c.slug.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q)
+			(c: any) => c.slug.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q)
 		);
 	});
 
@@ -121,9 +120,7 @@
 		<TabsContent value="mine">
 			{#if !auth.isAuthenticated}
 				<div class="flex flex-col items-center justify-center py-16 text-center">
-					<div
-						class="mb-4 flex size-14 items-center justify-center rounded-full bg-muted"
-					>
+					<div class="mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
 						<Compass class="size-7 text-muted-foreground" />
 					</div>
 					<h3 class="mb-1 text-lg font-medium">Sign in to see your communities</h3>
@@ -134,9 +131,7 @@
 				</div>
 			{:else if (myCommunitiesQuery.data?.length ?? 0) === 0}
 				<div class="flex flex-col items-center justify-center py-16 text-center">
-					<div
-						class="mb-4 flex size-14 items-center justify-center rounded-full bg-muted"
-					>
+					<div class="mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
 						<Compass class="size-7 text-muted-foreground" />
 					</div>
 					<h3 class="mb-1 text-lg font-medium">You haven't joined any communities yet</h3>
@@ -149,7 +144,7 @@
 				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 					{#each myCommunitiesQuery.data ?? [] as item (item.community._id)}
 						{@const color = slugToColor(item.community.slug)}
-						<Card class="gap-0 py-0 overflow-hidden">
+						<Card class="gap-0 overflow-hidden py-0">
 							<CardContent class="p-4">
 								<div class="flex items-start gap-3">
 									<div
@@ -158,10 +153,7 @@
 										{item.community.slug.charAt(0).toUpperCase()}
 									</div>
 									<div class="min-w-0 flex-1">
-										<a
-											href={`/c/${item.community.slug}`}
-											class="font-medium hover:underline"
-										>
+										<a href={`/c/${item.community.slug}`} class="font-medium hover:underline">
 											c/{item.community.slug}
 										</a>
 										{#if item.community.description}
@@ -197,11 +189,7 @@
 										View
 									</Button>
 									{#if item.membershipRole === 'owner' || item.membershipRole === 'admin'}
-										<Button
-											size="sm"
-											variant="outline"
-											href={`/c/${item.community.slug}/manage`}
-										>
+										<Button size="sm" variant="outline" href={`/c/${item.community.slug}/manage`}>
 											<Settings class="size-3.5" />
 											Manage
 										</Button>
@@ -218,11 +206,7 @@
 		<TabsContent value="discover">
 			<div class="relative mb-4">
 				<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-				<Input
-					placeholder="Search communities..."
-					class="pl-9"
-					bind:value={searchQuery}
-				/>
+				<Input placeholder="Search communities..." class="pl-9" bind:value={searchQuery} />
 			</div>
 
 			{#if publicCommunitiesQuery.isLoading}
@@ -231,9 +215,7 @@
 				</div>
 			{:else if filteredPublicCommunities.length === 0}
 				<div class="flex flex-col items-center justify-center py-16 text-center">
-					<div
-						class="mb-4 flex size-14 items-center justify-center rounded-full bg-muted"
-					>
+					<div class="mb-4 flex size-14 items-center justify-center rounded-full bg-muted">
 						<Users class="size-7 text-muted-foreground" />
 					</div>
 					<h3 class="mb-1 text-lg font-medium">No communities found</h3>
@@ -256,7 +238,7 @@
 					{#each filteredPublicCommunities as community (community._id)}
 						{@const membership = myMembershipByCommunityId[community._id]}
 						{@const color = slugToColor(community.slug)}
-						<Card class="gap-0 py-0 overflow-hidden">
+						<Card class="gap-0 overflow-hidden py-0">
 							<CardContent class="p-4">
 								<div class="flex items-start gap-3">
 									<div
@@ -265,10 +247,7 @@
 										{community.slug.charAt(0).toUpperCase()}
 									</div>
 									<div class="min-w-0 flex-1">
-										<a
-											href={`/c/${community.slug}`}
-											class="font-medium hover:underline"
-										>
+										<a href={`/c/${community.slug}`} class="font-medium hover:underline">
 											c/{community.slug}
 										</a>
 										{#if community.description}
@@ -307,16 +286,10 @@
 									{:else if membership?.membershipStatus === 'pending'}
 										<Button size="sm" variant="secondary" disabled>Requested</Button>
 									{:else}
-										<Button size="sm" onclick={() => requestJoin(community._id)}>
-											Join
-										</Button>
+										<Button size="sm" onclick={() => requestJoin(community._id)}>Join</Button>
 									{/if}
 									{#if membership?.membershipRole === 'owner' || membership?.membershipRole === 'admin'}
-										<Button
-											size="sm"
-											variant="outline"
-											href={`/c/${community.slug}/manage`}
-										>
+										<Button size="sm" variant="outline" href={`/c/${community.slug}/manage`}>
 											<Settings class="size-3.5" />
 											Manage
 										</Button>

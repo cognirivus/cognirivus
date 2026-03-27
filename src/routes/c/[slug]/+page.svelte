@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import {
 		Calendar,
@@ -31,7 +31,7 @@
 
 	type FeedTab = 'new' | 'top' | 'discussed';
 
-	const auth = useAuth();
+	const auth = useAppAuth();
 	const client = useConvexClient();
 	const slug = $derived(page.params.slug);
 	const tab = $derived((page.url.searchParams.get('tab') as FeedTab | null) ?? 'new');
@@ -151,7 +151,6 @@
 			toast.error(error?.message ?? 'Failed to vote');
 		}
 	}
-
 </script>
 
 <main class="mx-auto w-full max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6">
@@ -185,12 +184,7 @@
 					Request Pending
 				</Button>
 			{:else}
-				<Button
-					variant="outline"
-					size="sm"
-					disabled={!auth.isAuthenticated}
-					onclick={requestJoin}
-				>
+				<Button variant="outline" size="sm" disabled={!auth.isAuthenticated} onclick={requestJoin}>
 					<Plus class="size-4" />
 					Join
 				</Button>
@@ -231,7 +225,8 @@
 				<!-- Tab bar -->
 				<div class="mb-4 flex items-center overflow-x-auto border-b">
 					<button
-						class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab === 'new'
+						class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab ===
+						'new'
 							? 'border-primary text-foreground'
 							: 'border-transparent text-muted-foreground hover:text-foreground'}"
 						onclick={() => updateParams({ tab: 'new', cursor: null })}
@@ -240,7 +235,8 @@
 						New
 					</button>
 					<button
-						class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab === 'top'
+						class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab ===
+						'top'
 							? 'border-primary text-foreground'
 							: 'border-transparent text-muted-foreground hover:text-foreground'}"
 						onclick={() => updateParams({ tab: 'top', cursor: null })}
@@ -249,7 +245,8 @@
 						Top
 					</button>
 					<button
-						class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab === 'discussed'
+						class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab ===
+						'discussed'
 							? 'border-primary text-foreground'
 							: 'border-transparent text-muted-foreground hover:text-foreground'}"
 						onclick={() => updateParams({ tab: 'discussed', cursor: null })}
@@ -262,9 +259,7 @@
 				<!-- Search & tag filter -->
 				<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
 					<div class="relative flex-1">
-						<Search
-							class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-						/>
+						<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
 						<Input
 							placeholder="Search community..."
 							class="pr-9 pl-9 text-sm"
@@ -301,7 +296,9 @@
 				{#if feedQuery.error}
 					<p class="py-8 text-center text-sm text-destructive">{feedQuery.error.message}</p>
 				{:else if (feedQuery.data?.page?.length ?? 0) === 0}
-					<div class="flex flex-col items-center justify-center rounded-lg border border-dashed py-16">
+					<div
+						class="flex flex-col items-center justify-center rounded-lg border border-dashed py-16"
+					>
 						<Archive class="mb-3 size-10 text-muted-foreground/50" />
 						<p class="text-sm text-muted-foreground">No posts in this community yet.</p>
 					</div>
@@ -346,7 +343,7 @@
 										<div class="min-w-0 flex-1 px-3 py-3 sm:px-4">
 											<a
 												href="/post/{post._id}"
-												class="line-clamp-2 text-base font-medium leading-snug hover:underline"
+												class="line-clamp-2 text-base leading-snug font-medium hover:underline"
 											>
 												{post.title}
 											</a>
@@ -358,11 +355,7 @@
 											<!-- Metadata row -->
 											<div class="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
 												{#if post.authorUsername}
-													<Badge
-														href="/u/{post.authorUsername}"
-														variant="outline"
-														class="gap-1"
-													>
+													<Badge href="/u/{post.authorUsername}" variant="outline" class="gap-1">
 														<User class="size-3" />
 														u/{post.authorUsername}
 													</Badge>
@@ -383,10 +376,7 @@
 												{/if}
 
 												{#if post.sourceType}
-													<Badge
-														variant="outline"
-														class="gap-1 border-dashed bg-muted/30"
-													>
+													<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
 														<Archive class="size-3" />
 														{post.sourceType === 'chrome_import'
 															? 'Chrome Bookmark'
@@ -414,8 +404,6 @@
 					</div>
 				{/if}
 			</div>
-
-
 		</div>
 	{/if}
 </main>

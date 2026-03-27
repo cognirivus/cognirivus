@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import type { Id } from '$convex/_generated/dataModel';
@@ -29,7 +29,7 @@
 		communityId?: Id<'communities'>;
 	};
 
-	const auth = useAuth();
+	const auth = useAppAuth();
 	const client = useConvexClient();
 	const sourceItemId = $derived(page.params.sourceItemId as Id<'source_items'>);
 	const detailsQuery = useQuery((api as any).sources.getSourceItem, () =>

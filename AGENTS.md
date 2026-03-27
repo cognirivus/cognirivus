@@ -12,7 +12,7 @@ Essential guidance for AI coding agents operating in this repository.
 | Styling    | TailwindCSS 4                                                  |
 | Components | shadcn-svelte (`bits-ui`) → `src/lib/components/ui/`           |
 | Backend    | Convex → `src/convex/`                                         |
-| Auth       | better-auth with Convex adapter                                |
+| Auth       | WorkOS AuthKit + Convex JWT auth                               |
 | AI         | OpenRouter API + Vercel AI SDK (`@openrouter/ai-sdk-provider`) |
 | Storage    | Cloudflare R2 (large text content)                             |
 | Schema     | `src/convex/schema.ts`                                         |
@@ -58,7 +58,7 @@ Essential guidance for AI coding agents operating in this repository.
 | `action`                             | Network requests (AI, R2); cannot modify DB directly |
 
 - Every function **must** have `args` with `v` validators.
-- Auth: `authComponent.getAuthUser(ctx)`.
+- Auth: use WorkOS-backed helpers from `src/convex/auth.ts` / `src/convex/lib/adminAuth.ts`.
 - Always use `.withIndex()` over `.filter()` for queries.
 - **Always** check `convex_rules.txt` for reference before writing Convex code.
 

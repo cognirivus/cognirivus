@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { useQuery } from 'convex-svelte';
 	import {
 		CirclePlus,
@@ -16,7 +17,6 @@
 		Users
 	} from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
-	import { authClient } from '$lib/auth-client';
 	import Logo from './Logo.svelte';
 	import ThemeToggle from './theme-toggle.svelte';
 	import { Button } from '$lib/components/ui/button';
@@ -29,7 +29,8 @@
 		DropdownMenuTrigger
 	} from '$lib/components/ui/dropdown-menu';
 
-	const auth = useAuth();
+	const resolvePath = resolve as unknown as (path: string) => string;
+	const auth = useAppAuth();
 	const currentUserQuery = useQuery(api.auth.getCurrentUser, {}, () => ({
 		initialData: (page.data as any).currentUser,
 		keepPreviousData: true
@@ -48,12 +49,16 @@
 	}
 
 	function navigateTo(href: string) {
-		goto(href);
+		if (href === '/logout' || href.startsWith('/signin') || href.startsWith('/signup')) {
+			window.location.assign(href);
+			return;
+		}
+
+		goto(resolvePath(href));
 	}
 
-	async function signOut() {
-		await authClient.signOut();
-		await invalidateAll();
+	function signOut() {
+		window.location.assign(resolve('/logout'));
 	}
 </script>
 
@@ -95,12 +100,12 @@
 				</DropdownMenuContent>
 			</DropdownMenu>
 
-			<a href="/" class="transition-opacity hover:opacity-80">
+			<a href={resolve('/')} class="transition-opacity hover:opacity-80">
 				<Logo size="sm" />
 			</a>
 			<div class="hidden items-center gap-2 md:flex">
 				<a
-					href="/feed"
+					href={resolve('/feed')}
 					class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive(
 						'/feed'
 					)
@@ -111,7 +116,7 @@
 					Feed
 				</a>
 				<a
-					href="/c"
+					href={resolve('/c')}
 					class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive(
 						'/c'
 					)
@@ -123,7 +128,7 @@
 				</a>
 				{#if auth.isAuthenticated}
 					<a
-						href="/submit"
+						href={resolve('/submit')}
 						class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive(
 							'/submit'
 						)
@@ -134,7 +139,7 @@
 						Submit
 					</a>
 					<a
-						href="/c/new"
+						href={resolve('/c/new')}
 						class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium {isRouteActive(
 							'/c/new'
 						)

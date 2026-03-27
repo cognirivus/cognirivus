@@ -1,7 +1,7 @@
-﻿<script lang="ts">
+<script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { Archive, Tag, ThumbsDown, ThumbsUp } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
@@ -12,7 +12,7 @@
 	import { sanitizeDisplayText, splitReadableParagraphs } from '$lib/utils';
 	import { toast } from 'svelte-sonner';
 
-	const auth = useAuth();
+	const auth = useAppAuth();
 	const client = useConvexClient();
 	const postId = $derived(page.params.id);
 

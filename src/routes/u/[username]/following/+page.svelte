@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { useQuery } from 'convex-svelte';
 	import { UserRoundCheck } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
@@ -15,7 +15,7 @@
 		followedAt: number;
 	};
 
-	const auth = useAuth();
+	const auth = useAppAuth();
 	const username = $derived(page.params.username);
 	const listLimit = $derived(auth.isAuthenticated ? 100 : 10);
 	const signInHref = $derived(

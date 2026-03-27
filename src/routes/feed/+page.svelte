@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
+	import { useAppAuth } from '$lib/auth.svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import {
 		Calendar,
@@ -51,7 +51,7 @@
 		| 'bookmarks';
 	type VisibilityFilter = 'all' | 'private' | 'public' | 'community';
 
-	const auth = useAuth();
+	const auth = useAppAuth();
 	const client = useConvexClient();
 
 	const tab = $derived((page.url.searchParams.get('tab') as FeedTab | null) ?? 'new');
