@@ -289,7 +289,12 @@
 									<TableRow>
 										<TableCell>
 											<div class="max-w-[380px]">
-												<p class="truncate font-medium">{source.title}</p>
+												<div class="flex flex-wrap items-center gap-2">
+													<p class="truncate font-medium">{source.title}</p>
+													{#if source.rssFeedUrl}
+														<Badge variant="outline">RSS-backed</Badge>
+													{/if}
+												</div>
 												<p class="truncate text-xs text-muted-foreground">{source.canonicalUrl}</p>
 											</div>
 										</TableCell>

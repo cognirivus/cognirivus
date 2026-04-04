@@ -11,7 +11,6 @@
 import type * as admin from "../admin.js";
 import type * as ai_tools from "../ai_tools.js";
 import type * as auth from "../auth.js";
-import type * as bookmarks from "../bookmarks.js";
 import type * as communities from "../communities.js";
 import type * as community_chat from "../community_chat.js";
 import type * as crons from "../crons.js";
@@ -28,6 +27,7 @@ import type * as lib_r2 from "../lib/r2.js";
 import type * as lib_rateLimits from "../lib/rateLimits.js";
 import type * as lib_serializers from "../lib/serializers.js";
 import type * as lib_similarLinks from "../lib/similarLinks.js";
+import type * as lib_sourceIdentity from "../lib/sourceIdentity.js";
 import type * as lib_sourceUrls from "../lib/sourceUrls.js";
 import type * as lib_usernameGate from "../lib/usernameGate.js";
 import type * as migrations from "../migrations.js";
@@ -52,7 +52,6 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   ai_tools: typeof ai_tools;
   auth: typeof auth;
-  bookmarks: typeof bookmarks;
   communities: typeof communities;
   community_chat: typeof community_chat;
   crons: typeof crons;
@@ -69,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   "lib/rateLimits": typeof lib_rateLimits;
   "lib/serializers": typeof lib_serializers;
   "lib/similarLinks": typeof lib_similarLinks;
+  "lib/sourceIdentity": typeof lib_sourceIdentity;
   "lib/sourceUrls": typeof lib_sourceUrls;
   "lib/usernameGate": typeof lib_usernameGate;
   migrations: typeof migrations;

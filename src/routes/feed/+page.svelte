@@ -47,8 +47,7 @@
 		| 'source_updates'
 		| 'website'
 		| 'rss'
-		| 'youtube'
-		| 'bookmarks';
+		| 'youtube';
 	type VisibilityFilter = 'all' | 'private' | 'public' | 'community';
 
 	const auth = useAppAuth();
@@ -101,8 +100,7 @@
 		source_updates: { label: 'Source updates' },
 		website: { label: 'Website' },
 		rss: { label: 'RSS' },
-		youtube: { label: 'YouTube' },
-		bookmarks: { label: 'Bookmarks' }
+		youtube: { label: 'YouTube' }
 	};
 	const visibilityFilterMeta: Record<VisibilityFilter, { label: string }> = {
 		all: { label: 'All' },
@@ -110,23 +108,8 @@
 		public: { label: 'Public' },
 		community: { label: 'Community' }
 	};
-	const PRIVATE_SOURCE_OPTIONS: SourceFilter[] = [
-		'all',
-		'posts',
-		'source_updates',
-		'website',
-		'rss',
-		'youtube',
-		'bookmarks'
-	];
-	const SHARED_SOURCE_OPTIONS: SourceFilter[] = [
-		'all',
-		'posts',
-		'website',
-		'rss',
-		'youtube',
-		'bookmarks'
-	];
+	const PRIVATE_SOURCE_OPTIONS: SourceFilter[] = ['all', 'posts', 'source_updates', 'website', 'rss', 'youtube'];
+	const SHARED_SOURCE_OPTIONS: SourceFilter[] = ['all', 'posts', 'website', 'rss', 'youtube'];
 	const VISIBILITY_OPTIONS: VisibilityFilter[] = ['private', 'all', 'public', 'community'];
 	const sourceFilterOptions = $derived(
 		scope === 'you' ? PRIVATE_SOURCE_OPTIONS : SHARED_SOURCE_OPTIONS
@@ -341,37 +324,6 @@
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Failed to remove share');
 			return false;
-		}
-	}
-
-	async function toggleSavedSourceItem(
-		sourceItemId: string,
-		isSaved: boolean,
-		savedBookmarkItemId?: string,
-		legacySavedPostId?: string
-	) {
-		if (savedBookmarkItemId) {
-			try {
-				await client.mutation((api as any).sources.unsaveBookmarkItem, {
-					bookmarkItemId: savedBookmarkItemId
-				});
-				toast.success('Unsaved');
-			} catch (error: any) {
-				toast.error(error?.message ?? 'Failed to unsave link');
-			}
-			return;
-		}
-		if (legacySavedPostId) {
-			await unshareSourcePost(legacySavedPostId);
-			return;
-		}
-		if (!isSaved) {
-			try {
-				await client.mutation((api as any).sources.saveSourceItemToBookmarks, { sourceItemId });
-				toast.success('Saved');
-			} catch (error: any) {
-				toast.error(error?.message ?? 'Failed to save link');
-			}
 		}
 	}
 
@@ -815,20 +767,6 @@
 							</div>
 							{#if scope === 'you'}
 								<div class="mt-3 flex flex-wrap items-center gap-2">
-									<Button
-										size="sm"
-										variant="outline"
-										disabled={!auth.isAuthenticated}
-										onclick={() =>
-											toggleSavedSourceItem(
-												item._id,
-												item.isSaved,
-												item.savedBookmarkItemId,
-												item.legacySavedPostId
-											)}
-									>
-										{item.isSaved ? 'Unsave' : 'Save'}
-									</Button>
 									<Button
 										size="sm"
 										variant="outline"

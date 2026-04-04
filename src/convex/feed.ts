@@ -9,7 +9,6 @@ import {
 	windowStartFromBucket,
 	type FeedTab
 } from './lib/feedRanking';
-import { normalizeHttpUrl } from './lib/sourceUrls';
 
 const tabValidator = v.union(v.literal('new'), v.literal('top'), v.literal('discussed'));
 const windowValidator = v.union(
@@ -24,8 +23,7 @@ const sourceFilterValidator = v.union(
 	v.literal('source_updates'),
 	v.literal('website'),
 	v.literal('rss'),
-	v.literal('youtube'),
-	v.literal('bookmarks')
+	v.literal('youtube')
 );
 const visibilityFilterValidator = v.union(
 	v.literal('all'),
@@ -41,16 +39,9 @@ const TAG_SCAN_LIMIT = 350;
 const MAX_FILTER_TAGS = 10;
 
 type GlobalScope = 'all' | 'public' | 'community' | 'you' | 'me';
-type FeedSourceFilter =
-	| 'all'
-	| 'posts'
-	| 'source_updates'
-	| 'website'
-	| 'rss'
-	| 'youtube'
-	| 'bookmarks';
+type FeedSourceFilter = 'all' | 'posts' | 'source_updates' | 'website' | 'rss' | 'youtube';
 type FeedVisibilityFilter = 'all' | 'private' | 'public' | 'community';
-type SourceType = 'website' | 'rss' | 'youtube' | 'bookmarks';
+type SourceType = 'website' | 'rss' | 'youtube';
 type ViewerAuthId = string | null;
 
 const postFeedItemValidator = v.object({
@@ -96,8 +87,7 @@ const sourceFeedItemValidator = v.object({
 	sourceType: v.union(
 		v.literal('website'),
 		v.literal('rss'),
-		v.literal('youtube'),
-		v.literal('bookmarks')
+		v.literal('youtube')
 	),
 	sourceTitle: v.string(),
 	title: v.string(),
@@ -107,9 +97,6 @@ const sourceFeedItemValidator = v.object({
 	createdAt: v.number(),
 	updatedAt: v.number(),
 	shareCount: v.number(),
-	isSaved: v.boolean(),
-	savedBookmarkItemId: v.optional(v.id('source_items')),
-	legacySavedPostId: v.optional(v.id('posts')),
 	publicPostId: v.optional(v.id('posts')),
 	communityShares: v.array(sourceCommunityShareValidator)
 });
@@ -148,7 +135,7 @@ const normalizeTags = (tags?: Array<string>) => {
 };
 
 const isSourceType = (value: string): value is SourceType =>
-	value === 'website' || value === 'rss' || value === 'youtube' || value === 'bookmarks';
+	value === 'website' || value === 'rss' || value === 'youtube';
 
 const getPostSourceType = (
 	post: Pick<Doc<'posts'>, 'sourceType' | 'sourceTypeSnapshot'>
@@ -224,61 +211,6 @@ const matchesSelectedSourceId = (
 		return true;
 	}
 	return item.sourceId === sourceId;
-};
-
-const textEncoder = new TextEncoder();
-
-const toHex = (buffer: ArrayBuffer) =>
-	Array.from(new Uint8Array(buffer))
-		.map((byte) => byte.toString(16).padStart(2, '0'))
-		.join('');
-
-const urlHash = async (url: string) => {
-	if (!globalThis.crypto?.subtle) {
-		throw new Error('SHA-256 hashing is unavailable in this runtime.');
-	}
-	const normalizedUrl = normalizeHttpUrl(url).toString();
-	const digest = await globalThis.crypto.subtle.digest(
-		'SHA-256',
-		textEncoder.encode(normalizedUrl.toLowerCase())
-	);
-	return toHex(digest);
-};
-
-const getBookmarkSourceForUser = async (ctx: QueryCtx, userAuthId: string) => {
-	return await ctx.db
-		.query('sources')
-		.withIndex('by_normalizedKey', (q) => q.eq('normalizedKey', `bookmarks:${userAuthId}`))
-		.unique();
-};
-
-const getActiveBookmarkSaveState = async (ctx: QueryCtx, userAuthId: string, url: string) => {
-	const bookmarkSource = await getBookmarkSourceForUser(ctx, userAuthId);
-	if (!bookmarkSource) {
-		return null;
-	}
-	const bookmarkUrlHash = await urlHash(url);
-	const bookmarkItem = await ctx.db
-		.query('source_items')
-		.withIndex('by_sourceId_and_urlHash', (q) =>
-			q.eq('sourceId', bookmarkSource._id).eq('urlHash', bookmarkUrlHash)
-		)
-		.unique();
-	if (!bookmarkItem) {
-		return null;
-	}
-	const delivery = (
-		await ctx.db
-			.query('user_source_items')
-			.withIndex('by_userAuthId_and_sourceItemId', (q) =>
-				q.eq('userAuthId', userAuthId).eq('sourceItemId', bookmarkItem._id)
-			)
-			.take(1)
-	)[0];
-	if (!delivery) {
-		return null;
-	}
-	return bookmarkItem;
 };
 
 const candidateLimitFor = (numItems: number) =>
@@ -601,9 +533,6 @@ const loadUserSourceFeedItems = async (
 				createdAt: sourceItem.publishedAt,
 				updatedAt: sourceItem.updatedAt,
 				shareCount: 0,
-				isSaved: false,
-				savedBookmarkItemId: undefined,
-				legacySavedPostId: undefined,
 				publicPostId: undefined,
 				communityShares: []
 			};
@@ -625,7 +554,7 @@ const enrichSourceItemsWithShareCount = async (
 				kind: 'source_item';
 				_id: Id<'source_items'>;
 				sourceId: Id<'sources'>;
-				sourceType: 'website' | 'rss' | 'youtube' | 'bookmarks';
+				sourceType: 'website' | 'rss' | 'youtube';
 				sourceTitle: string;
 				title: string;
 				snippet: string;
@@ -634,9 +563,6 @@ const enrichSourceItemsWithShareCount = async (
 				createdAt: number;
 				updatedAt: number;
 				shareCount: number;
-				isSaved: boolean;
-				savedBookmarkItemId?: Id<'source_items'>;
-				legacySavedPostId?: Id<'posts'>;
 				publicPostId?: Id<'posts'>;
 				communityShares: Array<{
 					communityId: Id<'communities'>;
@@ -657,10 +583,6 @@ const enrichSourceItemsWithShareCount = async (
 				q.eq('authorAuthId', userAuthId).eq('sourceItemId', item._id)
 			)
 			.collect();
-		const bookmarkMatch = await getActiveBookmarkSaveState(ctx, userAuthId, item.url);
-		const legacySavedShare = shares.find(
-			(share) => (share.visibility ?? 'private') === 'private' && !share.communityId
-		);
 		const publicShare = shares.find(
 			(share) => (share.visibility ?? 'private') === 'public' && !share.communityId
 		);
@@ -676,9 +598,6 @@ const enrichSourceItemsWithShareCount = async (
 		enriched.push({
 			...item,
 			shareCount: (publicShare ? 1 : 0) + communityShareById.size,
-			isSaved: !!bookmarkMatch || !!legacySavedShare,
-			savedBookmarkItemId: bookmarkMatch?._id,
-			legacySavedPostId: legacySavedShare?._id,
 			publicPostId: publicShare?._id,
 			communityShares: Array.from(communityShareById.entries()).map(([communityId, postId]) => ({
 				communityId,

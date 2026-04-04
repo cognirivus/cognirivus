@@ -394,7 +394,7 @@ export const shareSourceItemAsPost = action({
 		const sourceItem: {
 			sourceItemId: Id<'source_items'>;
 			sourceId: Id<'sources'>;
-			sourceType: 'website' | 'rss' | 'youtube' | 'bookmarks';
+			sourceType: 'website' | 'rss' | 'youtube';
 			url: string;
 			title: string;
 			snippet: string;

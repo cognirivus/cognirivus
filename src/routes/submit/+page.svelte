@@ -9,20 +9,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
 	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
-	import ImportBookmarks from '$lib/components/ImportBookmarks.svelte';
-	import {
-		Bookmark,
-		Globe,
-		Link,
-		Loader2,
-		Lock,
-		PenLine,
-		Rss,
-		Send,
-		Users,
-		Youtube,
-		FileUp
-	} from '@lucide/svelte';
+	import { Globe, Link, Loader2, Lock, PenLine, Rss, Send, Users, Youtube } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	const client = useConvexClient();
@@ -38,18 +25,19 @@
 	let communityId = $state('');
 	let submitting = $state(false);
 
-	let sourceType = $state<'website' | 'rss' | 'youtube' | 'bookmarks'>('website');
+	let sourceType = $state<'website' | 'rss' | 'youtube'>('website');
 	let sourceInput = $state('');
 	let sourceTitle = $state('');
 	let addingSource = $state(false);
-	let saveUrl = $state('');
-	let saveTitle = $state('');
-	let savingLink = $state(false);
 
 	$effect(() => {
 		if (!meQuery.isLoading && !meQuery.data) {
 			goto(
-				`${resolve('/signin')}?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
+				(() => {
+					const url = new URL(resolve('/signin'), page.url);
+					url.searchParams.set('redirectTo', page.url.pathname + page.url.search);
+					return url;
+				})()
 			);
 		}
 	});
@@ -83,9 +71,6 @@
 
 	async function submitSource(event: Event) {
 		event.preventDefault();
-		if (sourceType === 'bookmarks') {
-			return;
-		}
 		addingSource = true;
 		try {
 			const result = await client.action((api as any).sources.addSource, {
@@ -94,45 +79,35 @@
 				title: sourceTitle || undefined
 			});
 			const status = result?.subscriptionStatus as 'active' | 'already_subscribed' | undefined;
-			if (status === 'already_subscribed' && result?.savedSeedItemId) {
-				toast.success('Source already followed. Article saved to your private links.');
+			const mappedRssToWebsite = sourceType === 'rss' && result?.resolvedSourceType === 'website';
+			if (status === 'already_subscribed' && result?.sourceItemId) {
+				toast.success('Source already followed. The pasted page was added as a source item.');
+			} else if (status === 'already_subscribed' && mappedRssToWebsite) {
+				toast.info('This RSS feed is already attached to the website source you follow.');
 			} else if (status === 'already_subscribed') {
 				toast.info('You are already subscribed to this source.');
-			} else if (result?.savedSeedItemId) {
-				toast.success('Source followed. The pasted article was also saved privately.');
-			} else {
+			} else if (result?.sourceItemId) {
+				toast.success('Source followed. The pasted page was added as a source item.');
+			} else if (mappedRssToWebsite) {
+				toast.success('Website source followed. RSS sync is attached for future updates.');
+			} else if (result?.jobId) {
 				toast.success('Source subscribed. Sync job queued.');
+			} else {
+				toast.success('Source followed.');
 			}
 			sourceInput = '';
 			sourceTitle = '';
-			goto(`${resolve('/feed')}?scope=you`);
+			goto(
+				(() => {
+					const url = new URL(resolve('/feed'), page.url);
+					url.searchParams.set('scope', 'you');
+					return url;
+				})()
+			);
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Failed to add source');
 		} finally {
 			addingSource = false;
-		}
-	}
-
-	async function saveLink(event: Event) {
-		event.preventDefault();
-		savingLink = true;
-		try {
-			const result = await client.mutation((api as any).sources.saveWebsiteLink, {
-				url: saveUrl,
-				title: saveTitle || undefined
-			});
-			if (result.alreadySaved) {
-				toast.info('This link is already saved.');
-			} else {
-				toast.success('Link saved to your private feed.');
-			}
-			saveUrl = '';
-			saveTitle = '';
-			goto(`${resolve('/feed')}?scope=you`);
-		} catch (error: any) {
-			toast.error(error?.message ?? 'Failed to save link');
-		} finally {
-			savingLink = false;
 		}
 	}
 
@@ -149,10 +124,9 @@
 	] as const;
 
 	const sourceTypes = [
-		{ value: 'website', label: 'Website', icon: Globe, description: 'Follow a site or feed' },
-		{ value: 'rss', label: 'RSS', icon: Rss, description: 'Track a feed URL' },
-		{ value: 'youtube', label: 'YouTube', icon: Youtube, description: 'Track a channel/page URL' },
-		{ value: 'bookmarks', label: 'Bookmarks', icon: FileUp, description: 'Import bookmarks file' }
+		{ value: 'website', label: 'Website', icon: Globe, description: 'Follow a site' },
+		{ value: 'rss', label: 'RSS', icon: Rss, description: 'Track a feed or map it to a site' },
+		{ value: 'youtube', label: 'YouTube', icon: Youtube, description: 'Track a channel/page URL' }
 	] as const;
 
 	const activeVisibility = $derived(
@@ -164,19 +138,15 @@
 	<div class="mb-6">
 		<h1 class="text-2xl font-semibold tracking-tight">Submit</h1>
 		<p class="mt-1 text-sm text-muted-foreground">
-			Create a post, save a link privately, or follow a source for future updates.
+			Create a post or follow a source for future updates.
 		</p>
 	</div>
 
 	<Tabs bind:value={activeTab} class="w-full">
-		<TabsList class="mb-6 grid w-full grid-cols-3">
+		<TabsList class="mb-6 grid w-full grid-cols-2">
 			<TabsTrigger value="create" class="gap-2">
 				<PenLine class="size-4" />
 				Create Post
-			</TabsTrigger>
-			<TabsTrigger value="save" class="gap-2">
-				<Bookmark class="size-4" />
-				Save Link
 			</TabsTrigger>
 			<TabsTrigger value="source" class="gap-2">
 				<Link class="size-4" />
@@ -313,67 +283,19 @@
 			</form>
 		</TabsContent>
 
-		<TabsContent value="save">
-			<form
-				class="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
-				onsubmit={saveLink}
-			>
-				<div class="space-y-1">
-					<h2 class="text-base font-semibold">Save a Website Link</h2>
-					<p class="text-sm text-muted-foreground">
-						Store the exact page privately. This does not create a post.
-					</p>
-				</div>
-
-				<div class="space-y-2">
-					<Label for="saveUrl">Link URL</Label>
-					<Input
-						id="saveUrl"
-						type="url"
-						bind:value={saveUrl}
-						required
-						placeholder="https://example.com/article"
-					/>
-				</div>
-
-				<div class="space-y-2">
-					<Label for="saveTitle">Custom Title (optional)</Label>
-					<Input
-						id="saveTitle"
-						bind:value={saveTitle}
-						maxlength={220}
-						placeholder="Override the saved title"
-					/>
-				</div>
-
-				<div class="flex items-center gap-3 border-t border-border pt-4">
-					<Button type="submit" disabled={savingLink} class="gap-2">
-						{#if savingLink}
-							<Loader2 class="size-4 animate-spin" />
-							Saving...
-						{:else}
-							<Bookmark class="size-4" />
-							Save Link
-						{/if}
-					</Button>
-					<Button type="button" variant="ghost" href="/feed?scope=you">Go to My Feed</Button>
-				</div>
-			</form>
-		</TabsContent>
-
 		<TabsContent value="source">
 			<div class="space-y-5 rounded-xl border border-border bg-card p-4 sm:p-6">
 				<div class="space-y-1">
 					<h2 class="text-base font-semibold">Add a Source</h2>
 					<p class="text-sm text-muted-foreground">
-						Follow websites, feeds, or channels for future updates. Pasting an article URL follows
-						the site and saves that article privately.
+						Follow websites, feeds, or channels for future updates. Pasting a page URL follows the
+						site and adds that page as a source item.
 					</p>
 				</div>
 
 				<fieldset class="space-y-3">
 					<Label class="text-sm font-medium">Source Type</Label>
-					<div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+					<div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
 						{#each sourceTypes as st (st.value)}
 							{@const isActive = sourceType === st.value}
 							<button
@@ -392,51 +314,42 @@
 					</div>
 				</fieldset>
 
-				{#if sourceType === 'bookmarks'}
-					<div class="rounded-lg border border-dashed border-border bg-muted/20 p-4">
-						<p class="mb-3 text-sm text-muted-foreground">
-							Import your browser bookmarks as source items. This no longer creates posts directly.
-						</p>
-						<ImportBookmarks />
+				<form class="space-y-4" onsubmit={submitSource}>
+					<div class="space-y-2">
+						<Label for="sourceInput">Source URL</Label>
+						<Input
+							id="sourceInput"
+							bind:value={sourceInput}
+							required
+							placeholder={sourceType === 'rss'
+								? 'https://example.com/feed.xml'
+								: sourceType === 'youtube'
+									? 'https://www.youtube.com/@channel'
+									: 'https://example.com/blog/post-1'}
+						/>
 					</div>
-				{:else}
-					<form class="space-y-4" onsubmit={submitSource}>
-						<div class="space-y-2">
-							<Label for="sourceInput">Source URL</Label>
-							<Input
-								id="sourceInput"
-								bind:value={sourceInput}
-								required
-								placeholder={sourceType === 'rss'
-									? 'https://example.com/feed.xml'
-									: sourceType === 'youtube'
-										? 'https://www.youtube.com/@channel'
-										: 'https://example.com/article'}
-							/>
-						</div>
-						<div class="space-y-2">
-							<Label for="sourceTitle">Custom Title (optional)</Label>
-							<Input
-								id="sourceTitle"
-								bind:value={sourceTitle}
-								maxlength={220}
-								placeholder="Override displayed source title"
-							/>
-						</div>
-						<div class="flex items-center gap-3 border-t border-border pt-4">
-							<Button type="submit" disabled={addingSource} class="gap-2">
-								{#if addingSource}
-									<Loader2 class="size-4 animate-spin" />
-									Adding...
-								{:else}
-									<Link class="size-4" />
-									Subscribe Source
-								{/if}
-							</Button>
-							<Button type="button" variant="ghost" href="/feed?scope=you">Go to My Feed</Button>
-						</div>
-					</form>
-				{/if}
+					<div class="space-y-2">
+						<Label for="sourceTitle">Custom Title (optional)</Label>
+						<Input
+							id="sourceTitle"
+							bind:value={sourceTitle}
+							maxlength={220}
+							placeholder="Override displayed source title"
+						/>
+					</div>
+					<div class="flex items-center gap-3 border-t border-border pt-4">
+						<Button type="submit" disabled={addingSource} class="gap-2">
+							{#if addingSource}
+								<Loader2 class="size-4 animate-spin" />
+								Adding...
+							{:else}
+								<Link class="size-4" />
+								Subscribe Source
+							{/if}
+						</Button>
+						<Button type="button" variant="ghost" href="/feed?scope=you">Go to My Feed</Button>
+					</div>
+				</form>
 			</div>
 		</TabsContent>
 	</Tabs>

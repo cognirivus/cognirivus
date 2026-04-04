@@ -52,7 +52,6 @@ const purgeTableNameValidator = v.union(
 	v.literal('sources'),
 	v.literal('source_subscriptions'),
 	v.literal('source_items'),
-	v.literal('saved_source_suggestions'),
 	v.literal('user_source_items'),
 	v.literal('source_jobs'),
 	v.literal('source_nightly_runs'),
@@ -104,7 +103,6 @@ const CUTOVER_RESET_TABLES: Array<
 	| 'sources'
 	| 'source_subscriptions'
 	| 'source_items'
-	| 'saved_source_suggestions'
 	| 'user_source_items'
 	| 'source_jobs'
 	| 'source_nightly_runs'
@@ -150,7 +148,6 @@ const CUTOVER_RESET_TABLES: Array<
 	'follows_communities',
 	'community_memberships',
 	'user_source_items',
-	'saved_source_suggestions',
 	'dm_reactions',
 	'dm_messages',
 	'dm_participants',

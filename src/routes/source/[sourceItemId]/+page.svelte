@@ -16,7 +16,6 @@
 		ExternalLink,
 		Globe,
 		Loader2,
-		Lock,
 		NotebookText,
 		Trash2,
 		Users
@@ -138,38 +137,6 @@
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Failed to remove share');
 			return false;
-		} finally {
-			actionLoading = false;
-		}
-	}
-
-	async function toggleSaveShare() {
-		const savedBookmarkItemId = detailsQuery.data?.savedBookmarkItemId;
-		const legacySavedPostId = detailsQuery.data?.legacySavedPostId;
-		if (savedBookmarkItemId) {
-			actionLoading = true;
-			try {
-				await client.mutation((api as any).sources.unsaveBookmarkItem, {
-					bookmarkItemId: savedBookmarkItemId
-				});
-				toast.success('Unsaved');
-			} catch (error: any) {
-				toast.error(error?.message ?? 'Failed to unsave link');
-			} finally {
-				actionLoading = false;
-			}
-			return;
-		}
-		if (legacySavedPostId) {
-			await unsharePost(legacySavedPostId, 'Unsaved');
-			return;
-		}
-		actionLoading = true;
-		try {
-			await client.mutation((api as any).sources.saveSourceItemToBookmarks, { sourceItemId });
-			toast.success('Saved');
-		} catch (error: any) {
-			toast.error(error?.message ?? 'Failed to save link');
 		} finally {
 			actionLoading = false;
 		}
@@ -332,13 +299,9 @@
 
 		<Card class="mb-4">
 			<CardContent class="space-y-3 py-5">
-				<h3 class="text-base font-semibold">Save or Share</h3>
+				<h3 class="text-base font-semibold">Share</h3>
 				{@const publicPostId = getSharePostId('public')}
 				<div class="flex flex-wrap items-center gap-2">
-					<Button size="sm" variant="outline" disabled={actionLoading} onclick={toggleSaveShare}>
-						<Lock class="mr-1 size-4" />
-						{detailsQuery.data.isSaved ? 'Unsave' : 'Save'}
-					</Button>
 					<Button size="sm" variant="outline" disabled={actionLoading} onclick={togglePublicShare}>
 						<Globe class="mr-1 size-4" />
 						{publicPostId ? 'Unshare Public' : 'Share Public'}

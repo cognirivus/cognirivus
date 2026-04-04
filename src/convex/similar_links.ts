@@ -107,14 +107,13 @@ const actionResponseValidator = v.object({
 const domainContributorValidator = v.object({
 	label: v.string(),
 	url: v.string(),
-	kind: v.union(v.literal('source'), v.literal('saved_link'))
+	kind: v.literal('source')
 });
 
 const userSourceDomainRowValidator = v.object({
 	domain: v.string(),
 	included: v.boolean(),
 	sourceCount: v.number(),
-	savedLinkCount: v.number(),
 	totalCount: v.number(),
 	contributors: v.array(domainContributorValidator)
 });
@@ -155,12 +154,11 @@ type UserSourceDomainRow = {
 	domain: string;
 	included: boolean;
 	sourceCount: number;
-	savedLinkCount: number;
 	totalCount: number;
 	contributors: Array<{
 		label: string;
 		url: string;
-		kind: 'source' | 'saved_link';
+		kind: 'source';
 	}>;
 };
 
@@ -353,17 +351,6 @@ const buildUserSourceDomainRows = async (
 			activeSubscriptions.map((subscription: any) => ctx.db.get(subscription.sourceId))
 		)
 	).filter((source): source is NonNullable<typeof source> => !!source);
-	const bookmarkSources = sources.filter((source) => source.type === 'bookmarks');
-	const bookmarkItems = (
-		await Promise.all(
-			bookmarkSources.map((source) =>
-				ctx.db
-					.query('source_items')
-					.withIndex('by_sourceId_and_publishedAt', (q: any) => q.eq('sourceId', source._id))
-					.collect()
-			)
-		)
-	).flat();
 	const exclusions = await ctx.db
 		.query('similar_links_domain_exclusions')
 		.withIndex('by_userAuthId_and_updatedAt', (q: any) => q.eq('userAuthId', userAuthId))
@@ -374,17 +361,21 @@ const buildUserSourceDomainRows = async (
 		string,
 		{
 			sourceIds: Set<string>;
-			savedLinkCount: number;
 			contributorKeys: Set<string>;
 			contributors: UserSourceDomainRow['contributors'];
 		}
 	>();
-	const ensureRow = (domain: string) => {
+	const ensureRow = (
+		domain: string
+	): {
+		sourceIds: Set<string>;
+		contributorKeys: Set<string>;
+		contributors: UserSourceDomainRow['contributors'];
+	} => {
 		let row = rowsByDomain.get(domain);
 		if (!row) {
 			row = {
 				sourceIds: new Set<string>(),
-				savedLinkCount: 0,
 				contributorKeys: new Set<string>(),
 				contributors: []
 			};
@@ -409,9 +400,6 @@ const buildUserSourceDomainRows = async (
 	};
 
 	for (const source of sources) {
-		if (source.type === 'bookmarks') {
-			continue;
-		}
 		const domain = dedupeDomains([source.canonicalUrl])[0];
 		if (!domain) {
 			continue;
@@ -427,27 +415,12 @@ const buildUserSourceDomainRows = async (
 		);
 	}
 
-	for (const item of bookmarkItems) {
-		const domain = dedupeDomains([item.originHost ?? item.url])[0];
-		if (!domain) {
-			continue;
-		}
-		const row = ensureRow(domain);
-		row.savedLinkCount += 1;
-		pushContributor(domain, {
-			label: item.title,
-			url: item.url,
-			kind: 'saved_link'
-		});
-	}
-
 	return Array.from(rowsByDomain.entries())
 		.map(([domain, row]) => ({
 			domain,
 			included: !excludedDomains.has(domain),
 			sourceCount: row.sourceIds.size,
-			savedLinkCount: row.savedLinkCount,
-			totalCount: row.sourceIds.size + row.savedLinkCount,
+			totalCount: row.sourceIds.size,
 			contributors: row.contributors
 		}))
 		.sort((a, b) => {

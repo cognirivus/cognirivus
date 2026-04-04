@@ -128,14 +128,11 @@ const schema = defineSchema({
 		.index('by_sourceItemId_and_createdAt', ['sourceItemId', 'createdAt'])
 		.index('by_r2Key_and_createdAt', ['r2Key', 'createdAt']),
 	sources: defineTable({
-		type: v.union(
-			v.literal('website'),
-			v.literal('rss'),
-			v.literal('youtube'),
-			v.literal('bookmarks')
-		),
+		type: v.union(v.literal('website'), v.literal('rss'), v.literal('youtube')),
 		normalizedKey: v.string(),
 		canonicalUrl: v.string(),
+		rssFeedUrl: v.optional(v.string()),
+		rssFeedNormalizedKey: v.optional(v.string()),
 		title: v.string(),
 		description: v.optional(v.string()),
 		status: v.union(
@@ -151,13 +148,14 @@ const schema = defineSchema({
 		updatedAt: v.number()
 	})
 		.index('by_normalizedKey', ['normalizedKey'])
+		.index('by_rssFeedNormalizedKey', ['rssFeedNormalizedKey'])
 		.index('by_type_and_updatedAt', ['type', 'updatedAt'])
 		.index('by_status_and_updatedAt', ['status', 'updatedAt']),
 	source_subscriptions: defineTable({
 		userAuthId: v.string(),
 		sourceId: v.id('sources'),
 		status: v.union(v.literal('active'), v.literal('paused')),
-		addedVia: v.optional(v.union(v.literal('manual'), v.literal('saved_link'))),
+		addedVia: v.optional(v.literal('manual')),
 		includeInSimilarLinks: v.optional(v.boolean()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
@@ -195,21 +193,6 @@ const schema = defineSchema({
 		])
 		.index('by_r2Key_and_publishedAt', ['r2Key', 'publishedAt'])
 		.index('by_publishedAt', ['publishedAt']),
-	saved_source_suggestions: defineTable({
-		userAuthId: v.string(),
-		sourceType: v.literal('website'),
-		normalizedKey: v.string(),
-		canonicalUrl: v.string(),
-		originHost: v.string(),
-		itemCount: v.number(),
-		latestSavedUrl: v.string(),
-		latestSavedTitle: v.string(),
-		createdAt: v.number(),
-		updatedAt: v.number(),
-		lastSavedAt: v.number()
-	})
-		.index('by_userAuthId_and_normalizedKey', ['userAuthId', 'normalizedKey'])
-		.index('by_userAuthId_and_updatedAt', ['userAuthId', 'updatedAt']),
 	user_source_items: defineTable({
 		userAuthId: v.string(),
 		sourceId: v.id('sources'),

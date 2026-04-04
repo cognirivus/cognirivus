@@ -11,7 +11,6 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
 	createComment: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
 	votePost: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 },
 	voteComment: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 },
-	bookmarkImport: { kind: 'token bucket', rate: 40, period: HOUR, capacity: 5 },
 	addSource: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
 	addSourcePerNormalizedKey: {
 		kind: 'fixed window',

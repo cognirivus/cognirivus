@@ -20,7 +20,6 @@ import {
 	countAuthorSharedPostsForSource,
 	countSourceItemsForSource,
 	trackPostReplaced,
-	trackSourceItemDeleted,
 	trackSourceItemInserted,
 	trackSourceItemReplaced
 } from './lib/aggregates';
@@ -32,10 +31,8 @@ import {
 import { assertNightlyRunTransition, assertSourceJobTransition } from './lib/jobTransitions';
 import { toSourceJobResponse } from './lib/serializers';
 import {
-	deriveSavedWebsiteMetadata,
 	deriveWebsiteSourceInput,
-	normalizeHttpUrl,
-	sourceHostForDisplay
+	normalizeHttpUrl
 } from './lib/sourceUrls';
 import { dedupeDomains } from './lib/similarLinks';
 
@@ -65,8 +62,7 @@ const sourceCleanupWorkpool = new Workpool((components as any).sourceCleanupWork
 const sourceTypeValidator = v.union(
 	v.literal('website'),
 	v.literal('rss'),
-	v.literal('youtube'),
-	v.literal('bookmarks')
+	v.literal('youtube')
 );
 const sourceStatusValidator = v.union(
 	v.literal('active'),
@@ -85,39 +81,26 @@ const sourceJobStatusValidator = v.union(
 	v.literal('done'),
 	v.literal('failed')
 );
-const addedViaValidator = v.union(v.literal('manual'), v.literal('saved_link'));
-const savedSuggestionValidator = v.object({
-	_id: v.id('saved_source_suggestions'),
-	sourceType: v.literal('website'),
-	normalizedKey: v.string(),
-	canonicalUrl: v.string(),
-	originHost: v.string(),
-	itemCount: v.number(),
-	latestSavedUrl: v.string(),
-	latestSavedTitle: v.string(),
-	lastSavedAt: v.number(),
-	createdAt: v.number(),
-	updatedAt: v.number(),
-	isFollowing: v.boolean()
-});
+const addedViaValidator = v.literal('manual');
 
 const similarLinkDomainContributorValidator = v.object({
 	label: v.string(),
 	url: v.string(),
-	kind: v.union(v.literal('source'), v.literal('saved_link'))
+	kind: v.literal('source')
 });
 
 const similarLinkDomainRowValidator = v.object({
 	domain: v.string(),
 	included: v.boolean(),
 	sourceCount: v.number(),
-	savedLinkCount: v.number(),
 	totalCount: v.number(),
 	contributors: v.array(similarLinkDomainContributorValidator)
 });
 
-const isFetchableSourceType = (type: 'website' | 'rss' | 'youtube' | 'bookmarks') =>
-	type !== 'bookmarks';
+const canSyncSource = (source: {
+	type: 'website' | 'rss' | 'youtube';
+	rssFeedUrl?: string;
+}) => source.type === 'rss' || source.type === 'youtube' || !!source.rssFeedUrl;
 
 const nextUtcMidnightMs = (now = Date.now()) =>
 	Math.floor(now / UTC_DAY_MS) * UTC_DAY_MS + UTC_DAY_MS;
@@ -198,23 +181,12 @@ const sha256Hex = async (value: string) => {
 const urlHash = async (url: string) => sha256Hex(url.trim().toLowerCase());
 
 const normalizeSourceInput = (
-	type: 'website' | 'rss' | 'youtube' | 'bookmarks',
+	type: 'website' | 'rss' | 'youtube',
 	inputUrlOrId: string
 ): {
 	canonicalUrl: string;
 	normalizedKey: string;
 } => {
-	if (type === 'bookmarks') {
-		const normalizedKey = `bookmarks:${inputUrlOrId.trim().toLowerCase()}`;
-		if (!inputUrlOrId.trim()) {
-			throw new Error('Bookmark source key is required.');
-		}
-		return {
-			canonicalUrl: `https://bookmarks.local/${encodeURIComponent(inputUrlOrId.trim())}`,
-			normalizedKey
-		};
-	}
-
 	const parsed = normalizeHttpUrl(inputUrlOrId);
 	const host = parsed.hostname.toLowerCase();
 	const canonicalUrl = parsed.toString();
@@ -254,9 +226,11 @@ const resolveWebsiteFollowTarget = async (ctx: any, inputUrl: string) => {
 	const websiteInput = deriveWebsiteSourceInput(inputUrl);
 	try {
 		const discovered: {
-			sourceType: 'website' | 'rss';
+			sourceType: 'website';
 			canonicalUrl: string;
 			normalizedKey: string;
+			rssFeedUrl?: string;
+			rssFeedNormalizedKey?: string;
 		} = await ctx.runAction((internal as any).sources_node.discoverWebsiteFollowTarget, {
 			siteUrl: websiteInput.canonicalUrl
 		});
@@ -265,7 +239,9 @@ const resolveWebsiteFollowTarget = async (ctx: any, inputUrl: string) => {
 			shouldSaveOriginal: websiteInput.shouldSaveOriginal,
 			sourceType: discovered.sourceType,
 			canonicalUrl: discovered.canonicalUrl,
-			normalizedKey: discovered.normalizedKey
+			normalizedKey: discovered.normalizedKey,
+			rssFeedUrl: discovered.rssFeedUrl,
+			rssFeedNormalizedKey: discovered.rssFeedNormalizedKey
 		};
 	} catch {
 		return {
@@ -276,6 +252,19 @@ const resolveWebsiteFollowTarget = async (ctx: any, inputUrl: string) => {
 			normalizedKey: websiteInput.normalizedKey
 		};
 	}
+};
+
+const resolveRssFollowTarget = async (ctx: any, inputUrl: string) => {
+	const discovered: {
+		sourceType: 'website' | 'rss';
+		canonicalUrl: string;
+		normalizedKey: string;
+		rssFeedUrl: string;
+		rssFeedNormalizedKey: string;
+	} = await ctx.runAction((internal as any).sources_node.discoverRssFollowTarget, {
+		feedUrl: inputUrl
+	});
+	return discovered;
 };
 
 const isIpv4Address = (value: string) => {
@@ -406,6 +395,7 @@ const sourceSummaryValidator = v.object({
 	addedVia: v.optional(addedViaValidator),
 	includeInSimilarLinks: v.boolean(),
 	canonicalUrl: v.string(),
+	rssFeedUrl: v.optional(v.string()),
 	lastFetchedAt: v.optional(v.number()),
 	lastSuccessAt: v.optional(v.number()),
 	lastError: v.optional(v.string()),
@@ -473,175 +463,8 @@ const sourceItemDetailsValidator = v.object({
 	publishedAt: v.number(),
 	createdAt: v.number(),
 	updatedAt: v.number(),
-	isSaved: v.boolean(),
-	savedBookmarkItemId: v.optional(v.id('source_items')),
-	legacySavedPostId: v.optional(v.id('posts')),
 	shares: v.array(sourceItemShareValidator)
 });
-
-const bookmarkSourceNormalizedKeyForUser = (userAuthId: string) => `bookmarks:${userAuthId}`;
-
-type ActiveBookmarkRow = {
-	delivery: {
-		publishedAt: number;
-	};
-	bookmarkItem: {
-		_id: Id<'source_items'>;
-		url: string;
-		title: string;
-		updatedAt: number;
-		originHost?: string;
-		originSiteUrl?: string;
-		suggestedSourceNormalizedKey?: string;
-		suggestedSourceCanonicalUrl?: string;
-	};
-};
-
-const getBookmarkSourceByUserAuthId = async (ctx: any, userAuthId: string) => {
-	return await ctx.db
-		.query('sources')
-		.withIndex('by_normalizedKey', (q: any) =>
-			q.eq('normalizedKey', bookmarkSourceNormalizedKeyForUser(userAuthId))
-		)
-		.unique();
-};
-
-const getActiveBookmarkMatchForUrl = async (ctx: any, userAuthId: string, url: string) => {
-	const bookmarkSource = await getBookmarkSourceByUserAuthId(ctx, userAuthId);
-	if (!bookmarkSource) {
-		return null;
-	}
-
-	const normalizedUrl = normalizeHttpUrl(url).toString();
-	const normalizedUrlHash = await urlHash(normalizedUrl);
-	const bookmarkItem = await ctx.db
-		.query('source_items')
-		.withIndex('by_sourceId_and_urlHash', (q: any) =>
-			q.eq('sourceId', bookmarkSource._id).eq('urlHash', normalizedUrlHash)
-		)
-		.unique();
-	if (!bookmarkItem) {
-		return null;
-	}
-
-	const delivery = (
-		await ctx.db
-			.query('user_source_items')
-			.withIndex('by_userAuthId_and_sourceItemId', (q: any) =>
-				q.eq('userAuthId', userAuthId).eq('sourceItemId', bookmarkItem._id)
-			)
-			.take(1)
-	)[0];
-	if (!delivery) {
-		return null;
-	}
-
-	return {
-		bookmarkSource,
-		bookmarkItem
-	};
-};
-
-const listActiveBookmarkItemsForSource = async (
-	ctx: any,
-	userAuthId: string,
-	bookmarkSourceId: Id<'sources'>
-): Promise<Array<ActiveBookmarkRow>> => {
-	const deliveries = await ctx.db
-		.query('user_source_items')
-		.withIndex('by_userAuthId_and_sourceId_and_publishedAt', (q: any) =>
-			q.eq('userAuthId', userAuthId).eq('sourceId', bookmarkSourceId)
-		)
-		.order('desc')
-		.collect();
-
-	const bookmarkItems = await Promise.all(
-		deliveries.map((delivery: any) => ctx.db.get(delivery.sourceItemId))
-	);
-	return deliveries
-		.map((delivery: any, index: number) => {
-			const bookmarkItem = bookmarkItems[index];
-			if (!bookmarkItem) {
-				return null;
-			}
-			return {
-				delivery,
-				bookmarkItem
-			};
-		})
-		.filter((row: ActiveBookmarkRow | null): row is ActiveBookmarkRow => !!row);
-};
-
-const refreshSavedSourceSuggestionForKey = async (
-	ctx: any,
-	userAuthId: string,
-	normalizedKey: string
-) => {
-	const bookmarkSource = await getBookmarkSourceByUserAuthId(ctx, userAuthId);
-	const existingSuggestion = await ctx.db
-		.query('saved_source_suggestions')
-		.withIndex('by_userAuthId_and_normalizedKey', (q: any) =>
-			q.eq('userAuthId', userAuthId).eq('normalizedKey', normalizedKey)
-		)
-		.unique();
-
-	if (!bookmarkSource) {
-		if (existingSuggestion) {
-			await ctx.db.delete(existingSuggestion._id);
-		}
-		return null;
-	}
-
-	const activeBookmarkItems = await listActiveBookmarkItemsForSource(
-		ctx,
-		userAuthId,
-		bookmarkSource._id
-	);
-	const matching = activeBookmarkItems.filter(
-		({ bookmarkItem }: ActiveBookmarkRow) =>
-			bookmarkItem.suggestedSourceNormalizedKey === normalizedKey
-	);
-
-	if (matching.length === 0) {
-		if (existingSuggestion) {
-			await ctx.db.delete(existingSuggestion._id);
-		}
-		return null;
-	}
-
-	const latest = matching.slice().sort((a: ActiveBookmarkRow, b: ActiveBookmarkRow) => {
-		if (a.delivery.publishedAt !== b.delivery.publishedAt) {
-			return b.delivery.publishedAt - a.delivery.publishedAt;
-		}
-		return b.bookmarkItem.updatedAt - a.bookmarkItem.updatedAt;
-	})[0];
-	const now = Date.now();
-	const payload = {
-		userAuthId,
-		sourceType: 'website' as const,
-		normalizedKey,
-		canonicalUrl:
-			latest.bookmarkItem.suggestedSourceCanonicalUrl ??
-			latest.bookmarkItem.originSiteUrl ??
-			latest.bookmarkItem.url,
-		originHost: latest.bookmarkItem.originHost ?? sourceHostForDisplay(latest.bookmarkItem.url),
-		itemCount: matching.length,
-		latestSavedUrl: latest.bookmarkItem.url,
-		latestSavedTitle: latest.bookmarkItem.title,
-		lastSavedAt: latest.delivery.publishedAt,
-		updatedAt: now
-	};
-
-	if (existingSuggestion) {
-		await ctx.db.patch(existingSuggestion._id, payload);
-		return existingSuggestion._id;
-	}
-
-	return await ctx.db.insert('saved_source_suggestions', {
-		...payload,
-		createdAt: now
-	});
-};
 
 export const ensureSourceAndSubscription = internalMutation({
 	args: {
@@ -706,14 +529,8 @@ export const ensureSourceAndSubscription = internalMutation({
 		if (existingSubscription) {
 			await ctx.db.patch(existingSubscription._id, {
 				status: 'active',
-				addedVia:
-					source.type === 'bookmarks'
-						? existingSubscription.addedVia
-						: (existingSubscription.addedVia ?? args.addedVia),
-				includeInSimilarLinks:
-					source.type === 'bookmarks'
-						? existingSubscription.includeInSimilarLinks
-						: (existingSubscription.includeInSimilarLinks ?? true),
+				addedVia: existingSubscription.addedVia ?? args.addedVia,
+				includeInSimilarLinks: existingSubscription.includeInSimilarLinks ?? true,
 				unsubscribedAt: undefined,
 				updatedAt: now
 			});
@@ -722,8 +539,8 @@ export const ensureSourceAndSubscription = internalMutation({
 				userAuthId: args.userAuthId,
 				sourceId: source._id,
 				status: 'active',
-				addedVia: source.type === 'bookmarks' ? undefined : args.addedVia,
-				includeInSimilarLinks: source.type === 'bookmarks' ? undefined : true,
+				addedVia: args.addedVia,
+				includeInSimilarLinks: true,
 				createdAt: now,
 				updatedAt: now
 			});
@@ -737,127 +554,33 @@ export const ensureSourceAndSubscription = internalMutation({
 	}
 });
 
-export const ensureUserBookmarkSource = internalMutation({
+export const attachRssFeedToSource = internalMutation({
 	args: {
-		userAuthId: v.string()
+		sourceId: v.id('sources'),
+		rssFeedUrl: v.string(),
+		rssFeedNormalizedKey: v.string()
 	},
-	returns: v.id('sources'),
+	returns: v.null(),
 	handler: async (ctx, args) => {
-		const now = Date.now();
-		const normalizedKey = `bookmarks:${args.userAuthId}`;
-		let source = await ctx.db
-			.query('sources')
-			.withIndex('by_normalizedKey', (q) => q.eq('normalizedKey', normalizedKey))
-			.unique();
-
+		const source = await ctx.db.get(args.sourceId);
 		if (!source) {
-			const sourceId = await ctx.db.insert('sources', {
-				type: 'bookmarks',
-				normalizedKey,
-				canonicalUrl: `https://bookmarks.local/${encodeURIComponent(args.userAuthId)}`,
-				title: 'Saved Links',
-				status: 'active',
-				createdAt: now,
-				updatedAt: now
-			});
-			source = await ctx.db.get(sourceId);
+			throw new Error('Source not found.');
 		}
-		if (!source) {
-			throw new Error('Failed to initialize bookmark source.');
+		if (source.type !== 'website') {
+			return null;
 		}
-		if (source.title !== 'Saved Links') {
-			await ctx.db.patch(source._id, {
-				title: 'Saved Links',
-				updatedAt: now
-			});
-			source = await ctx.db.get(source._id);
-			if (!source) {
-				throw new Error('Failed to initialize bookmark source.');
-			}
+		if (
+			source.rssFeedUrl === args.rssFeedUrl &&
+			source.rssFeedNormalizedKey === args.rssFeedNormalizedKey
+		) {
+			return null;
 		}
-
-		const subscription = await ctx.db
-			.query('source_subscriptions')
-			.withIndex('by_userAuthId_and_sourceId', (q) =>
-				q.eq('userAuthId', args.userAuthId).eq('sourceId', source._id)
-			)
-			.unique();
-		if (subscription) {
-			await ctx.db.patch(subscription._id, {
-				status: 'active',
-				includeInSimilarLinks: subscription.includeInSimilarLinks,
-				unsubscribedAt: undefined,
-				updatedAt: now
-			});
-		} else {
-			await ctx.db.insert('source_subscriptions', {
-				userAuthId: args.userAuthId,
-				sourceId: source._id,
-				status: 'active',
-				includeInSimilarLinks: undefined,
-				createdAt: now,
-				updatedAt: now
-			});
-		}
-
-		return source._id;
-	}
-});
-
-export const saveLinkToBookmarks = internalMutation({
-	args: {
-		userAuthId: v.string(),
-		url: v.string(),
-		title: v.string(),
-		snippet: v.string(),
-		publishedAt: v.optional(v.number())
-	},
-	returns: v.object({
-		bookmarkSourceId: v.id('sources'),
-		sourceItemId: v.id('source_items'),
-		created: v.boolean(),
-		alreadySaved: v.boolean()
-	}),
-	handler: async (ctx, args) => {
-		const bookmarkSourceId: Id<'sources'> = await ctx.runMutation(
-			(internal as any).sources.ensureUserBookmarkSource,
-			{
-				userAuthId: args.userAuthId
-			}
-		);
-
-		const existingActiveMatch = await getActiveBookmarkMatchForUrl(ctx, args.userAuthId, args.url);
-		const metadata = deriveSavedWebsiteMetadata(args.url);
-		const ingestResult: {
-			sourceItemId: Id<'source_items'>;
-			created: boolean;
-			deliveredCount: number;
-		} = await ctx.runMutation((internal as any).sources.ingestSourceItemFromInput, {
-			sourceId: bookmarkSourceId,
-			url: metadata.normalizedUrl,
-			title: args.title.trim().slice(0, SOURCE_TITLE_LIMIT),
-			snippet: createSnippet(args.snippet || args.title || metadata.normalizedUrl),
-			publishedAt: args.publishedAt,
-			contentHash: `bookmark:${metadata.normalizedUrl}`,
-			originHost: metadata.originHost,
-			originSiteUrl: metadata.originSiteUrl,
-			suggestedSourceType: metadata.suggestedSourceType,
-			suggestedSourceNormalizedKey: metadata.suggestedSourceNormalizedKey,
-			suggestedSourceCanonicalUrl: metadata.suggestedSourceCanonicalUrl
+		await ctx.db.patch(args.sourceId, {
+			rssFeedUrl: args.rssFeedUrl,
+			rssFeedNormalizedKey: args.rssFeedNormalizedKey,
+			updatedAt: Date.now()
 		});
-
-		await refreshSavedSourceSuggestionForKey(
-			ctx,
-			args.userAuthId,
-			metadata.suggestedSourceNormalizedKey
-		);
-
-		return {
-			bookmarkSourceId,
-			sourceItemId: ingestResult.sourceItemId,
-			created: ingestResult.created,
-			alreadySaved: !!existingActiveMatch
-		};
+		return null;
 	}
 });
 
@@ -1214,6 +937,7 @@ export const getSourceForUserRefresh = internalQuery({
 		v.object({
 			sourceId: v.id('sources'),
 			type: sourceTypeValidator,
+			rssFeedUrl: v.optional(v.string()),
 			subscriptionStatus: v.union(v.literal('active'), v.literal('paused'))
 		})
 	),
@@ -1234,6 +958,7 @@ export const getSourceForUserRefresh = internalQuery({
 		return {
 			sourceId: source._id,
 			type: source.type,
+			rssFeedUrl: source.rssFeedUrl,
 			subscriptionStatus: subscription.status
 		};
 	}
@@ -1275,7 +1000,7 @@ export const enqueueNightlySourceSyncIfNeeded = internalMutation({
 		if (!source || source.status !== 'active') {
 			return null;
 		}
-		if (!isFetchableSourceType(source.type)) {
+		if (!canSyncSource(source)) {
 			return null;
 		}
 
@@ -1622,6 +1347,7 @@ export const getSourceForSync = internalQuery({
 			status: sourceStatusValidator,
 			title: v.string(),
 			canonicalUrl: v.string(),
+			rssFeedUrl: v.optional(v.string()),
 			hasActiveSubscriptions: v.boolean()
 		})
 	),
@@ -1645,6 +1371,7 @@ export const getSourceForSync = internalQuery({
 			status: source.status,
 			title: source.title,
 			canonicalUrl: source.canonicalUrl,
+			rssFeedUrl: source.rssFeedUrl,
 			hasActiveSubscriptions
 		};
 	}
@@ -1697,58 +1424,6 @@ export const getSourceItemForSharing = internalQuery({
 	}
 });
 
-export const getSourceItemForBookmarking = internalQuery({
-	args: {
-		sourceItemId: v.id('source_items'),
-		userAuthId: v.string()
-	},
-	returns: v.union(
-		v.null(),
-		v.object({
-			sourceItemId: v.id('source_items'),
-			url: v.string(),
-			title: v.string(),
-			snippet: v.string(),
-			publishedAt: v.number()
-		})
-	),
-	handler: async (ctx, args) => {
-		const delivery = (
-			await ctx.db
-				.query('user_source_items')
-				.withIndex('by_userAuthId_and_sourceItemId', (q) =>
-					q.eq('userAuthId', args.userAuthId).eq('sourceItemId', args.sourceItemId)
-				)
-				.take(1)
-		)[0];
-		const ownedShareExists =
-			(
-				await ctx.db
-					.query('posts')
-					.withIndex('by_authorAuthId_and_sourceItemId_and_createdAt', (q) =>
-						q.eq('authorAuthId', args.userAuthId).eq('sourceItemId', args.sourceItemId)
-					)
-					.take(1)
-			).length > 0;
-		if (!delivery && !ownedShareExists) {
-			return null;
-		}
-
-		const sourceItem = await ctx.db.get(args.sourceItemId);
-		if (!sourceItem) {
-			return null;
-		}
-
-		return {
-			sourceItemId: sourceItem._id,
-			url: sourceItem.url,
-			title: sourceItem.title,
-			snippet: sourceItem.snippet,
-			publishedAt: sourceItem.publishedAt
-		};
-	}
-});
-
 export const getSourceItem = query({
 	args: {
 		sourceItemId: v.id('source_items')
@@ -1794,10 +1469,6 @@ export const getSourceItem = query({
 			)
 			.order('desc')
 			.collect();
-		const bookmarkMatch = await getActiveBookmarkMatchForUrl(ctx, authUser._id, sourceItem.url);
-		const legacySavedPostId = shares.find(
-			(post) => (post.visibility ?? 'private') === 'private' && !post.communityId
-		)?._id;
 		const communityIds = [
 			...new Set(shares.map((post) => post.communityId).filter(Boolean))
 		] as Array<Id<'communities'>>;
@@ -1823,9 +1494,6 @@ export const getSourceItem = query({
 			publishedAt: sourceItem.publishedAt,
 			createdAt: sourceItem.createdAt,
 			updatedAt: sourceItem.updatedAt,
-			isSaved: !!bookmarkMatch || !!legacySavedPostId,
-			savedBookmarkItemId: bookmarkMatch?.bookmarkItem._id,
-			legacySavedPostId,
 			shares: shares.map((post) => {
 				const community = post.communityId ? communityById.get(post.communityId) : null;
 				return {
@@ -1892,34 +1560,6 @@ export const getUserProfileCreatedAt = internalQuery({
 	}
 });
 
-export const getSavedSourceSuggestionForUser = internalQuery({
-	args: {
-		userAuthId: v.string(),
-		suggestionId: v.id('saved_source_suggestions')
-	},
-	returns: v.union(
-		v.null(),
-		v.object({
-			_id: v.id('saved_source_suggestions'),
-			normalizedKey: v.string(),
-			canonicalUrl: v.string(),
-			originHost: v.string()
-		})
-	),
-	handler: async (ctx, args) => {
-		const suggestion = await ctx.db.get(args.suggestionId);
-		if (!suggestion || suggestion.userAuthId !== args.userAuthId) {
-			return null;
-		}
-		return {
-			_id: suggestion._id,
-			normalizedKey: suggestion.normalizedKey,
-			canonicalUrl: suggestion.canonicalUrl,
-			originHost: suggestion.originHost
-		};
-	}
-});
-
 export const addSource = action({
 	args: {
 		type: sourceTypeValidator,
@@ -1930,7 +1570,7 @@ export const addSource = action({
 		sourceId: v.id('sources'),
 		subscriptionStatus: v.union(v.literal('active'), v.literal('already_subscribed')),
 		jobId: v.optional(v.id('source_jobs')),
-		savedSeedItemId: v.optional(v.id('source_items')),
+		sourceItemId: v.optional(v.id('source_items')),
 		resolvedSourceType: sourceTypeValidator,
 		resolvedCanonicalUrl: v.string()
 	}),
@@ -1984,13 +1624,20 @@ export const addSource = action({
 
 		const resolvedWebsiteTarget =
 			args.type === 'website' ? await resolveWebsiteFollowTarget(ctx, args.inputUrlOrId) : null;
+		const resolvedRssTarget =
+			args.type === 'rss' ? await resolveRssFollowTarget(ctx, args.inputUrlOrId) : null;
 		const resolvedType =
 			resolvedWebsiteTarget?.sourceType ??
-			(args.type as 'website' | 'rss' | 'youtube' | 'bookmarks');
+			resolvedRssTarget?.sourceType ??
+			(args.type as 'website' | 'rss' | 'youtube');
 		const resolvedCanonicalUrl =
-			resolvedWebsiteTarget?.canonicalUrl ?? normalizedInput.canonicalUrl;
+			resolvedWebsiteTarget?.canonicalUrl ??
+			resolvedRssTarget?.canonicalUrl ??
+			normalizedInput.canonicalUrl;
 		const resolvedNormalizedKey =
-			resolvedWebsiteTarget?.normalizedKey ?? normalizedInput.normalizedKey;
+			resolvedWebsiteTarget?.normalizedKey ??
+			resolvedRssTarget?.normalizedKey ??
+			normalizedInput.normalizedKey;
 
 		const ensureResult: {
 			sourceId: Id<'sources'>;
@@ -2005,39 +1652,56 @@ export const addSource = action({
 			addedVia: 'manual'
 		});
 
-		let savedSeedItemId: Id<'source_items'> | undefined;
+		const attachedRssFeedUrl = resolvedWebsiteTarget?.rssFeedUrl ?? resolvedRssTarget?.rssFeedUrl;
+		const attachedRssFeedNormalizedKey =
+			resolvedWebsiteTarget?.rssFeedNormalizedKey ?? resolvedRssTarget?.rssFeedNormalizedKey;
+		if (resolvedType === 'website' && attachedRssFeedUrl && attachedRssFeedNormalizedKey) {
+			await ctx.runMutation((internal as any).sources.attachRssFeedToSource, {
+				sourceId: ensureResult.sourceId,
+				rssFeedUrl: attachedRssFeedUrl,
+				rssFeedNormalizedKey: attachedRssFeedNormalizedKey
+			});
+		}
+
+		let sourceItemId: Id<'source_items'> | undefined;
 		if (
 			args.type === 'website' &&
+			resolvedType === 'website' &&
 			resolvedWebsiteTarget?.shouldSaveOriginal &&
 			resolvedWebsiteTarget.originalUrl !== resolvedCanonicalUrl
 		) {
-			const savedSeedResult: {
+			const sourceItemResult: {
 				sourceItemId: Id<'source_items'>;
-			} = await ctx.runMutation((internal as any).sources.saveLinkToBookmarks, {
-				userAuthId: authUser._id,
+			} = await ctx.runAction((internal as any).sources_node.saveWebsiteSourceItemFromUrl, {
+				sourceId: ensureResult.sourceId,
 				url: resolvedWebsiteTarget.originalUrl,
-				title: args.title?.trim() || resolvedWebsiteTarget.originalUrl,
-				snippet: `Saved while following ${resolvedWebsiteTarget.canonicalUrl}`,
-				publishedAt: Date.now()
+				fallbackTitle: args.title?.trim() || resolvedWebsiteTarget.originalUrl,
+				originSiteUrl: resolvedCanonicalUrl
 			});
-			savedSeedItemId = savedSeedResult.sourceItemId;
+			sourceItemId = sourceItemResult.sourceItemId;
 		}
 
 		if (ensureResult.alreadySubscribed) {
 			return {
 				sourceId: ensureResult.sourceId,
 				subscriptionStatus: 'already_subscribed' as const,
-				savedSeedItemId,
+				sourceItemId,
 				resolvedSourceType: resolvedType,
 				resolvedCanonicalUrl
 			};
 		}
 
-		if (!isFetchableSourceType(resolvedType) && !ensureResult.shouldBackfill) {
+		if (
+			!canSyncSource({
+				type: resolvedType,
+				rssFeedUrl: attachedRssFeedUrl
+			}) &&
+			!ensureResult.shouldBackfill
+		) {
 			return {
 				sourceId: ensureResult.sourceId,
 				subscriptionStatus: 'active' as const,
-				savedSeedItemId,
+				sourceItemId,
 				resolvedSourceType: resolvedType,
 				resolvedCanonicalUrl
 			};
@@ -2068,234 +1732,9 @@ export const addSource = action({
 			sourceId: ensureResult.sourceId,
 			subscriptionStatus: 'active' as const,
 			jobId,
-			savedSeedItemId,
+			sourceItemId,
 			resolvedSourceType: resolvedType,
 			resolvedCanonicalUrl
-		};
-	}
-});
-
-export const saveWebsiteLink = mutation({
-	args: {
-		url: v.string(),
-		title: v.optional(v.string())
-	},
-	returns: v.object({
-		sourceItemId: v.id('source_items'),
-		created: v.boolean(),
-		alreadySaved: v.boolean()
-	}),
-	handler: async (ctx, args) => {
-		const authUser = await requireUserWithUsername(ctx);
-
-		const normalizedUrl = normalizeHttpUrl(args.url).toString();
-		const title = (args.title?.trim() || normalizedUrl).slice(0, SOURCE_TITLE_LIMIT);
-		const result: {
-			sourceItemId: Id<'source_items'>;
-			created: boolean;
-			alreadySaved: boolean;
-		} = await ctx.runMutation((internal as any).sources.saveLinkToBookmarks, {
-			userAuthId: authUser._id,
-			url: normalizedUrl,
-			title,
-			snippet: `${normalizedUrl} - saved link`,
-			publishedAt: Date.now()
-		});
-
-		return {
-			sourceItemId: result.sourceItemId,
-			created: result.created,
-			alreadySaved: result.alreadySaved
-		};
-	}
-});
-
-export const saveSourceItemToBookmarks = mutation({
-	args: {
-		sourceItemId: v.id('source_items')
-	},
-	returns: v.object({
-		sourceItemId: v.id('source_items'),
-		created: v.boolean(),
-		alreadySaved: v.boolean()
-	}),
-	handler: async (ctx, args) => {
-		const authUser = await requireUserWithUsername(ctx);
-
-		const sourceItem: {
-			sourceItemId: Id<'source_items'>;
-			url: string;
-			title: string;
-			snippet: string;
-			publishedAt: number;
-		} | null = await ctx.runQuery((internal as any).sources.getSourceItemForBookmarking, {
-			userAuthId: authUser._id,
-			sourceItemId: args.sourceItemId
-		});
-		if (!sourceItem) {
-			throw new Error('Source item not found.');
-		}
-
-		const result: {
-			sourceItemId: Id<'source_items'>;
-			created: boolean;
-			alreadySaved: boolean;
-		} = await ctx.runMutation((internal as any).sources.saveLinkToBookmarks, {
-			userAuthId: authUser._id,
-			url: sourceItem.url,
-			title: sourceItem.title,
-			snippet: sourceItem.snippet,
-			publishedAt: sourceItem.publishedAt
-		});
-
-		return {
-			sourceItemId: result.sourceItemId,
-			created: result.created,
-			alreadySaved: result.alreadySaved
-		};
-	}
-});
-
-export const unsaveBookmarkItem = mutation({
-	args: {
-		bookmarkItemId: v.id('source_items')
-	},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		const authUser = await requireUserWithUsername(ctx);
-
-		const bookmarkSource = await getBookmarkSourceByUserAuthId(ctx, authUser._id);
-		if (!bookmarkSource) {
-			return null;
-		}
-		const bookmarkItem = await ctx.db.get(args.bookmarkItemId);
-		if (!bookmarkItem || bookmarkItem.sourceId !== bookmarkSource._id) {
-			return null;
-		}
-
-		const deliveries = await ctx.db
-			.query('user_source_items')
-			.withIndex('by_userAuthId_and_sourceItemId', (q) =>
-				q.eq('userAuthId', authUser._id).eq('sourceItemId', args.bookmarkItemId)
-			)
-			.collect();
-		for (const delivery of deliveries) {
-			await ctx.db.delete(delivery._id);
-		}
-
-		const linkedPosts = await ctx.db
-			.query('posts')
-			.withIndex('by_sourceItemId_and_createdAt', (q) => q.eq('sourceItemId', args.bookmarkItemId))
-			.take(1);
-		if (linkedPosts.length === 0) {
-			await trackSourceItemDeleted(ctx, bookmarkItem);
-			await ctx.db.delete(bookmarkItem._id);
-		}
-
-		if (bookmarkItem.suggestedSourceNormalizedKey) {
-			await refreshSavedSourceSuggestionForKey(
-				ctx,
-				authUser._id,
-				bookmarkItem.suggestedSourceNormalizedKey
-			);
-		}
-
-		return null;
-	}
-});
-
-export const followSavedSourceSuggestion = action({
-	args: {
-		suggestionId: v.id('saved_source_suggestions')
-	},
-	returns: v.object({
-		sourceId: v.id('sources'),
-		subscriptionStatus: v.union(v.literal('active'), v.literal('already_subscribed')),
-		jobId: v.optional(v.id('source_jobs')),
-		resolvedSourceType: sourceTypeValidator,
-		resolvedCanonicalUrl: v.string()
-	}),
-	handler: async (ctx, args) => {
-		const authUser = await requireUserWithUsername(ctx);
-		const isAdmin = isAdminRole(authUser.role);
-
-		const suggestion = await ctx.runQuery(
-			(internal as any).sources.getSavedSourceSuggestionForUser,
-			{
-				userAuthId: authUser._id,
-				suggestionId: args.suggestionId
-			}
-		);
-		if (!suggestion) {
-			throw new Error('Suggestion not found.');
-		}
-
-		if (!isAdmin) {
-			await rateLimiter.limit(ctx, 'addSource', { key: authUser._id, throws: true });
-			await rateLimiter.limit(ctx, 'addSourcePerNormalizedKey', {
-				key: `${authUser._id}:${suggestion.normalizedKey}`,
-				throws: true
-			});
-		}
-		const resolvedWebsiteTarget = await resolveWebsiteFollowTarget(ctx, suggestion.canonicalUrl);
-		const ensureResult: {
-			sourceId: Id<'sources'>;
-			alreadySubscribed: boolean;
-			shouldBackfill: boolean;
-		} = await ctx.runMutation((internal as any).sources.ensureSourceAndSubscription, {
-			userAuthId: authUser._id,
-			type: resolvedWebsiteTarget.sourceType,
-			normalizedKey: resolvedWebsiteTarget.normalizedKey,
-			canonicalUrl: resolvedWebsiteTarget.canonicalUrl,
-			title: suggestion.originHost,
-			addedVia: 'saved_link'
-		});
-
-		if (ensureResult.alreadySubscribed) {
-			return {
-				sourceId: ensureResult.sourceId,
-				subscriptionStatus: 'already_subscribed' as const,
-				resolvedSourceType: resolvedWebsiteTarget.sourceType,
-				resolvedCanonicalUrl: resolvedWebsiteTarget.canonicalUrl
-			};
-		}
-
-		if (!isFetchableSourceType(resolvedWebsiteTarget.sourceType) && !ensureResult.shouldBackfill) {
-			return {
-				sourceId: ensureResult.sourceId,
-				subscriptionStatus: 'active' as const,
-				resolvedSourceType: resolvedWebsiteTarget.sourceType,
-				resolvedCanonicalUrl: resolvedWebsiteTarget.canonicalUrl
-			};
-		}
-
-		const jobType = ensureResult.shouldBackfill ? 'resubscribe_backfill' : 'sync_source';
-		const jobId: Id<'source_jobs'> = await ctx.runMutation((internal as any).sources.createJob, {
-			jobType,
-			userAuthId: authUser._id,
-			sourceId: ensureResult.sourceId
-		});
-
-		if (ensureResult.shouldBackfill) {
-			await enqueueSourceCleanupWork(ctx, (internal as any).sources.runResubscribeBackfill, {
-				jobId,
-				userAuthId: authUser._id,
-				sourceId: ensureResult.sourceId,
-				cursor: null
-			});
-		} else {
-			await enqueueSourceSyncWork(ctx, {
-				jobId,
-				sourceId: ensureResult.sourceId
-			});
-		}
-
-		return {
-			sourceId: ensureResult.sourceId,
-			subscriptionStatus: 'active' as const,
-			jobId,
-			resolvedSourceType: resolvedWebsiteTarget.sourceType,
-			resolvedCanonicalUrl: resolvedWebsiteTarget.canonicalUrl
 		};
 	}
 });
@@ -2317,10 +1756,11 @@ export const runSourceSync = internalAction({
 		try {
 			const source: {
 				_id: Id<'sources'>;
-				type: 'website' | 'rss' | 'youtube' | 'bookmarks';
+				type: 'website' | 'rss' | 'youtube';
 				status: 'active' | 'paused' | 'error' | 'deleting';
 				title: string;
 				canonicalUrl: string;
+				rssFeedUrl?: string;
 				hasActiveSubscriptions: boolean;
 			} | null = await ctx.runQuery((internal as any).sources.getSourceForSync, {
 				sourceId: args.sourceId
@@ -2338,7 +1778,7 @@ export const runSourceSync = internalAction({
 				});
 				return null;
 			}
-			if (!isFetchableSourceType(source.type)) {
+			if (!canSyncSource(source)) {
 				await ctx.runMutation((internal as any).sources.completeJob, {
 					jobId: args.jobId
 				});
@@ -2352,12 +1792,12 @@ export const runSourceSync = internalAction({
 
 			let processed = 0;
 
-			if (source.type === 'rss') {
+			if (source.rssFeedUrl || source.type === 'rss') {
 				const rssResult: { processed: number } = await ctx.runAction(
 					(internal as any).sources_node.syncRssSource,
 					{
 						sourceId: source._id,
-						canonicalUrl: source.canonicalUrl
+						canonicalUrl: source.rssFeedUrl ?? source.canonicalUrl
 					}
 				);
 				processed = rssResult.processed;
@@ -2421,7 +1861,8 @@ export const refreshSource = action({
 
 		const sourceForRefresh: {
 			sourceId: Id<'sources'>;
-			type: 'website' | 'rss' | 'youtube' | 'bookmarks';
+			type: 'website' | 'rss' | 'youtube';
+			rssFeedUrl?: string;
 			subscriptionStatus: 'active' | 'paused';
 		} | null = await ctx.runQuery((internal as any).sources.getSourceForUserRefresh, {
 			userAuthId: authUser._id,
@@ -2430,8 +1871,8 @@ export const refreshSource = action({
 		if (!sourceForRefresh || sourceForRefresh.subscriptionStatus !== 'active') {
 			throw new Error('Subscription not found.');
 		}
-		if (!isFetchableSourceType(sourceForRefresh.type)) {
-			throw new Error('Bookmark sources are upload-only and cannot be refreshed.');
+		if (!canSyncSource(sourceForRefresh)) {
+			throw new Error('This source does not have a sync method yet.');
 		}
 
 		if (!isAdminRole(authUser.role)) {
@@ -2700,11 +2141,12 @@ export const listMySources = query({
 			subscriptionId: Id<'source_subscriptions'>;
 			title: string;
 			description?: string;
-			type: 'website' | 'rss' | 'youtube' | 'bookmarks';
+			type: 'website' | 'rss' | 'youtube';
 			status: 'active' | 'paused' | 'error' | 'deleting';
-			addedVia?: 'manual' | 'saved_link';
+			addedVia?: 'manual';
 			includeInSimilarLinks: boolean;
 			canonicalUrl: string;
+			rssFeedUrl?: string;
 			lastFetchedAt?: number;
 			lastSuccessAt?: number;
 			lastError?: string;
@@ -2717,9 +2159,6 @@ export const listMySources = query({
 		for (const subscription of subscriptions.page) {
 			const source = await ctx.db.get(subscription.sourceId);
 			if (!source) {
-				continue;
-			}
-			if (source.type === 'bookmarks') {
 				continue;
 			}
 			const [itemCount, sharedPostCount] = await Promise.all([
@@ -2737,6 +2176,7 @@ export const listMySources = query({
 				addedVia: subscription.addedVia,
 				includeInSimilarLinks: subscription.includeInSimilarLinks ?? true,
 				canonicalUrl: source.canonicalUrl,
+				rssFeedUrl: source.rssFeedUrl,
 				lastFetchedAt: source.lastFetchedAt,
 				lastSuccessAt: source.lastSuccessAt,
 				lastError: source.lastError,
@@ -2765,12 +2205,11 @@ export const listMySimilarLinkDomains = query({
 			domain: string;
 			included: boolean;
 			sourceCount: number;
-			savedLinkCount: number;
 			totalCount: number;
 			contributors: Array<{
 				label: string;
 				url: string;
-				kind: 'source' | 'saved_link';
+				kind: 'source';
 			}>;
 		}>
 	> => {
@@ -2780,82 +2219,16 @@ export const listMySimilarLinkDomains = query({
 			domain: string;
 			included: boolean;
 			sourceCount: number;
-			savedLinkCount: number;
 			totalCount: number;
 			contributors: Array<{
 				label: string;
 				url: string;
-				kind: 'source' | 'saved_link';
+				kind: 'source';
 			}>;
 		}> = await ctx.runQuery((internal as any).similar_links.getUserSourceDomainRows, {
 			userAuthId: authUser._id
 		});
 		return rows;
-	}
-});
-
-export const listSavedSourceSuggestions = query({
-	args: {
-		paginationOpts: paginationOptsValidator
-	},
-	returns: v.object({
-		page: v.array(savedSuggestionValidator),
-		isDone: v.boolean(),
-		continueCursor: v.union(v.string(), v.null())
-	}),
-	handler: async (ctx, args) => {
-		const authUser = await getAuthUser(ctx);
-
-		const suggestions = await ctx.db
-			.query('saved_source_suggestions')
-			.withIndex('by_userAuthId_and_updatedAt', (q) => q.eq('userAuthId', authUser._id))
-			.order('desc')
-			.paginate(args.paginationOpts);
-
-		const subscriptions = await ctx.db
-			.query('source_subscriptions')
-			.withIndex('by_userAuthId_and_updatedAt', (q) => q.eq('userAuthId', authUser._id))
-			.collect();
-		const activeSubscriptions = subscriptions.filter(
-			(subscription) => subscription.status === 'active'
-		);
-		const activeSourceIds = activeSubscriptions.map((subscription) => subscription.sourceId);
-		const sourceDocs = await Promise.all(activeSourceIds.map((sourceId) => ctx.db.get(sourceId)));
-		const activeSources = sourceDocs.filter(
-			(source): source is NonNullable<typeof source> => !!source && source.type !== 'bookmarks'
-		);
-		const activeHosts = new Set(
-			activeSources.map((source) => sourceHostForDisplay(source.canonicalUrl))
-		);
-		const activeSavedLinkTitles = new Set(
-			activeSources.map((source) => source.title.trim().toLowerCase()).filter(Boolean)
-		);
-
-		return {
-			page: suggestions.page
-				.map((suggestion) => {
-					const isFollowing =
-						activeHosts.has(suggestion.originHost) ||
-						activeSavedLinkTitles.has(suggestion.originHost.toLowerCase());
-					return {
-						_id: suggestion._id,
-						sourceType: suggestion.sourceType,
-						normalizedKey: suggestion.normalizedKey,
-						canonicalUrl: suggestion.canonicalUrl,
-						originHost: suggestion.originHost,
-						itemCount: suggestion.itemCount,
-						latestSavedUrl: suggestion.latestSavedUrl,
-						latestSavedTitle: suggestion.latestSavedTitle,
-						lastSavedAt: suggestion.lastSavedAt,
-						createdAt: suggestion.createdAt,
-						updatedAt: suggestion.updatedAt,
-						isFollowing
-					};
-				})
-				.filter((suggestion) => !suggestion.isFollowing),
-			isDone: suggestions.isDone,
-			continueCursor: suggestions.continueCursor
-		};
 	}
 });
 

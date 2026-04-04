@@ -51,8 +51,7 @@ const logAdminAuditEvent = async (
 const sourceTypeValidator = v.union(
 	v.literal('website'),
 	v.literal('rss'),
-	v.literal('youtube'),
-	v.literal('bookmarks')
+	v.literal('youtube')
 );
 
 const sourceStatusValidator = v.union(
@@ -72,6 +71,7 @@ const dashboardSourceValidator = v.object({
 	type: sourceTypeValidator,
 	status: sourceStatusValidator,
 	canonicalUrl: v.string(),
+	rssFeedUrl: v.optional(v.string()),
 	updatedAt: v.number(),
 	itemCount: v.number()
 });
@@ -353,9 +353,6 @@ type R2RetryJobClaim = {
 	shouldRun: boolean;
 };
 
-type R2RetryStage = 'object_delete' | 'metadata_delete';
-type R2RetryStatus = 'queued' | 'running' | 'done' | 'failed';
-
 const createDeletionRequestKey = (targetType: DeletionJobTargetType, targetId: string) =>
 	`v1:${targetType}:${targetId}`;
 
@@ -405,6 +402,7 @@ export const listDashboard = query({
 					type: source.type,
 					status: source.status,
 					canonicalUrl: source.canonicalUrl,
+					rssFeedUrl: source.rssFeedUrl,
 					updatedAt: source.updatedAt,
 					itemCount
 				};

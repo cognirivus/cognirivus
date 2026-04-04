@@ -8,14 +8,23 @@ import { internalAction } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { r2 } from './lib/r2';
-import { deriveWebsiteSourceInput } from './lib/sourceUrls';
+import {
+	canonicalWebsiteRootUrl,
+	deriveWebsiteSourceInput,
+	normalizeHttpUrl as normalizeSharedHttpUrl,
+	rssNormalizedKeyFromUrl,
+	sourceHostForDisplay
+} from './lib/sourceUrls';
+import { resolveSourceIdentityFromRss } from './lib/sourceIdentity';
 
 const SOURCE_ITEM_INLINE_LIMIT = 1000;
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
 const SOURCE_TITLE_LIMIT = 220;
 const SOURCE_SYNC_ITEM_LIMIT = 25;
+const EXA_CONTENT_MAX_CHARACTERS = 20000;
 const SOURCE_URL_LIMIT = 2048;
 const MAX_FETCH_REDIRECTS = 15;
+const EXA_CONTENTS_ENDPOINT = 'https://api.exa.ai/contents';
 
 const REQUEST_HEADERS = {
 	'User-Agent':
@@ -53,12 +62,6 @@ const stripHtml = (html: string) =>
 		.replace(/ *\n */g, '\n')
 		.replace(/\n{3,}/g, '\n\n')
 		.trim();
-
-const extractHtmlTitle = (html: string, fallback: string) => {
-	const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-	const title = match?.[1]?.replace(/\s+/g, ' ').trim();
-	return (title && title.slice(0, SOURCE_TITLE_LIMIT)) || fallback;
-};
 
 const isIpv4Address = (value: string) => {
 	const parts = value.split('.');
@@ -358,6 +361,55 @@ const normalizeFeedError = (error: unknown) => {
 	return message;
 };
 
+const fetchExaContentsForUrl = async (url: string) => {
+	const exaApiKey = process.env.EXA_API_KEY?.trim();
+	if (!exaApiKey) {
+		throw new Error('EXA_API_KEY is not configured.');
+	}
+
+	const response = await fetch(EXA_CONTENTS_ENDPOINT, {
+		method: 'POST',
+		headers: {
+			'content-type': 'application/json',
+			'x-api-key': exaApiKey
+		},
+		body: JSON.stringify({
+			urls: [url],
+			text: {
+				maxCharacters: EXA_CONTENT_MAX_CHARACTERS,
+				verbosity: 'standard'
+			}
+		})
+	});
+
+	const payload = (await response.json().catch(() => null)) as {
+		results?: Array<{
+			title?: string;
+			url?: string;
+			publishedDate?: string | null;
+			author?: string | null;
+			text?: string;
+		}>;
+		statuses?: Array<{
+			id?: string;
+			status?: string;
+			error?: { tag?: string; httpStatusCode?: number | null };
+		}>;
+	} | null;
+
+	if (!response.ok) {
+		throw new Error(`Exa contents request failed (${response.status}).`);
+	}
+
+	const status = payload?.statuses?.[0];
+	if (status?.status === 'error') {
+		const tag = status.error?.tag ?? 'CRAWL_UNKNOWN_ERROR';
+		throw new Error(`Exa contents failed (${tag}).`);
+	}
+
+	return payload?.results?.[0] ?? null;
+};
+
 const tryThirdPartyIngestionFallback = async (): Promise<{
 	parsedFeed: any;
 	parsedFeedUrl: string | null;
@@ -476,40 +528,16 @@ export const syncRssSource = internalAction({
 	}
 });
 
-const normalizeWebsiteError = (error: unknown) => {
-	const message = error instanceof Error ? error.message : 'Source fetch failed.';
-	if (/redirect loop/i.test(message)) {
-		return 'Source fetch redirect loop detected.';
-	}
-	if (/exceeded .*redirect/i.test(message)) {
-		return `Source fetch exceeded ${MAX_FETCH_REDIRECTS} redirects.`;
-	}
-	if (/dns resolution failed/i.test(message)) {
-		return 'Source host DNS resolution failed.';
-	}
-	if (/missing location header/i.test(message)) {
-		return 'Source host returned an invalid redirect response.';
-	}
-	if (/blocked for safety|blocked address|host is blocked/i.test(message)) {
-		return 'Source host is blocked for safety.';
-	}
-	if (/\b429\b|rate-limited/i.test(message)) {
-		return 'Source website rate-limited requests (HTTP 429). Try again later.';
-	}
-	if (/\b403\b|\b401\b|access denied|forbidden/i.test(message)) {
-		return 'Access denied by source website. This site may block server-side fetches.';
-	}
-	return message;
-};
-
 export const discoverWebsiteFollowTarget = internalAction({
 	args: {
 		siteUrl: v.string()
 	},
 	returns: v.object({
-		sourceType: v.union(v.literal('website'), v.literal('rss')),
+		sourceType: v.literal('website'),
 		canonicalUrl: v.string(),
-		normalizedKey: v.string()
+		normalizedKey: v.string(),
+		rssFeedUrl: v.optional(v.string()),
+		rssFeedNormalizedKey: v.optional(v.string())
 	}),
 	handler: async (_ctx, args) => {
 		const websiteInput = deriveWebsiteSourceInput(args.siteUrl);
@@ -521,25 +549,29 @@ export const discoverWebsiteFollowTarget = internalAction({
 				lowerContentType.includes('atom') ||
 				(lowerContentType.includes('xml') && !lowerContentType.includes('html'));
 			if (looksLikeFeed) {
-				const canonicalUrl = normalizeHttpUrl(fetched.finalUrl);
+				const rssFeedUrl = normalizeSharedHttpUrl(fetched.finalUrl).toString();
 				return {
-					sourceType: 'rss' as const,
-					canonicalUrl,
-					normalizedKey: `rss:${canonicalUrl.toLowerCase()}`
+					sourceType: 'website' as const,
+					canonicalUrl: websiteInput.canonicalUrl,
+					normalizedKey: websiteInput.normalizedKey,
+					rssFeedUrl,
+					rssFeedNormalizedKey: rssNormalizedKeyFromUrl(rssFeedUrl)
 				};
 			}
 
 			const alternateFeedUrl = extractAlternateFeedUrl(fetched.body, fetched.finalUrl);
 			if (alternateFeedUrl) {
-				const canonicalUrl = normalizeHttpUrl(alternateFeedUrl);
+				const rssFeedUrl = normalizeSharedHttpUrl(alternateFeedUrl).toString();
 				return {
-					sourceType: 'rss' as const,
-					canonicalUrl,
-					normalizedKey: `rss:${canonicalUrl.toLowerCase()}`
+					sourceType: 'website' as const,
+					canonicalUrl: websiteInput.canonicalUrl,
+					normalizedKey: websiteInput.normalizedKey,
+					rssFeedUrl,
+					rssFeedNormalizedKey: rssNormalizedKeyFromUrl(rssFeedUrl)
 				};
 			}
 		} catch {
-			// Fall back to site-level website tracking when discovery fails.
+			// best-effort feed discovery; website follow should still succeed
 		}
 
 		return {
@@ -547,6 +579,128 @@ export const discoverWebsiteFollowTarget = internalAction({
 			canonicalUrl: websiteInput.canonicalUrl,
 			normalizedKey: websiteInput.normalizedKey
 		};
+	}
+});
+
+export const discoverRssFollowTarget = internalAction({
+	args: {
+		feedUrl: v.string()
+	},
+	returns: v.object({
+		sourceType: v.union(v.literal('website'), v.literal('rss')),
+		canonicalUrl: v.string(),
+		normalizedKey: v.string(),
+		rssFeedUrl: v.string(),
+		rssFeedNormalizedKey: v.string()
+	}),
+	handler: async (_ctx, args) => {
+		const normalizedFeedUrl = normalizeSharedHttpUrl(args.feedUrl).toString();
+		const candidates = rssCandidatesFrom(normalizedFeedUrl);
+		let parsedFeed: any = null;
+		let parsedFeedUrl: string | null = null;
+		let lastError: unknown = null;
+
+		for (const candidate of candidates) {
+			try {
+				const fetched = await fetchTextWithGuards(candidate);
+				try {
+					parsedFeed = await parser.parseString(fetched.body);
+				} catch (parseError) {
+					const parseMessage =
+						parseError instanceof Error ? parseError.message : 'Unknown parser error';
+					throw new Error(`RSS parse failed: ${parseMessage}`);
+				}
+				parsedFeedUrl = fetched.finalUrl;
+				break;
+			} catch (error) {
+				lastError = error;
+			}
+		}
+
+		if (!parsedFeed) {
+			throw new Error(normalizeFeedError(lastError));
+		}
+
+		const feedBaseUrl =
+			typeof parsedFeed?.link === 'string' && parsedFeed.link.trim()
+				? parsedFeed.link
+				: (parsedFeedUrl ?? normalizedFeedUrl);
+		const itemUrls: Array<string> = (Array.isArray(parsedFeed.items) ? parsedFeed.items : [])
+			.map((item: any) => {
+				const rawUrl = item?.link ?? item?.guid ?? item?.id;
+				return typeof rawUrl === 'string' ? coerceItemUrl(rawUrl, feedBaseUrl) : null;
+			})
+			.filter((itemUrl: string | null): itemUrl is string => !!itemUrl);
+
+		return resolveSourceIdentityFromRss({
+			feedUrl: parsedFeedUrl ?? normalizedFeedUrl,
+			feedSiteUrl: typeof parsedFeed?.link === 'string' ? parsedFeed.link : null,
+			itemUrls
+		});
+	}
+});
+
+export const saveWebsiteSourceItemFromUrl = internalAction({
+	args: {
+		sourceId: v.id('sources'),
+		url: v.string(),
+		fallbackTitle: v.string(),
+		originSiteUrl: v.string()
+	},
+	returns: v.object({
+		sourceItemId: v.id('source_items')
+	}),
+	handler: async (ctx, args) => {
+		const normalizedUrl = normalizeSharedHttpUrl(args.url).toString();
+		const fallbackTitle = args.fallbackTitle.trim().slice(0, SOURCE_TITLE_LIMIT) || normalizedUrl;
+		const originSiteUrl = canonicalWebsiteRootUrl(args.originSiteUrl);
+		const originHost = sourceHostForDisplay(originSiteUrl);
+
+		try {
+			const extracted = await fetchExaContentsForUrl(normalizedUrl);
+			const extractedTitle = extracted?.title?.trim().slice(0, SOURCE_TITLE_LIMIT) || fallbackTitle;
+			const bodyText = (extracted?.text ?? '').trim();
+			const snippet = createSnippet(bodyText || extractedTitle || normalizedUrl);
+			const { inlineBody, r2Key } = await maybeStoreBodyToR2(ctx, args.sourceId, bodyText);
+			const publishedAt = parseDateToMs(extracted?.publishedDate ?? null, null);
+			const result: {
+				sourceItemId: Id<'source_items'>;
+				created: boolean;
+				deliveredCount: number;
+			} = await ctx.runMutation((internal as any).sources.ingestSourceItemFromInput, {
+				sourceId: args.sourceId,
+				url: extracted?.url ? normalizeSharedHttpUrl(extracted.url).toString() : normalizedUrl,
+				title: extractedTitle,
+				snippet,
+				body: inlineBody,
+				r2Key,
+				publishedAt,
+				contentHash: bodyText ? sha256Hex(bodyText.slice(0, 4000)) : undefined,
+				contentType: bodyText ? 'text/markdown' : undefined,
+				originHost,
+				originSiteUrl
+			});
+			return {
+				sourceItemId: result.sourceItemId
+			};
+		} catch {
+			const result: {
+				sourceItemId: Id<'source_items'>;
+				created: boolean;
+				deliveredCount: number;
+			} = await ctx.runMutation((internal as any).sources.ingestSourceItemFromInput, {
+				sourceId: args.sourceId,
+				url: normalizedUrl,
+				title: fallbackTitle,
+				snippet: createSnippet(fallbackTitle || normalizedUrl),
+				publishedAt: Date.now(),
+				originHost,
+				originSiteUrl
+			});
+			return {
+				sourceItemId: result.sourceItemId
+			};
+		}
 	}
 });
 
@@ -559,31 +713,7 @@ export const syncWebsiteSource = internalAction({
 	returns: v.object({
 		processed: v.number()
 	}),
-	handler: async (ctx, args) => {
-		try {
-			const normalizedCanonicalUrl = normalizeHttpUrl(args.canonicalUrl);
-			const fetched = await fetchTextWithGuards(normalizedCanonicalUrl);
-			const rawText = stripHtml(fetched.body);
-			const pageTitle = extractHtmlTitle(
-				fetched.body,
-				args.sourceTitle.trim() || normalizedCanonicalUrl
-			).slice(0, SOURCE_TITLE_LIMIT);
-			const snippet = createSnippet(rawText || pageTitle || normalizedCanonicalUrl);
-			const { inlineBody, r2Key } = await maybeStoreBodyToR2(ctx, args.sourceId, rawText);
-			await ctx.runMutation((internal as any).sources.ingestSourceItemFromInput, {
-				sourceId: args.sourceId,
-				url: normalizedCanonicalUrl,
-				title: pageTitle,
-				snippet,
-				body: inlineBody,
-				r2Key,
-				publishedAt: Date.now(),
-				contentHash: sha256Hex(rawText.slice(0, 4000)),
-				contentType: fetched.contentType
-			});
-			return { processed: 1 };
-		} catch (error) {
-			throw new Error(normalizeWebsiteError(error));
-		}
+	handler: async () => {
+		return { processed: 0 };
 	}
 });

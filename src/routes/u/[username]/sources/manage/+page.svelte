@@ -19,7 +19,7 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table';
-	import { ArrowLeft, Link2, Loader2, Pause, Play, RefreshCw, Trash2 } from '@lucide/svelte';
+	import { ArrowLeft, Loader2, Pause, Play, RefreshCw, Trash2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	const auth = useAppAuth();
@@ -40,14 +40,10 @@
 	const similarDomainsQuery = useQuery((api as any).sources.listMySimilarLinkDomains, () =>
 		isAuthorized ? {} : 'skip'
 	);
-	const suggestionsQuery = useQuery((api as any).sources.listSavedSourceSuggestions, () =>
-		isAuthorized ? { paginationOpts: { numItems: 50, cursor: null } } : 'skip'
-	);
 
 	let selectedSourceIds = $state<Array<string>>([]);
 	let runningJobId = $state<Id<'source_jobs'> | null>(null);
 	let busySourceId = $state<string | null>(null);
-	let busySuggestionId = $state<string | null>(null);
 	let busySimilarDomain = $state<string | null>(null);
 	let bulkUnsubscribeDialogOpen = $state(false);
 	let activeTab = $state('sources');
@@ -85,13 +81,10 @@
 
 	const sourceCount = $derived(sourcesQuery.data?.page?.length ?? 0);
 	const similarDomainCount = $derived(similarDomainsQuery.data?.length ?? 0);
-	const suggestionCount = $derived(suggestionsQuery.data?.page?.length ?? 0);
-	const hasAnyManageData = $derived(
-		sourceCount > 0 || similarDomainCount > 0 || suggestionCount > 0
-	);
+	const hasAnyManageData = $derived(sourceCount > 0 || similarDomainCount > 0);
 
-	function isFetchableSourceType(type: string) {
-		return type !== 'bookmarks';
+	function canRefreshSource(type: string, rssFeedUrl?: string) {
+		return type === 'rss' || type === 'youtube' || !!rssFeedUrl;
 	}
 
 	const refreshResetsAtUtc = $derived.by(() => {
@@ -207,23 +200,6 @@
 		}
 	}
 
-	async function followSuggestion(suggestionId: Id<'saved_source_suggestions'>) {
-		busySuggestionId = suggestionId;
-		try {
-			const result = await client.action((api as any).sources.followSavedSourceSuggestion, {
-				suggestionId
-			});
-			if (result.subscriptionStatus === 'already_subscribed') {
-				toast.info('You already follow this source.');
-			} else {
-				toast.success('Source followed from saved links.');
-			}
-		} catch (error: any) {
-			toast.error(error?.message ?? 'Failed to follow suggestion');
-		} finally {
-			busySuggestionId = null;
-		}
-	}
 </script>
 
 <main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
@@ -290,7 +266,7 @@
 					<Button variant="outline" class="mt-4" href="/u/{username}">Go back to profile</Button>
 				</CardContent>
 			</Card>
-		{:else if sourcesQuery.isLoading || similarDomainsQuery.isLoading || suggestionsQuery.isLoading}
+		{:else if sourcesQuery.isLoading || similarDomainsQuery.isLoading}
 			<div class="flex h-40 items-center justify-center">
 				<p class="text-sm text-muted-foreground italic">Loading source controls...</p>
 			</div>
@@ -303,10 +279,9 @@
 			</Card>
 		{:else}
 			<Tabs bind:value={activeTab} class="gap-4">
-				<TabsList class="grid w-full grid-cols-3 sm:w-auto">
+				<TabsList class="grid w-full grid-cols-2 sm:w-auto">
 					<TabsTrigger value="sources">Sources ({sourceCount})</TabsTrigger>
 					<TabsTrigger value="domains">Similar Search ({similarDomainCount})</TabsTrigger>
-					<TabsTrigger value="suggestions">Suggestions ({suggestionCount})</TabsTrigger>
 				</TabsList>
 
 				<TabsContent value="sources">
@@ -338,9 +313,9 @@
 								</TableHeader>
 								<TableBody>
 									{#each sourcesQuery.data?.page ?? [] as row (row.subscriptionId)}
-										{@const canRefresh = isFetchableSourceType(row.type)}
+										{@const canRefresh = canRefreshSource(row.type, row.rssFeedUrl)}
 										{@const refreshTitle = !canRefresh
-											? 'Bookmarks are non-fetchable. Upload a bookmarks file to add new items.'
+											? 'This source does not have a sync method yet.'
 											: isRefreshLimited
 												? refreshResetsAtUtc
 													? `Daily limit reached. Resets ${refreshResetsAtUtc} UTC`
@@ -357,10 +332,11 @@
 												<div class="max-w-[360px]">
 													<div class="flex flex-wrap items-center gap-2">
 														<p class="truncate font-medium">{row.title}</p>
+														{#if row.rssFeedUrl}
+															<Badge variant="outline">RSS-backed</Badge>
+														{/if}
 														{#if row.addedVia === 'manual'}
 															<Badge variant="outline">Manual</Badge>
-														{:else if row.addedVia === 'saved_link'}
-															<Badge variant="outline">Saved Link</Badge>
 														{/if}
 													</div>
 													<p class="truncate text-xs text-muted-foreground">{row.canonicalUrl}</p>
@@ -464,7 +440,6 @@
 										<TableRow>
 											<TableHead>Domain</TableHead>
 											<TableHead class="text-right">Sources</TableHead>
-											<TableHead class="text-right">Saved Links</TableHead>
 											<TableHead>Contributors</TableHead>
 											<TableHead>Status</TableHead>
 											<TableHead class="text-right">Action</TableHead>
@@ -482,7 +457,6 @@
 													</div>
 												</TableCell>
 												<TableCell class="text-right">{row.sourceCount}</TableCell>
-												<TableCell class="text-right">{row.savedLinkCount}</TableCell>
 												<TableCell>
 													<div class="flex max-w-[420px] flex-wrap gap-1.5">
 														{#each row.contributors as contributor (contributor.kind + contributor.url)}
@@ -516,80 +490,6 @@
 								</Table>
 							</div>
 						</div>
-					{/if}
-				</TabsContent>
-
-				<TabsContent value="suggestions">
-					{#if suggestionCount === 0}
-						<Card class="bg-muted/30">
-							<CardContent class="py-16 text-center">
-								<p class="text-sm text-muted-foreground italic">
-									No saved-link suggestions right now.
-								</p>
-							</CardContent>
-						</Card>
-					{:else}
-						<Card>
-							<CardContent class="space-y-4 py-5">
-								<div>
-									<h2 class="text-base font-semibold">Suggested from Saved Links</h2>
-									<p class="text-sm text-muted-foreground">
-										These domains came from links you saved privately. Follow them when you want
-										future updates.
-									</p>
-								</div>
-
-								<div class="space-y-2">
-									{#each suggestionsQuery.data?.page ?? [] as suggestion (suggestion._id)}
-										<div
-											class="flex flex-col gap-3 rounded-lg border border-border p-3 sm:flex-row sm:items-center sm:justify-between"
-										>
-											<div class="min-w-0">
-												<div class="flex flex-wrap items-center gap-2">
-													<p class="font-medium">{suggestion.originHost}</p>
-													<Badge variant="outline">{suggestion.itemCount} saved</Badge>
-													{#if suggestion.isFollowing}
-														<Badge variant="secondary">Following</Badge>
-													{/if}
-												</div>
-												<p class="truncate text-xs text-muted-foreground">
-													{suggestion.canonicalUrl}
-												</p>
-												<p class="truncate text-xs text-muted-foreground">
-													Latest saved: {suggestion.latestSavedTitle}
-												</p>
-											</div>
-											<div class="flex items-center gap-2">
-												<Button
-													variant="outline"
-													size="sm"
-													href={suggestion.canonicalUrl}
-													target="_blank"
-													class="gap-2"
-												>
-													<Link2 class="size-3.5" />
-													Open
-												</Button>
-												<Button
-													size="sm"
-													disabled={suggestion.isFollowing || busySuggestionId === suggestion._id}
-													onclick={() => followSuggestion(suggestion._id)}
-												>
-													{#if busySuggestionId === suggestion._id}
-														<Loader2 class="mr-2 size-3.5 animate-spin" />
-														Following...
-													{:else if suggestion.isFollowing}
-														Following
-													{:else}
-														Follow Source
-													{/if}
-												</Button>
-											</div>
-										</div>
-									{/each}
-								</div>
-							</CardContent>
-						</Card>
 					{/if}
 				</TabsContent>
 			</Tabs>

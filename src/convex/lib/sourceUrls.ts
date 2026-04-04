@@ -72,6 +72,11 @@ export const websiteNormalizedKeyFromUrl = (inputUrl: string) => {
 	return `website:${parsed.host.toLowerCase()}/`;
 };
 
+export const rssNormalizedKeyFromUrl = (inputUrl: string) => {
+	const canonicalUrl = normalizeHttpUrl(inputUrl).toString();
+	return `rss:${canonicalUrl.toLowerCase()}`;
+};
+
 export const sourceHostForDisplay = (inputUrl: string) => {
 	const parsed = normalizeHttpUrl(inputUrl);
 	return stripLeadingWww(parsed.host.toLowerCase());
