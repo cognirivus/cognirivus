@@ -1,0 +1,17 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "cognirivus",
+	"main": ".svelte-kit/cloudflare/_worker.js",
+	"assets": {
+		"directory": ".svelte-kit/cloudflare",
+		"binding": "ASSETS"
+	},
+	"compatibility_date": "2026-04-03",
+	"compatibility_flags": ["nodejs_compat"],
+	"build": {
+		"command": "pnpm build"
+	},
+	"observability": {
+		"enabled": true
+	}
+}
