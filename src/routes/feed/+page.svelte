@@ -41,13 +41,7 @@
 	type FeedTab = 'new' | 'top' | 'discussed';
 	type FeedWindow = 'all' | '24h' | '7d' | '30d';
 	type FeedScope = 'you' | 'public' | 'community';
-	type SourceFilter =
-		| 'all'
-		| 'posts'
-		| 'source_updates'
-		| 'website'
-		| 'rss'
-		| 'youtube';
+	type SourceFilter = 'all' | 'posts' | 'source_updates' | 'website' | 'rss' | 'youtube';
 	type VisibilityFilter = 'all' | 'private' | 'public' | 'community';
 
 	const auth = useAppAuth();
@@ -80,18 +74,15 @@
 	const scopeMeta: Record<FeedScope, { label: string; title: string; description: string }> = {
 		you: {
 			label: 'You',
-			title: 'My Feed',
-			description: 'Your links, source updates, and shared posts.'
+			title: 'My Feed'
 		},
 		public: {
 			label: 'Public',
-			title: 'Public Feed',
-			description: 'Knowledge posts ranked by new, top, and discussed.'
+			title: 'Public Feed'
 		},
 		community: {
 			label: 'Community',
-			title: 'Community Feed',
-			description: 'Posts from communities you follow, tuned for discovery.'
+			title: 'Community Feed'
 		}
 	};
 	const sourceFilterMeta: Record<SourceFilter, { label: string }> = {
@@ -108,7 +99,14 @@
 		public: { label: 'Public' },
 		community: { label: 'Community' }
 	};
-	const PRIVATE_SOURCE_OPTIONS: SourceFilter[] = ['all', 'posts', 'source_updates', 'website', 'rss', 'youtube'];
+	const PRIVATE_SOURCE_OPTIONS: SourceFilter[] = [
+		'all',
+		'posts',
+		'source_updates',
+		'website',
+		'rss',
+		'youtube'
+	];
 	const SHARED_SOURCE_OPTIONS: SourceFilter[] = ['all', 'posts', 'website', 'rss', 'youtube'];
 	const VISIBILITY_OPTIONS: VisibilityFilter[] = ['private', 'all', 'public', 'community'];
 	const sourceFilterOptions = $derived(
@@ -382,25 +380,24 @@
 	}
 </script>
 
-<main class="mx-auto w-full max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6">
-	<div class="mb-5 flex flex-col items-center gap-3 text-center">
+<main class="mx-auto w-full max-w-6xl overflow-x-hidden px-4 py-4 sm:px-6 sm:py-5">
+	<div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+		<div class="min-w-0 space-y-1">
+			<h1 class="text-xl font-semibold tracking-tight sm:text-2xl">{scopeMeta[scope].title}</h1>
+		</div>
 		<div
-			class="inline-flex items-center gap-1 overflow-hidden rounded-lg border border-border bg-muted/30 p-1"
+			class="inline-flex items-center gap-1 self-start overflow-hidden rounded-lg border border-border bg-muted/30 p-1"
 		>
 			{#each scopeOptions as s (s)}
 				<Button
 					variant={scope === s ? 'secondary' : 'ghost'}
 					size="sm"
-					class="h-8 rounded-md px-3 text-xs"
+					class="h-7 rounded-md px-2.5 text-xs sm:h-8 sm:px-3"
 					onclick={() => selectScope(s)}
 				>
 					{scopeMeta[s].label}
 				</Button>
 			{/each}
-		</div>
-		<div>
-			<h1 class="text-2xl font-semibold tracking-tight">{scopeMeta[scope].title}</h1>
-			<p class="text-sm text-muted-foreground">{scopeMeta[scope].description}</p>
 		</div>
 	</div>
 
