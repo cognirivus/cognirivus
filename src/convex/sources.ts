@@ -30,10 +30,7 @@ import {
 } from './lib/jobFailure';
 import { assertNightlyRunTransition, assertSourceJobTransition } from './lib/jobTransitions';
 import { toSourceJobResponse } from './lib/serializers';
-import {
-	deriveWebsiteSourceInput,
-	normalizeHttpUrl
-} from './lib/sourceUrls';
+import { deriveWebsiteSourceInput, normalizeHttpUrl } from './lib/sourceUrls';
 import { dedupeDomains } from './lib/similarLinks';
 
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
@@ -59,11 +56,7 @@ const sourceCleanupWorkpool = new Workpool((components as any).sourceCleanupWork
 	retryActionsByDefault: true
 });
 
-const sourceTypeValidator = v.union(
-	v.literal('website'),
-	v.literal('rss'),
-	v.literal('youtube')
-);
+const sourceTypeValidator = v.union(v.literal('website'), v.literal('rss'), v.literal('youtube'));
 const sourceStatusValidator = v.union(
 	v.literal('active'),
 	v.literal('paused'),
@@ -97,10 +90,8 @@ const similarLinkDomainRowValidator = v.object({
 	contributors: v.array(similarLinkDomainContributorValidator)
 });
 
-const canSyncSource = (source: {
-	type: 'website' | 'rss' | 'youtube';
-	rssFeedUrl?: string;
-}) => source.type === 'rss' || source.type === 'youtube' || !!source.rssFeedUrl;
+const canSyncSource = (source: { type: 'website' | 'rss' | 'youtube'; rssFeedUrl?: string }) =>
+	source.type === 'rss' || source.type === 'youtube' || !!source.rssFeedUrl;
 
 const nextUtcMidnightMs = (now = Date.now()) =>
 	Math.floor(now / UTC_DAY_MS) * UTC_DAY_MS + UTC_DAY_MS;
@@ -1564,7 +1555,10 @@ export const addSource = action({
 	args: {
 		type: sourceTypeValidator,
 		inputUrlOrId: v.string(),
-		title: v.optional(v.string())
+		title: v.optional(v.string()),
+		targetCollectionId: v.optional(v.id('source_collections')),
+		targetCommunityCollectionId: v.optional(v.id('source_collections')),
+		collectionNote: v.optional(v.string())
 	},
 	returns: v.object({
 		sourceId: v.id('sources'),
@@ -1575,6 +1569,10 @@ export const addSource = action({
 		resolvedCanonicalUrl: v.string()
 	}),
 	handler: async (ctx, args) => {
+		if (args.targetCollectionId && args.targetCommunityCollectionId) {
+			throw new Error('Choose either a personal collection or a community collection suggestion.');
+		}
+
 		const authUser = await requireUserWithUsername(ctx);
 		const isAdmin = isAdminRole(authUser.role);
 		const identity = await ctx.auth.getUserIdentity();
@@ -1679,6 +1677,26 @@ export const addSource = action({
 				originSiteUrl: resolvedCanonicalUrl
 			});
 			sourceItemId = sourceItemResult.sourceItemId;
+		}
+
+		if (args.targetCollectionId) {
+			await ctx.runMutation((internal as any).collections.attachSourceToOwnedCollection, {
+				actorAuthId: authUser._id,
+				collectionId: args.targetCollectionId,
+				sourceId: ensureResult.sourceId,
+				sourceItemId,
+				note: args.collectionNote
+			});
+		}
+
+		if (args.targetCommunityCollectionId) {
+			await ctx.runMutation((internal as any).collections.suggestSourceToCommunityCollection, {
+				actorAuthId: authUser._id,
+				collectionId: args.targetCommunityCollectionId,
+				sourceId: ensureResult.sourceId,
+				sourceItemId,
+				note: args.collectionNote
+			});
 		}
 
 		if (ensureResult.alreadySubscribed) {

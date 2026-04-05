@@ -8,10 +8,12 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
+	import SaveSourceToCollectionDialog from '$lib/components/collections/SaveSourceToCollectionDialog.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import { decodeHtmlEntities, sanitizeDisplayText, splitReadableParagraphs } from '$lib/utils';
 	import {
 		ArrowLeft,
+		BookMarked,
 		Calendar,
 		ExternalLink,
 		Globe,
@@ -41,6 +43,7 @@
 	let loadingBody = $state(false);
 	let actionLoading = $state(false);
 	let shareCommunityDialogOpen = $state(false);
+	let saveToCollectionDialogOpen = $state(false);
 	let deleteShareDialogOpen = $state(false);
 	let pendingDeleteSharePostId = $state<Id<'posts'> | null>(null);
 	const bodyText = $derived(fullBody || decodeHtmlEntities(detailsQuery.data?.body ?? ''));
@@ -302,6 +305,15 @@
 				<h3 class="text-base font-semibold">Share</h3>
 				{@const publicPostId = getSharePostId('public')}
 				<div class="flex flex-wrap items-center gap-2">
+					<Button
+						size="sm"
+						variant="outline"
+						disabled={!auth.isAuthenticated}
+						onclick={() => (saveToCollectionDialogOpen = true)}
+					>
+						<BookMarked class="mr-1 size-4" />
+						Save to Collection
+					</Button>
 					<Button size="sm" variant="outline" disabled={actionLoading} onclick={togglePublicShare}>
 						<Globe class="mr-1 size-4" />
 						{publicPostId ? 'Unshare Public' : 'Share Public'}
@@ -429,6 +441,15 @@
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
+
+{#if detailsQuery.data}
+	<SaveSourceToCollectionDialog
+		bind:open={saveToCollectionDialogOpen}
+		sourceId={detailsQuery.data.sourceId}
+		sourceItemId={detailsQuery.data._id}
+		sourceTitle={decodeHtmlEntities(detailsQuery.data.title)}
+	/>
+{/if}
 
 <Dialog.Root
 	open={deleteShareDialogOpen}

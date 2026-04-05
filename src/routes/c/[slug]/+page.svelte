@@ -3,6 +3,7 @@
 	import { useAppAuth } from '$lib/auth.svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import {
+		BookMarked,
 		Calendar,
 		MessageSquare,
 		ThumbsDown,
@@ -163,11 +164,8 @@
 			<p class="text-sm text-destructive">Community not found.</p>
 		</div>
 	{:else}
-		{@const community = communityQuery.data.community}
 		{@const membershipStatus = communityQuery.data.membershipStatus}
-		{@const canRead = communityQuery.data.canRead}
 		{@const canPost = communityQuery.data.canPost}
-		{@const isManager = communityQuery.data.isManager}
 
 		<CommunitySubpageHeader communityData={communityQuery.data} activeNav="feed" />
 
@@ -211,6 +209,11 @@
 					Submit
 				</Button>
 			{/if}
+
+			<Button href={`/c/${slug}/collections`} variant="outline" size="sm">
+				<BookMarked class="size-4" />
+				Collections
+			</Button>
 
 			{#if !auth.isAuthenticated}
 				<span class="text-xs text-muted-foreground">

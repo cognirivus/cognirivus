@@ -5,6 +5,7 @@
 	import { useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import {
+		BookMarked,
 		Compass,
 		Users,
 		Send,
@@ -43,6 +44,7 @@
 
 	const navItems = [
 		{ title: 'Feed', url: '/feed', icon: User, authOnly: true },
+		{ title: 'Collections', url: '/collections', icon: BookMarked, authOnly: true },
 		{ title: 'Communities', url: '/c', icon: Compass, authOnly: false },
 		{ title: 'Submit', url: '/submit', icon: Send, authOnly: true },
 		{ title: 'Chat', url: '/chat', icon: MessageSquare, authOnly: true },
@@ -52,6 +54,9 @@
 	function isActive(href: string) {
 		if (href === '/chat') {
 			return page.url.pathname === '/chat' || page.url.pathname.startsWith('/chat/');
+		}
+		if (href === '/collections') {
+			return page.url.pathname === '/collections' || page.url.pathname.startsWith('/collections/');
 		}
 		if (href === '/c') {
 			return page.url.pathname === '/c' || page.url.pathname.startsWith('/c/');

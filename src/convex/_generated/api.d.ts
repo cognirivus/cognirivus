@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as ai_tools from "../ai_tools.js";
 import type * as auth from "../auth.js";
+import type * as collections from "../collections.js";
 import type * as communities from "../communities.js";
 import type * as community_chat from "../community_chat.js";
 import type * as crons from "../crons.js";
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   ai_tools: typeof ai_tools;
   auth: typeof auth;
+  collections: typeof collections;
   communities: typeof communities;
   community_chat: typeof community_chat;
   crons: typeof crons;

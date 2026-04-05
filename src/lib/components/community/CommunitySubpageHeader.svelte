@@ -3,7 +3,15 @@
 	import { useAppAuth } from '$lib/auth.svelte';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
-	import { Globe, LayoutList, MessageSquare, Settings, ShieldCheck, Users } from '@lucide/svelte';
+	import {
+		BookMarked,
+		Globe,
+		LayoutList,
+		MessageSquare,
+		Settings,
+		ShieldCheck,
+		Users
+	} from '@lucide/svelte';
 
 	type CommunityData = {
 		community: {
@@ -18,6 +26,7 @@
 	};
 	type CommunityHref =
 		| `/c/${string}`
+		| `/c/${string}/collections`
 		| `/c/${string}/members`
 		| `/c/${string}/chat`
 		| `/c/${string}/manage`;
@@ -27,7 +36,7 @@
 		activeNav = ''
 	}: {
 		communityData: CommunityData;
-		activeNav?: 'feed' | 'members' | 'chat' | 'manage' | '';
+		activeNav?: 'feed' | 'collections' | 'members' | 'chat' | 'manage' | '';
 	} = $props();
 
 	const auth = useAppAuth();
@@ -54,7 +63,13 @@
 
 	const navItems = $derived.by(() => {
 		const items: Array<{ value: string; label: string; href: CommunityHref; icon: any }> = [
-			{ value: 'feed', label: 'Feed', href: `/c/${community.slug}`, icon: LayoutList }
+			{ value: 'feed', label: 'Feed', href: `/c/${community.slug}`, icon: LayoutList },
+			{
+				value: 'collections',
+				label: 'Collections',
+				href: `/c/${community.slug}/collections`,
+				icon: BookMarked
+			}
 		];
 		if (auth.isAuthenticated && communityData.canRead) {
 			items.push({

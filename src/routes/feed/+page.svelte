@@ -5,6 +5,7 @@
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import {
 		Calendar,
+		BookMarked,
 		ChevronDown,
 		Globe,
 		MessageSquare,
@@ -23,6 +24,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
+	import SaveSourceToCollectionDialog from '$lib/components/collections/SaveSourceToCollectionDialog.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import {
 		DropdownMenu,
@@ -74,15 +76,18 @@
 	const scopeMeta: Record<FeedScope, { label: string; title: string; description: string }> = {
 		you: {
 			label: 'You',
-			title: 'My Feed'
+			title: 'My Feed',
+			description: 'Your trusted sources, collections, and communities'
 		},
 		public: {
 			label: 'Public',
-			title: 'Public Feed'
+			title: 'Public Feed',
+			description: 'Public posts from across Cognirivus'
 		},
 		community: {
 			label: 'Community',
-			title: 'Community Feed'
+			title: 'Community Feed',
+			description: 'Posts shared into communities'
 		}
 	};
 	const sourceFilterMeta: Record<SourceFilter, { label: string }> = {
@@ -112,7 +117,7 @@
 	const sourceFilterOptions = $derived(
 		scope === 'you' ? PRIVATE_SOURCE_OPTIONS : SHARED_SOURCE_OPTIONS
 	);
-	const showVisibilityFilter = $derived(scope === 'you' && sourceFilter !== 'source_updates');
+	const showVisibilityFilter = $derived(scope === 'you');
 
 	let searchInput = $state('');
 
@@ -141,12 +146,18 @@
 			tags: ts.length > 0 ? ts : undefined,
 			source: sf === 'all' ? undefined : sf,
 			sourceId: selectedSourceId || undefined,
-			visibility: scope === 'you' && sf !== 'source_updates' && vf !== 'private' ? vf : undefined
+			visibility: scope === 'you' && vf !== 'private' ? vf : undefined
 		};
 	});
 	const communitiesQuery = useQuery((api as any).communities.listPublic, { limit: 100 });
 	let shareCommunityId = $state('');
 	let communityShareDialogOpen = $state(false);
+	let saveToCollectionDialogOpen = $state(false);
+	let pendingCollectionSource = $state<{
+		sourceId: string;
+		sourceItemId?: string;
+		sourceTitle: string;
+	} | null>(null);
 	let pendingCommunityShareState = $state<{
 		sourceItemId: string;
 		communityShares: Array<{ communityId: string; postId: string }>;
@@ -155,6 +166,12 @@
 	$effect(() => {
 		if (!shareCommunityId && (communitiesQuery.data?.length ?? 0) > 0) {
 			shareCommunityId = communitiesQuery.data![0]._id;
+		}
+	});
+
+	$effect(() => {
+		if (!saveToCollectionDialogOpen) {
+			pendingCollectionSource = null;
 		}
 	});
 
@@ -228,10 +245,6 @@
 				delete params.source;
 			}
 		}
-		if (activeSource === 'source_updates') {
-			delete params.visibility;
-		}
-
 		const queryString = new URLSearchParams(params).toString();
 		const target = queryString.length > 0 ? `/feed?${queryString}` : '/feed';
 		goto(target, { noScroll: true, keepFocus: true });
@@ -343,6 +356,19 @@
 		}
 		pendingCommunityShareState = { sourceItemId, communityShares };
 		communityShareDialogOpen = true;
+	}
+
+	function openSaveToCollectionDialog(
+		sourceId: string,
+		sourceTitle: string,
+		sourceItemId?: string
+	) {
+		if (!auth.isAuthenticated) {
+			toast.error('Sign in required');
+			return;
+		}
+		pendingCollectionSource = { sourceId, sourceItemId, sourceTitle };
+		saveToCollectionDialogOpen = true;
 	}
 
 	function getPendingCommunitySharePostId() {
@@ -753,6 +779,44 @@
 												Shared {item.shareCount}
 											</Badge>
 										{/if}
+										{#if item.provenance.kind === 'direct_follow'}
+											<Badge variant="secondary" class="gap-1 bg-primary/10 text-primary">
+												<BookMarked class="size-3.5" />
+												{item.provenance.label}
+											</Badge>
+										{:else if item.provenance.collectionSlug}
+											<Badge
+												href={`/collections/${item.provenance.collectionSlug}`}
+												variant="secondary"
+												class="gap-1 bg-primary/10 text-primary"
+											>
+												<BookMarked class="size-3.5" />
+												{item.provenance.label}
+											</Badge>
+										{:else if item.provenance.communitySlug}
+											<Badge
+												href={`/c/${item.provenance.communitySlug}/collections`}
+												variant="secondary"
+												class="gap-1 bg-primary/10 text-primary"
+											>
+												<Users class="size-3.5" />
+												{item.provenance.label}
+											</Badge>
+										{:else if item.provenance.username}
+											<Badge
+												href={`/u/${item.provenance.username}`}
+												variant="secondary"
+												class="gap-1 bg-primary/10 text-primary"
+											>
+												<User class="size-3.5" />
+												{item.provenance.label}
+											</Badge>
+										{:else}
+											<Badge variant="secondary" class="gap-1 bg-primary/10 text-primary">
+												<BookMarked class="size-3.5" />
+												{item.provenance.label}
+											</Badge>
+										{/if}
 										<span
 											class="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
 										>
@@ -764,6 +828,15 @@
 							</div>
 							{#if scope === 'you'}
 								<div class="mt-3 flex flex-wrap items-center gap-2">
+									<Button
+										size="sm"
+										variant="outline"
+										disabled={!auth.isAuthenticated}
+										onclick={() => openSaveToCollectionDialog(item.sourceId, item.title, item._id)}
+									>
+										<BookMarked class="mr-1 size-4" />
+										Save to Collection
+									</Button>
 									<Button
 										size="sm"
 										variant="outline"
@@ -782,6 +855,18 @@
 											Share to Community
 										</Button>
 									{/if}
+								</div>
+							{:else}
+								<div class="mt-3 flex flex-wrap items-center gap-2">
+									<Button
+										size="sm"
+										variant="outline"
+										disabled={!auth.isAuthenticated}
+										onclick={() => openSaveToCollectionDialog(item.sourceId, item.title, item._id)}
+									>
+										<BookMarked class="mr-1 size-4" />
+										Save to Collection
+									</Button>
 								</div>
 							{/if}
 						{/if}
@@ -869,3 +954,12 @@
 		</Dialog.Footer>
 	</Dialog.Content>
 </Dialog.Root>
+
+{#if pendingCollectionSource}
+	<SaveSourceToCollectionDialog
+		bind:open={saveToCollectionDialogOpen}
+		sourceId={pendingCollectionSource.sourceId}
+		sourceItemId={pendingCollectionSource.sourceItemId}
+		sourceTitle={pendingCollectionSource.sourceTitle}
+	/>
+{/if}

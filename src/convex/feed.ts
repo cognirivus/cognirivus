@@ -2,6 +2,7 @@ import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 import { query, type QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
+import { api } from './_generated/api';
 import { getAuthUser } from './auth';
 import {
 	applyFeedRanking,
@@ -43,6 +44,11 @@ type FeedSourceFilter = 'all' | 'posts' | 'source_updates' | 'website' | 'rss' |
 type FeedVisibilityFilter = 'all' | 'private' | 'public' | 'community';
 type SourceType = 'website' | 'rss' | 'youtube';
 type ViewerAuthId = string | null;
+type SourceDiscoveryReason =
+	| 'direct_follow'
+	| 'followed_collection'
+	| 'community_collection'
+	| 'followed_user_collection';
 
 const postFeedItemValidator = v.object({
 	kind: v.literal('post'),
@@ -80,15 +86,30 @@ const sourceCommunityShareValidator = v.object({
 	postId: v.id('posts')
 });
 
+const sourceProvenanceValidator = v.object({
+	kind: v.union(
+		v.literal('direct_follow'),
+		v.literal('followed_collection'),
+		v.literal('community_collection'),
+		v.literal('followed_user_collection')
+	),
+	label: v.string(),
+	collectionId: v.optional(v.id('source_collections')),
+	collectionSlug: v.optional(v.string()),
+	collectionTitle: v.optional(v.string()),
+	communityId: v.optional(v.id('communities')),
+	communitySlug: v.optional(v.string()),
+	communityName: v.optional(v.string()),
+	userAuthId: v.optional(v.string()),
+	username: v.optional(v.string()),
+	userName: v.optional(v.string())
+});
+
 const sourceFeedItemValidator = v.object({
 	kind: v.literal('source_item'),
 	_id: v.id('source_items'),
 	sourceId: v.id('sources'),
-	sourceType: v.union(
-		v.literal('website'),
-		v.literal('rss'),
-		v.literal('youtube')
-	),
+	sourceType: v.union(v.literal('website'), v.literal('rss'), v.literal('youtube')),
 	sourceTitle: v.string(),
 	title: v.string(),
 	snippet: v.string(),
@@ -98,7 +119,8 @@ const sourceFeedItemValidator = v.object({
 	updatedAt: v.number(),
 	shareCount: v.number(),
 	publicPostId: v.optional(v.id('posts')),
-	communityShares: v.array(sourceCommunityShareValidator)
+	communityShares: v.array(sourceCommunityShareValidator),
+	provenance: sourceProvenanceValidator
 });
 
 const pagedFeedValidator = v.object({
@@ -173,6 +195,81 @@ const matchesSourceItemSourceFilter = (
 		return false;
 	}
 	return item.sourceType === source;
+};
+
+const buildSourceProvenance = (entry: {
+	reason: SourceDiscoveryReason;
+	collectionId?: Id<'source_collections'>;
+	collectionSlug?: string;
+	collectionTitle?: string;
+	communityId?: Id<'communities'>;
+	communitySlug?: string;
+	communityName?: string;
+	userAuthId?: string;
+	username?: string;
+	userName?: string;
+}) => {
+	if (entry.reason === 'direct_follow') {
+		return {
+			kind: 'direct_follow' as const,
+			label: 'From a source you follow'
+		};
+	}
+	if (entry.reason === 'community_collection') {
+		return {
+			kind: 'community_collection' as const,
+			label: entry.communityName
+				? `Suggested by community ${entry.communityName}`
+				: 'Suggested by a community',
+			collectionId: entry.collectionId,
+			collectionSlug: entry.collectionSlug,
+			collectionTitle: entry.collectionTitle,
+			communityId: entry.communityId,
+			communitySlug: entry.communitySlug,
+			communityName: entry.communityName
+		};
+	}
+	if (entry.reason === 'followed_user_collection') {
+		const personLabel = entry.username
+			? `u/${entry.username}`
+			: (entry.userName ?? 'someone you follow');
+		return {
+			kind: 'followed_user_collection' as const,
+			label: `Curated by ${personLabel}`,
+			collectionId: entry.collectionId,
+			collectionSlug: entry.collectionSlug,
+			collectionTitle: entry.collectionTitle,
+			userAuthId: entry.userAuthId,
+			username: entry.username,
+			userName: entry.userName
+		};
+	}
+	return {
+		kind: 'followed_collection' as const,
+		label: entry.collectionTitle ? `From collection ${entry.collectionTitle}` : 'From a collection',
+		collectionId: entry.collectionId,
+		collectionSlug: entry.collectionSlug,
+		collectionTitle: entry.collectionTitle
+	};
+};
+
+const matchesYouSourceVisibilityFilter = (
+	item: { provenance: { kind: SourceDiscoveryReason } },
+	visibility: FeedVisibilityFilter
+) => {
+	if (visibility === 'all') {
+		return true;
+	}
+	if (visibility === 'private') {
+		return item.provenance.kind === 'direct_follow';
+	}
+	if (visibility === 'community') {
+		return item.provenance.kind === 'community_collection';
+	}
+	return (
+		item.provenance.kind === 'followed_collection' ||
+		item.provenance.kind === 'followed_user_collection'
+	);
 };
 
 const matchesPostVisibilityFilter = (
@@ -534,12 +631,173 @@ const loadUserSourceFeedItems = async (
 				updatedAt: sourceItem.updatedAt,
 				shareCount: 0,
 				publicPostId: undefined,
-				communityShares: []
+				communityShares: [],
+				provenance: buildSourceProvenance({
+					reason: 'direct_follow'
+				})
 			};
 		})
 		.filter((item): item is NonNullable<typeof item> => !!item);
 
 	return mapped;
+};
+
+const loadTrustedCollectionFeedItems = async (
+	ctx: QueryCtx,
+	userAuthId: string,
+	limit: number,
+	windowStart: number,
+	search: string | undefined
+) => {
+	const trustedSources: Array<{
+		sourceId: Id<'sources'>;
+		sourceItemId?: Id<'source_items'>;
+		reason: SourceDiscoveryReason;
+		collectionId?: Id<'source_collections'>;
+		collectionSlug?: string;
+		collectionTitle?: string;
+		communityId?: Id<'communities'>;
+		communitySlug?: string;
+		communityName?: string;
+		userAuthId?: string;
+		username?: string;
+		userName?: string;
+		priority: number;
+	}> = await ctx.runQuery((api as any).collections.listTrustedSourceIds, {
+		userAuthId
+	});
+
+	const discoverySources = trustedSources.filter((entry) => entry.reason !== 'direct_follow');
+	if (discoverySources.length === 0) {
+		return [];
+	}
+
+	const uniqueSourceIds = [...new Set(discoverySources.map((entry) => entry.sourceId))];
+	const sourceDocs = await Promise.all(uniqueSourceIds.map((sourceId) => ctx.db.get(sourceId)));
+	const sourceById = new Map(
+		uniqueSourceIds.map((sourceId, index) => [sourceId, sourceDocs[index]])
+	);
+	type TrustedSourceItemCandidate = {
+		kind: 'source_item';
+		_id: Id<'source_items'>;
+		sourceId: Id<'sources'>;
+		sourceType: SourceType;
+		sourceTitle: string;
+		title: string;
+		snippet: string;
+		url: string;
+		publishedAt: number;
+		createdAt: number;
+		updatedAt: number;
+		shareCount: number;
+		publicPostId?: Id<'posts'>;
+		communityShares: Array<{
+			communityId: Id<'communities'>;
+			postId: Id<'posts'>;
+		}>;
+		provenance: ReturnType<typeof buildSourceProvenance>;
+		priority: number;
+	};
+
+	const perSourceItems: Array<Array<TrustedSourceItemCandidate>> = await Promise.all(
+		discoverySources.map(async (entry) => {
+			const source = sourceById.get(entry.sourceId);
+			if (!source) {
+				return [];
+			}
+			if (entry.sourceItemId) {
+				const sourceItem = await ctx.db.get(entry.sourceItemId);
+				if (!sourceItem) {
+					return [];
+				}
+				const searchable =
+					`${sourceItem.title} ${sourceItem.snippet} ${sourceItem.url}`.toLowerCase();
+				if (search && !searchable.includes(search)) {
+					return [];
+				}
+				if (sourceItem.publishedAt < windowStart) {
+					return [];
+				}
+				return [
+					{
+						kind: 'source_item' as const,
+						_id: sourceItem._id,
+						sourceId: source._id,
+						sourceType: source.type,
+						sourceTitle: source.title,
+						title: sourceItem.title,
+						snippet: sourceItem.snippet,
+						url: sourceItem.url,
+						publishedAt: sourceItem.publishedAt,
+						createdAt: sourceItem.publishedAt,
+						updatedAt: sourceItem.updatedAt,
+						shareCount: 0,
+						publicPostId: undefined,
+						communityShares: [],
+						provenance: buildSourceProvenance(entry),
+						priority: entry.priority
+					}
+				];
+			}
+			const items = await ctx.db
+				.query('source_items')
+				.withIndex('by_sourceId_and_publishedAt', (q) => q.eq('sourceId', entry.sourceId))
+				.order('desc')
+				.take(8);
+			return items
+				.map((sourceItem) => {
+					const searchable =
+						`${sourceItem.title} ${sourceItem.snippet} ${sourceItem.url}`.toLowerCase();
+					if (search && !searchable.includes(search)) {
+						return null;
+					}
+					if (sourceItem.publishedAt < windowStart) {
+						return null;
+					}
+					return {
+						kind: 'source_item' as const,
+						_id: sourceItem._id,
+						sourceId: source._id,
+						sourceType: source.type,
+						sourceTitle: source.title,
+						title: sourceItem.title,
+						snippet: sourceItem.snippet,
+						url: sourceItem.url,
+						publishedAt: sourceItem.publishedAt,
+						createdAt: sourceItem.publishedAt,
+						updatedAt: sourceItem.updatedAt,
+						shareCount: 0,
+						publicPostId: undefined,
+						communityShares: [],
+						provenance: buildSourceProvenance(entry),
+						priority: entry.priority
+					};
+				})
+				.filter((item): item is NonNullable<typeof item> => !!item);
+		})
+	);
+
+	const deduped = new Map<Id<'source_items'>, TrustedSourceItemCandidate>();
+	for (const item of perSourceItems.flat()) {
+		const existing = deduped.get(item._id);
+		if (!existing || item.priority < existing.priority) {
+			deduped.set(item._id, item);
+		}
+	}
+
+	return Array.from(deduped.values())
+		.sort((a, b) => {
+			if (a.priority !== b.priority) {
+				return a.priority - b.priority;
+			}
+			return b.publishedAt - a.publishedAt;
+		})
+		.map((item) => {
+			const { priority, ...rest } = item;
+			void priority;
+			return rest;
+		})
+		.slice(0, limit);
 };
 
 const enrichSourceItemsWithShareCount = async (
@@ -568,6 +826,7 @@ const enrichSourceItemsWithShareCount = async (
 					communityId: Id<'communities'>;
 					postId: Id<'posts'>;
 				}>;
+				provenance: ReturnType<typeof buildSourceProvenance>;
 		  }
 	>
 ) => {
@@ -716,18 +975,34 @@ const listYouFeed = async (
 		return true;
 	});
 	const mappedPosts = await mapFeedPosts(ctx, scopedPosts, viewerAuthId);
-	const rawSourceItems =
+	const directSourceItems =
 		tags && tags.length > 0
 			? []
 			: await loadUserSourceFeedItems(ctx, viewerAuthId, candidateLimit, windowStart, search);
-	const sourceItems = rawSourceItems.filter((item) => {
+	const trustedCollectionItems =
+		tags && tags.length > 0
+			? []
+			: await loadTrustedCollectionFeedItems(
+					ctx,
+					viewerAuthId,
+					candidateLimit,
+					windowStart,
+					search
+				);
+	const dedupedSourceItems = [
+		...directSourceItems,
+		...trustedCollectionItems.filter(
+			(item) => !directSourceItems.some((directItem) => directItem._id === item._id)
+		)
+	];
+	const sourceItems = dedupedSourceItems.filter((item) => {
 		if (!matchesSourceItemSourceFilter(item, source)) {
 			return false;
 		}
 		if (!matchesSelectedSourceId(item, selectedSourceId)) {
 			return false;
 		}
-		return visibility === 'all' || visibility === 'private';
+		return matchesYouSourceVisibilityFilter(item, visibility);
 	});
 
 	const merged = [...mappedPosts, ...sourceItems].sort((a, b) => b.createdAt - a.createdAt);

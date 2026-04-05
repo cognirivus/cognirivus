@@ -151,6 +151,69 @@ const schema = defineSchema({
 		.index('by_rssFeedNormalizedKey', ['rssFeedNormalizedKey'])
 		.index('by_type_and_updatedAt', ['type', 'updatedAt'])
 		.index('by_status_and_updatedAt', ['status', 'updatedAt']),
+	source_collections: defineTable({
+		slug: v.string(),
+		title: v.string(),
+		description: v.optional(v.string()),
+		visibility: v.union(v.literal('public'), v.literal('private')),
+		ownerKind: v.union(v.literal('user'), v.literal('community')),
+		ownerAuthId: v.optional(v.string()),
+		ownerCommunityId: v.optional(v.id('communities')),
+		tags: v.optional(v.array(v.string())),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_slug', ['slug'])
+		.index('by_visibility_and_updatedAt', ['visibility', 'updatedAt'])
+		.index('by_ownerKind_and_ownerAuthId_and_updatedAt', ['ownerKind', 'ownerAuthId', 'updatedAt'])
+		.index('by_ownerKind_and_ownerCommunityId_and_updatedAt', [
+			'ownerKind',
+			'ownerCommunityId',
+			'updatedAt'
+		]),
+	source_collection_items: defineTable({
+		collectionId: v.id('source_collections'),
+		sourceId: v.id('sources'),
+		sourceItemId: v.optional(v.id('source_items')),
+		note: v.optional(v.string()),
+		position: v.number(),
+		addedByAuthId: v.string(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_collectionId_and_position', ['collectionId', 'position'])
+		.index('by_collectionId_and_sourceId', ['collectionId', 'sourceId'])
+		.index('by_collectionId_and_sourceItemId', ['collectionId', 'sourceItemId'])
+		.index('by_sourceId_and_createdAt', ['sourceId', 'createdAt'])
+		.index('by_sourceItemId_and_createdAt', ['sourceItemId', 'createdAt']),
+	source_collection_follows: defineTable({
+		userAuthId: v.string(),
+		collectionId: v.id('source_collections'),
+		createdAt: v.number()
+	})
+		.index('by_userAuthId_and_collectionId', ['userAuthId', 'collectionId'])
+		.index('by_userAuthId_and_createdAt', ['userAuthId', 'createdAt'])
+		.index('by_collectionId_and_createdAt', ['collectionId', 'createdAt']),
+	source_collection_suggestions: defineTable({
+		collectionId: v.id('source_collections'),
+		sourceId: v.id('sources'),
+		sourceItemId: v.optional(v.id('source_items')),
+		suggestedByAuthId: v.string(),
+		note: v.optional(v.string()),
+		status: v.union(v.literal('pending'), v.literal('approved'), v.literal('rejected')),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+		reviewedAt: v.optional(v.number()),
+		reviewedByAuthId: v.optional(v.string())
+	})
+		.index('by_collectionId_and_status', ['collectionId', 'status'])
+		.index('by_collectionId_and_sourceId_and_status', ['collectionId', 'sourceId', 'status'])
+		.index('by_collectionId_and_sourceItemId_and_status', [
+			'collectionId',
+			'sourceItemId',
+			'status'
+		])
+		.index('by_suggestedByAuthId_and_createdAt', ['suggestedByAuthId', 'createdAt']),
 	source_subscriptions: defineTable({
 		userAuthId: v.string(),
 		sourceId: v.id('sources'),

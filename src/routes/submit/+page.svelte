@@ -9,12 +9,28 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
 	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
-	import { Globe, Link, Loader2, Lock, PenLine, Rss, Send, Users, Youtube } from '@lucide/svelte';
+	import {
+		BookMarked,
+		Globe,
+		Link,
+		Loader2,
+		Lock,
+		PenLine,
+		Rss,
+		Send,
+		Users,
+		Youtube
+	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	const client = useConvexClient();
 	const meQuery = useQuery(api.auth.getCurrentUser, {});
 	const communitiesQuery = useQuery((api as any).communities.listPublic, { limit: 100 });
+	const myCollectionsQuery = useQuery((api as any).collections.listMine, {});
+	const communityCollectionsQuery = useQuery(
+		(api as any).collections.listSuggestableCommunityCollections,
+		{}
+	);
 
 	let activeTab = $state('create');
 	let type = $state<'text' | 'link' | 'media'>('text');
@@ -28,7 +44,23 @@
 	let sourceType = $state<'website' | 'rss' | 'youtube'>('website');
 	let sourceInput = $state('');
 	let sourceTitle = $state('');
+	let sourceCollectionMode = $state<'none' | 'personal' | 'community'>('none');
+	let targetCollectionId = $state('');
+	let targetCommunityCollectionId = $state('');
+	let collectionNote = $state('');
 	let addingSource = $state(false);
+
+	$effect(() => {
+		if (!targetCollectionId && (myCollectionsQuery.data?.length ?? 0) > 0) {
+			targetCollectionId = myCollectionsQuery.data![0]._id;
+		}
+	});
+
+	$effect(() => {
+		if (!targetCommunityCollectionId && (communityCollectionsQuery.data?.length ?? 0) > 0) {
+			targetCommunityCollectionId = communityCollectionsQuery.data![0]._id;
+		}
+	});
 
 	$effect(() => {
 		if (!meQuery.isLoading && !meQuery.data) {
@@ -76,7 +108,16 @@
 			const result = await client.action((api as any).sources.addSource, {
 				type: sourceType,
 				inputUrlOrId: sourceInput,
-				title: sourceTitle || undefined
+				title: sourceTitle || undefined,
+				targetCollectionId:
+					sourceCollectionMode === 'personal' && targetCollectionId
+						? targetCollectionId
+						: undefined,
+				targetCommunityCollectionId:
+					sourceCollectionMode === 'community' && targetCommunityCollectionId
+						? targetCommunityCollectionId
+						: undefined,
+				collectionNote: collectionNote || undefined
 			});
 			const status = result?.subscriptionStatus as 'active' | 'already_subscribed' | undefined;
 			const mappedRssToWebsite = sourceType === 'rss' && result?.resolvedSourceType === 'website';
@@ -95,8 +136,24 @@
 			} else {
 				toast.success('Source followed.');
 			}
+			if (sourceCollectionMode === 'personal' && targetCollectionId) {
+				toast.info(
+					result?.sourceItemId
+						? 'Item added to your collection.'
+						: 'Source added to your collection.'
+				);
+			}
+			if (sourceCollectionMode === 'community' && targetCommunityCollectionId) {
+				toast.info(
+					result?.sourceItemId
+						? 'Item suggestion submitted to the community collection.'
+						: 'Source suggestion submitted to the community collection.'
+				);
+			}
 			sourceInput = '';
 			sourceTitle = '';
+			collectionNote = '';
+			sourceCollectionMode = 'none';
 			goto(
 				(() => {
 					const url = new URL(resolve('/feed'), page.url);
@@ -337,8 +394,110 @@
 							placeholder="Override displayed source title"
 						/>
 					</div>
+					<div class="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
+						<div class="space-y-1">
+							<Label class="text-sm font-medium">Collections</Label>
+							<p class="text-xs text-muted-foreground">
+								Add this entry to one of your collections or suggest it to a community reading hub.
+							</p>
+						</div>
+						<div class="grid gap-2 sm:grid-cols-3">
+							<Button
+								type="button"
+								variant={sourceCollectionMode === 'none' ? 'default' : 'outline'}
+								onclick={() => (sourceCollectionMode = 'none')}
+							>
+								No collection
+							</Button>
+							<Button
+								type="button"
+								variant={sourceCollectionMode === 'personal' ? 'default' : 'outline'}
+								onclick={() => (sourceCollectionMode = 'personal')}
+							>
+								<BookMarked class="size-4" />
+								My collection
+							</Button>
+							<Button
+								type="button"
+								variant={sourceCollectionMode === 'community' ? 'default' : 'outline'}
+								onclick={() => (sourceCollectionMode = 'community')}
+							>
+								<Users class="size-4" />
+								Community suggestion
+							</Button>
+						</div>
+
+						{#if sourceCollectionMode === 'personal'}
+							{#if (myCollectionsQuery.data?.length ?? 0) === 0}
+								<p class="text-sm text-muted-foreground">
+									You do not have any personal collections yet.
+									<a class="font-medium underline" href={resolve('/collections')}>Create one</a>.
+								</p>
+							{:else}
+								<div class="space-y-2">
+									<Label for="targetCollection">Personal Collection</Label>
+									<select
+										id="targetCollection"
+										bind:value={targetCollectionId}
+										class="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+									>
+										{#each myCollectionsQuery.data ?? [] as collection (collection._id)}
+											<option value={collection._id}>{collection.title}</option>
+										{/each}
+									</select>
+								</div>
+							{/if}
+						{/if}
+
+						{#if sourceCollectionMode === 'community'}
+							{#if (communityCollectionsQuery.data?.length ?? 0) === 0}
+								<p class="text-sm text-muted-foreground">
+									No community collections are available for suggestions yet.
+								</p>
+							{:else}
+								<div class="space-y-2">
+									<Label for="targetCommunityCollection">Community Collection</Label>
+									<select
+										id="targetCommunityCollection"
+										bind:value={targetCommunityCollectionId}
+										class="h-10 w-full rounded-lg border border-input bg-transparent px-3 text-sm transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+									>
+										{#each communityCollectionsQuery.data ?? [] as collection (collection._id)}
+											<option value={collection._id}>
+												{collection.title}
+												{#if collection.ownerCommunitySlug}
+													(c/{collection.ownerCommunitySlug})
+												{/if}
+											</option>
+										{/each}
+									</select>
+								</div>
+							{/if}
+						{/if}
+
+						{#if sourceCollectionMode !== 'none'}
+							<div class="space-y-2">
+								<Label for="collectionNote">Curator Note (optional)</Label>
+								<Textarea
+									id="collectionNote"
+									bind:value={collectionNote}
+									rows={3}
+									maxlength={280}
+									placeholder="Why is this worth keeping?"
+								/>
+							</div>
+						{/if}
+					</div>
 					<div class="flex items-center gap-3 border-t border-border pt-4">
-						<Button type="submit" disabled={addingSource} class="gap-2">
+						<Button
+							type="submit"
+							disabled={addingSource ||
+								(sourceCollectionMode === 'personal' &&
+									(myCollectionsQuery.data?.length ?? 0) === 0) ||
+								(sourceCollectionMode === 'community' &&
+									(communityCollectionsQuery.data?.length ?? 0) === 0)}
+							class="gap-2"
+						>
 							{#if addingSource}
 								<Loader2 class="size-4 animate-spin" />
 								Adding...
