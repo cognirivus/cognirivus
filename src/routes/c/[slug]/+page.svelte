@@ -360,6 +360,10 @@
 												<span class="text-xs">{post.authorName}</span>
 											</Badge>
 										{/if}
+										<Badge variant="outline" class="gap-1">
+											<Calendar class="size-3" />
+											<span class="text-xs">{new Date(post.createdAt).toLocaleDateString()}</span>
+										</Badge>
 										{#if (post.tags?.length ?? 0) > 0}
 											{#each post.tags as tag}
 												<Badge variant="secondary" class="gap-1 bg-secondary/50">
@@ -474,6 +478,10 @@
 													<span class="text-xs">{post.authorName}</span>
 												</Badge>
 											{/if}
+											<Badge variant="outline" class="gap-1">
+												<Calendar class="size-3" />
+												<span class="text-xs">{new Date(post.createdAt).toLocaleDateString()}</span>
+											</Badge>
 											{#if (post.tags?.length ?? 0) > 0}
 												{#each post.tags as tag}
 													<Badge variant="secondary" class="gap-1 bg-secondary/50">

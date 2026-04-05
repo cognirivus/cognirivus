@@ -16,6 +16,7 @@
 		Shield
 	} from '@lucide/svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
+	import { useSidebar } from '$lib/components/ui/sidebar/index.js';
 	import Logo from './Logo.svelte';
 	import NavUser from './nav-user.svelte';
 	import type { ComponentProps } from 'svelte';
@@ -27,6 +28,7 @@
 	}: ComponentProps<typeof Sidebar.Root> = $props();
 
 	const auth = useAppAuth();
+	const sidebar = useSidebar();
 
 	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
 	const currentUser = $derived(currentUserQuery.data);
@@ -63,6 +65,12 @@
 		}
 		return page.url.pathname === href;
 	}
+
+	function closeMobileSidebar() {
+		if (sidebar.isMobile) {
+			sidebar.setOpenMobile(false);
+		}
+	}
 </script>
 
 <Sidebar.Root {collapsible} {...restProps}>
@@ -71,7 +79,7 @@
 			<Sidebar.MenuItem>
 				<Sidebar.MenuButton size="lg">
 					{#snippet child({ props })}
-						<a href={resolve('/')} {...props}>
+						<a href={resolve('/')} {...props} onclick={closeMobileSidebar}>
 							<Logo size="sm" />
 						</a>
 					{/snippet}
@@ -90,7 +98,7 @@
 							<Sidebar.MenuItem>
 								<Sidebar.MenuButton tooltipContent={item.title} isActive={isActive(item.url)}>
 									{#snippet child({ props })}
-										<a href={item.url} {...props}>
+										<a href={item.url} {...props} onclick={closeMobileSidebar}>
 											<item.icon />
 											<span>{item.title}</span>
 											{#if item.title === 'Chat' && unreadCount > 0}
@@ -119,7 +127,11 @@
 							<Sidebar.MenuItem>
 								<Sidebar.MenuButton isActive={isActive(`/c/${item.community.slug}`)}>
 									{#snippet child({ props })}
-										<a href={resolve(`/c/${item.community.slug}`)} {...props}>
+										<a
+											href={resolve(`/c/${item.community.slug}`)}
+											{...props}
+											onclick={closeMobileSidebar}
+										>
 											<Users />
 											<span>c/{item.community.slug}</span>
 										</a>
@@ -151,7 +163,7 @@
 				<Sidebar.MenuItem>
 					<Sidebar.MenuButton>
 						{#snippet child({ props })}
-							<a href={`/signin?redirectTo=${redirectTo}`} {...props}>
+							<a href={`/signin?redirectTo=${redirectTo}`} {...props} onclick={closeMobileSidebar}>
 								<LogIn />
 								<span>Sign in</span>
 							</a>
@@ -161,7 +173,7 @@
 				<Sidebar.MenuItem>
 					<Sidebar.MenuButton>
 						{#snippet child({ props })}
-							<a href={`/signup?redirectTo=${redirectTo}`} {...props}>
+							<a href={`/signup?redirectTo=${redirectTo}`} {...props} onclick={closeMobileSidebar}>
 								<UserPlus />
 								<span>Sign up</span>
 							</a>

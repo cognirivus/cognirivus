@@ -20,7 +20,8 @@
 		Search,
 		X,
 		LayoutGrid,
-		List
+		List,
+		MoreHorizontal
 	} from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Badge } from '$lib/components/ui/badge';
@@ -31,6 +32,7 @@
 	import {
 		DropdownMenu,
 		DropdownMenuContent,
+		DropdownMenuItem,
 		DropdownMenuLabel,
 		DropdownMenuRadioGroup,
 		DropdownMenuRadioItem,
@@ -416,7 +418,44 @@
 			pendingCommunityShareState = null;
 		}
 	}
+
+	function getSourceFaviconUrl(url: string) {
+		try {
+			return new URL('/favicon.ico', url).toString();
+		} catch {
+			return null;
+		}
+	}
 </script>
+
+{#snippet directFollowSourceBadge(sourceTitle: string, sourceCanonicalUrl: string)}
+	{@const faviconUrl = getSourceFaviconUrl(sourceCanonicalUrl)}
+	<Badge variant="outline" class="max-w-full gap-1.5 border-border/70 bg-muted/20 pr-2">
+		<span
+			class="flex size-3.5 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-background"
+		>
+			{#if faviconUrl}
+				<img
+					src={faviconUrl}
+					alt=""
+					class="size-3 object-contain"
+					onerror={(event) => {
+						(event.currentTarget as HTMLImageElement).style.display = 'none';
+						(event.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove(
+							'hidden'
+						);
+					}}
+				/>
+				<Globe class="hidden size-3 text-muted-foreground" />
+			{:else}
+				<Globe class="size-3 text-muted-foreground" />
+			{/if}
+		</span>
+		<span class="max-w-[180px] truncate text-xs sm:max-w-[240px]" title={decodeHtmlEntities(sourceTitle)}>
+			{decodeHtmlEntities(sourceTitle)}
+		</span>
+	</Badge>
+{/snippet}
 
 <main class="mx-auto w-full max-w-6xl overflow-x-hidden px-4 py-4 sm:px-6 sm:py-5">
 	<div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
@@ -751,110 +790,111 @@
 								</div>
 							</div>
 						{:else}
-							<div class="flex items-start gap-2">
-								<a href="/source/{item._id}" class="text-lg font-semibold hover:underline">
-									{decodeHtmlEntities(item.title)}
-								</a>
-								<a
-									href={item.url}
-									target="_blank"
-									rel="noopener noreferrer"
-									class="mt-1 shrink-0 text-muted-foreground hover:text-foreground"
-								>
-									<ExternalLink class="size-4" />
-								</a>
+							<div class="flex items-start justify-between gap-3">
+								<div class="min-w-0 flex-1">
+									<div class="flex items-start gap-2">
+										<a href="/source/{item._id}" class="text-lg font-semibold hover:underline">
+											{decodeHtmlEntities(item.title)}
+										</a>
+										<a
+											href={item.url}
+											target="_blank"
+											rel="noopener noreferrer"
+											class="mt-1 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+											aria-label="Open original article"
+											title="Open original article"
+										>
+											<ExternalLink class="size-4" />
+										</a>
+									</div>
+									<p class="mt-1 text-xs text-muted-foreground">
+										{new Date(item.publishedAt).toLocaleDateString()}
+									</p>
+								</div>
+								{#if scope === 'you'}
+									<DropdownMenu>
+										<DropdownMenuTrigger>
+											<Button variant="ghost" size="icon-sm" class="h-7 w-7 shrink-0">
+												<MoreHorizontal class="size-4" />
+											</Button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent align="end">
+											<DropdownMenuItem
+												disabled={!auth.isAuthenticated}
+												onclick={() => openSaveToCollectionDialog(item.sourceId, item.title, item._id)}
+											>
+												<BookMarked class="mr-2 size-4" />
+												Save to Collection
+											</DropdownMenuItem>
+											<DropdownMenuItem
+												disabled={!auth.isAuthenticated}
+												onclick={() => togglePublicSourceItem(item._id, item.publicPostId)}
+											>
+												<Globe class="mr-2 size-4" />
+												{item.publicPostId ? 'Unshare Public' : 'Share Public'}
+											</DropdownMenuItem>
+											{#if (communitiesQuery.data?.length ?? 0) > 0}
+												<DropdownMenuItem
+													disabled={!auth.isAuthenticated}
+													onclick={() => openCommunityShareDialog(item._id, item.communityShares ?? [])}
+												>
+													<Users class="mr-2 size-4" />
+													Share to Community
+												</DropdownMenuItem>
+											{/if}
+										</DropdownMenuContent>
+									</DropdownMenu>
+								{/if}
 							</div>
 							<p class="mt-2 line-clamp-2 text-sm text-muted-foreground">
 								{decodeHtmlEntities(item.snippet)}
 							</p>
-							<div class="mt-3 flex flex-wrap items-center gap-1.5">
-								<Badge variant="outline" class="gap-1">
-									<Archive class="size-3" />
-									<span class="text-xs">{item.sourceType}</span>
-								</Badge>
-								<Badge variant="outline" class="gap-1">
-									<Globe class="size-3" />
-									<span class="text-xs">{decodeHtmlEntities(item.sourceTitle)}</span>
-								</Badge>
-								{#if item.shareCount > 0}
-									<Badge variant="secondary" class="gap-1">
-										<MessageSquare class="size-3" />
-										<span class="text-xs">Shared {item.shareCount}</span>
-									</Badge>
-								{/if}
-								{#if item.provenance.kind === 'direct_follow'}
-									<Badge variant="secondary" class="gap-1 bg-primary/10 text-primary">
-										<BookMarked class="size-3" />
-										<span class="text-xs">{item.provenance.label}</span>
-									</Badge>
-								{:else if item.provenance.collectionSlug}
-									<Badge
-										href={`/collections/${item.provenance.collectionSlug}`}
-										variant="secondary"
-										class="gap-1 bg-primary/10 text-primary"
-									>
-										<BookMarked class="size-3" />
-										<span class="text-xs">{item.provenance.label}</span>
-									</Badge>
-								{:else if item.provenance.communitySlug}
-									<Badge
-										href={`/c/${item.provenance.communitySlug}/collections`}
-										variant="secondary"
-										class="gap-1 bg-primary/10 text-primary"
-									>
-										<Users class="size-3" />
-										<span class="text-xs">{item.provenance.label}</span>
-									</Badge>
-								{:else if item.provenance.username}
-									<Badge
-										href={`/u/${item.provenance.username}`}
-										variant="secondary"
-										class="gap-1 bg-primary/10 text-primary"
-									>
-										<User class="size-3" />
-										<span class="text-xs">{item.provenance.label}</span>
-									</Badge>
-								{:else}
-									<Badge variant="secondary" class="gap-1 bg-primary/10 text-primary">
-										<BookMarked class="size-3" />
-										<span class="text-xs">{item.provenance.label}</span>
-									</Badge>
-								{/if}
-							</div>
-							{#if scope === 'you'}
-								<div class="mt-3 flex flex-wrap items-center gap-2">
-									<Button
-										size="sm"
-										variant="ghost"
-										class="h-8 px-2 text-xs"
-										disabled={!auth.isAuthenticated}
-										onclick={() => openSaveToCollectionDialog(item.sourceId, item.title, item._id)}
-									>
-										<BookMarked class="mr-1 size-3.5" />
-										Save
-									</Button>
-									<Button
-										size="sm"
-										variant="ghost"
-										class="h-8 px-2 text-xs"
-										disabled={!auth.isAuthenticated}
-										onclick={() => togglePublicSourceItem(item._id, item.publicPostId)}
-									>
-										{item.publicPostId ? 'Unshare' : 'Share'}
-									</Button>
-									{#if (communitiesQuery.data?.length ?? 0) > 0}
-										<Button
-											size="sm"
-											variant="ghost"
-											class="h-8 px-2 text-xs"
-											disabled={!auth.isAuthenticated}
-											onclick={() => openCommunityShareDialog(item._id, item.communityShares ?? [])}
+							<div class="mt-3 space-y-2">
+								<div class="flex flex-wrap items-center gap-1.5">
+									{#if item.provenance.kind === 'direct_follow'}
+										{@render directFollowSourceBadge(item.sourceTitle, item.sourceCanonicalUrl)}
+									{:else if item.provenance.collectionSlug}
+										<Badge
+											href={`/collections/${item.provenance.collectionSlug}`}
+											variant="secondary"
+											class="gap-1 bg-primary/10 text-primary"
 										>
-											Community
-										</Button>
+											<BookMarked class="size-3" />
+											<span class="text-xs">{item.provenance.label}</span>
+										</Badge>
+									{:else if item.provenance.communitySlug}
+										<Badge
+											href={`/c/${item.provenance.communitySlug}/collections`}
+											variant="secondary"
+											class="gap-1 bg-primary/10 text-primary"
+										>
+											<Users class="size-3" />
+											<span class="text-xs">{item.provenance.label}</span>
+										</Badge>
+									{:else if item.provenance.username}
+										<Badge
+											href={`/u/${item.provenance.username}`}
+											variant="secondary"
+											class="gap-1 bg-primary/10 text-primary"
+										>
+											<User class="size-3" />
+											<span class="text-xs">{item.provenance.label}</span>
+										</Badge>
+									{:else}
+										<Badge variant="secondary" class="gap-1 bg-primary/10 text-primary">
+											<BookMarked class="size-3" />
+											<span class="text-xs">{item.provenance.label}</span>
+										</Badge>
+									{/if}
+									{#if item.shareCount > 0}
+										<Badge variant="secondary" class="gap-1 bg-muted/70 text-muted-foreground">
+											<MessageSquare class="size-3" />
+											<span class="text-xs">Shared {item.shareCount}</span>
+										</Badge>
 									{/if}
 								</div>
-							{:else}
+							</div>
+							{#if scope !== 'you'}
 								<a
 									href="/source/{item._id}"
 									class="mt-3 inline-flex items-center text-sm font-medium text-primary hover:underline"
@@ -1010,28 +1050,71 @@
 					{:else}
 						<div class="flex h-full flex-col p-5">
 							<div class="flex-1">
-								<div class="flex items-start gap-2">
-									<h1
-										class={`font-bold leading-tight tracking-tight ${
-											isLarge
-												? 'text-2xl sm:text-3xl lg:text-4xl'
-												: isMedium
-													? 'text-xl sm:text-2xl'
-													: 'text-lg sm:text-xl'
-										}`}
-									>
-										<a href="/source/{item._id}" class="hover:underline">
-											{decodeHtmlEntities(item.title)}
-										</a>
-									</h1>
-									<a
-										href={item.url}
-										target="_blank"
-										rel="noopener noreferrer"
-										class="mt-1 shrink-0 text-muted-foreground hover:text-foreground"
-									>
-										<ExternalLink class="size-4" />
-									</a>
+								<div class="flex items-start justify-between gap-3">
+									<div class="min-w-0 flex-1">
+										<div class="flex items-start gap-2">
+											<h1
+												class={`min-w-0 font-bold leading-tight tracking-tight ${
+													isLarge
+														? 'text-2xl sm:text-3xl lg:text-4xl'
+														: isMedium
+															? 'text-xl sm:text-2xl'
+															: 'text-lg sm:text-xl'
+												}`}
+											>
+												<a href="/source/{item._id}" class="hover:underline">
+													{decodeHtmlEntities(item.title)}
+												</a>
+											</h1>
+											<a
+												href={item.url}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="mt-1 shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+												aria-label="Open original article"
+												title="Open original article"
+											>
+												<ExternalLink class="size-4" />
+											</a>
+										</div>
+										<p class="mt-1 text-xs text-muted-foreground">
+											{new Date(item.publishedAt).toLocaleDateString()}
+										</p>
+									</div>
+									{#if scope === 'you'}
+										<DropdownMenu>
+											<DropdownMenuTrigger>
+												<Button variant="ghost" size="icon-sm" class="h-7 w-7 shrink-0">
+													<MoreHorizontal class="size-4" />
+												</Button>
+											</DropdownMenuTrigger>
+											<DropdownMenuContent align="end">
+												<DropdownMenuItem
+													disabled={!auth.isAuthenticated}
+													onclick={() => openSaveToCollectionDialog(item.sourceId, item.title, item._id)}
+												>
+													<BookMarked class="mr-2 size-4" />
+													Save to Collection
+												</DropdownMenuItem>
+												<DropdownMenuItem
+													disabled={!auth.isAuthenticated}
+													onclick={() => togglePublicSourceItem(item._id, item.publicPostId)}
+												>
+													<Globe class="mr-2 size-4" />
+													{item.publicPostId ? 'Unshare Public' : 'Share Public'}
+												</DropdownMenuItem>
+												{#if (communitiesQuery.data?.length ?? 0) > 0}
+													<DropdownMenuItem
+														disabled={!auth.isAuthenticated}
+														onclick={() => openCommunityShareDialog(item._id, item.communityShares ?? [])}
+													>
+														<Users class="mr-2 size-4" />
+														Share to Community
+													</DropdownMenuItem>
+												{/if}
+											</DropdownMenuContent>
+										</DropdownMenu>
+									{/if}
 								</div>
 								<p
 									class={`mt-3 text-muted-foreground ${
@@ -1042,95 +1125,55 @@
 								</p>
 							</div>
 							<div class="mt-4 space-y-3">
-								<div class="flex flex-wrap items-center gap-1.5">
-									<Badge variant="outline" class="gap-1">
-										<Archive class="size-3" />
-										<span class="text-xs">{item.sourceType}</span>
-									</Badge>
-									<Badge variant="outline" class="gap-1">
-										<Globe class="size-3" />
-										<span class="text-xs">{decodeHtmlEntities(item.sourceTitle)}</span>
-									</Badge>
-									{#if item.shareCount > 0}
-										<Badge variant="secondary" class="gap-1">
-											<MessageSquare class="size-3" />
-											<span class="text-xs">Shared {item.shareCount}</span>
-										</Badge>
-									{/if}
-									{#if item.provenance.kind === 'direct_follow'}
-										<Badge variant="secondary" class="gap-1 bg-primary/10 text-primary">
-											<BookMarked class="size-3" />
-											<span class="text-xs">{item.provenance.label}</span>
-										</Badge>
-									{:else if item.provenance.collectionSlug}
-										<Badge
-											href={`/collections/${item.provenance.collectionSlug}`}
-											variant="secondary"
-											class="gap-1 bg-primary/10 text-primary"
-										>
-											<BookMarked class="size-3" />
-											<span class="text-xs">{item.provenance.label}</span>
-										</Badge>
-									{:else if item.provenance.communitySlug}
-										<Badge
-											href={`/c/${item.provenance.communitySlug}/collections`}
-											variant="secondary"
-											class="gap-1 bg-primary/10 text-primary"
-										>
-											<Users class="size-3" />
-											<span class="text-xs">{item.provenance.label}</span>
-										</Badge>
-									{:else if item.provenance.username}
-										<Badge
-											href={`/u/${item.provenance.username}`}
-											variant="secondary"
-											class="gap-1 bg-primary/10 text-primary"
-										>
-											<User class="size-3" />
-											<span class="text-xs">{item.provenance.label}</span>
-										</Badge>
-									{:else}
-										<Badge variant="secondary" class="gap-1 bg-primary/10 text-primary">
-											<BookMarked class="size-3" />
-											<span class="text-xs">{item.provenance.label}</span>
-										</Badge>
-									{/if}
-								</div>
-								{#if scope === 'you'}
-									<div class="flex flex-wrap items-center gap-2">
-										<Button
-											size="sm"
-											variant="ghost"
-											class="h-8 px-2 text-xs"
-											disabled={!auth.isAuthenticated}
-											onclick={() => openSaveToCollectionDialog(item.sourceId, item.title, item._id)}
-										>
-											<BookMarked class="mr-1 size-3.5" />
-											Save
-										</Button>
-										<Button
-											size="sm"
-											variant="ghost"
-											class="h-8 px-2 text-xs"
-											disabled={!auth.isAuthenticated}
-											onclick={() => togglePublicSourceItem(item._id, item.publicPostId)}
-										>
-											{item.publicPostId ? 'Unshare' : 'Share'}
-										</Button>
-										{#if (communitiesQuery.data?.length ?? 0) > 0}
-											<Button
-												size="sm"
-												variant="ghost"
-												class="h-8 px-2 text-xs"
-												disabled={!auth.isAuthenticated}
-												onclick={() =>
-													openCommunityShareDialog(item._id, item.communityShares ?? [])}
+								<div class="space-y-2">
+									<div class="flex flex-wrap items-center gap-1.5">
+										{#if item.provenance.kind === 'direct_follow'}
+											{@render directFollowSourceBadge(item.sourceTitle, item.sourceCanonicalUrl)}
+										{:else if item.provenance.collectionSlug}
+											<Badge
+												href={`/collections/${item.provenance.collectionSlug}`}
+												variant="secondary"
+												class="gap-1 bg-primary/10 text-primary"
 											>
-												Community
-											</Button>
+												<BookMarked class="size-3" />
+												<span class="text-xs">{item.provenance.label}</span>
+											</Badge>
+										{:else if item.provenance.communitySlug}
+											<Badge
+												href={`/c/${item.provenance.communitySlug}/collections`}
+												variant="secondary"
+												class="gap-1 bg-primary/10 text-primary"
+											>
+												<Users class="size-3" />
+												<span class="text-xs">{item.provenance.label}</span>
+											</Badge>
+										{:else if item.provenance.username}
+											<Badge
+												href={`/u/${item.provenance.username}`}
+												variant="secondary"
+												class="gap-1 bg-primary/10 text-primary"
+											>
+												<User class="size-3" />
+												<span class="text-xs">{item.provenance.label}</span>
+											</Badge>
+										{:else}
+											<Badge variant="secondary" class="gap-1 bg-primary/10 text-primary">
+												<BookMarked class="size-3" />
+												<span class="text-xs">{item.provenance.label}</span>
+											</Badge>
+										{/if}
+										{#if item.shareCount > 0}
+											<Badge
+												variant="secondary"
+												class="gap-1 bg-muted/70 text-muted-foreground"
+											>
+												<MessageSquare class="size-3" />
+												<span class="text-xs">Shared {item.shareCount}</span>
+											</Badge>
 										{/if}
 									</div>
-								{:else}
+								</div>
+								{#if scope !== 'you'}
 									<a
 										href="/source/{item._id}"
 										class="inline-flex items-center text-sm font-medium text-primary hover:underline"

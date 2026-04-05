@@ -111,6 +111,7 @@ const sourceFeedItemValidator = v.object({
 	sourceId: v.id('sources'),
 	sourceType: v.union(v.literal('website'), v.literal('rss'), v.literal('youtube')),
 	sourceTitle: v.string(),
+	sourceCanonicalUrl: v.string(),
 	title: v.string(),
 	snippet: v.string(),
 	url: v.string(),
@@ -623,6 +624,7 @@ const loadUserSourceFeedItems = async (
 				sourceId: source._id,
 				sourceType: source.type,
 				sourceTitle: source.title,
+				sourceCanonicalUrl: source.canonicalUrl,
 				title: sourceItem.title,
 				snippet: sourceItem.snippet,
 				url: sourceItem.url,
@@ -683,6 +685,7 @@ const loadTrustedCollectionFeedItems = async (
 		sourceId: Id<'sources'>;
 		sourceType: SourceType;
 		sourceTitle: string;
+		sourceCanonicalUrl: string;
 		title: string;
 		snippet: string;
 		url: string;
@@ -725,6 +728,7 @@ const loadTrustedCollectionFeedItems = async (
 						sourceId: source._id,
 						sourceType: source.type,
 						sourceTitle: source.title,
+						sourceCanonicalUrl: source.canonicalUrl,
 						title: sourceItem.title,
 						snippet: sourceItem.snippet,
 						url: sourceItem.url,
@@ -760,6 +764,7 @@ const loadTrustedCollectionFeedItems = async (
 						sourceId: source._id,
 						sourceType: source.type,
 						sourceTitle: source.title,
+						sourceCanonicalUrl: source.canonicalUrl,
 						title: sourceItem.title,
 						snippet: sourceItem.snippet,
 						url: sourceItem.url,
