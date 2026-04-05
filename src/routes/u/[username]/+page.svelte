@@ -11,7 +11,9 @@
 		Tag,
 		Archive,
 		Search,
-		X
+		X,
+		LayoutGrid,
+		List
 	} from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Badge } from '$lib/components/ui/badge';
@@ -31,10 +33,20 @@
 	const cursor = $derived(page.url.searchParams.get('cursor'));
 
 	let searchInput = $state('');
+	let layoutMode = $state<'bento' | 'list'>(
+		(typeof localStorage !== 'undefined' && (localStorage.getItem('feedLayoutMode') as 'bento' | 'list')) || 'bento'
+	);
 
 	// Sync input with URL search param
 	$effect(() => {
 		searchInput = search;
+	});
+
+	// Persist layout mode to localStorage
+	$effect(() => {
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('feedLayoutMode', layoutMode);
+		}
 	});
 
 	const profileQuery = useQuery((api as any).profiles.getByUsername, () => ({ username }));
@@ -173,29 +185,51 @@
 			<section class="mt-8">
 				<div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 					<h2 class="text-lg font-semibold">Recent Posts</h2>
-					<div class="relative w-full max-w-sm">
-						<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-						<Input
-							placeholder="Search posts..."
-							class="pr-9 pl-9 text-sm"
-							bind:value={searchInput}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') {
-									updateParams({ search: searchInput, cursor: null });
-								}
-							}}
-						/>
-						{#if searchInput}
-							<button
-								class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-								onclick={() => {
-									searchInput = '';
-									updateParams({ search: '', cursor: null });
+					<div class="flex items-center gap-4">
+						<div class="relative w-full max-w-sm">
+							<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+							<Input
+								placeholder="Search posts..."
+								class="pr-9 pl-9 text-sm"
+								bind:value={searchInput}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') {
+										updateParams({ search: searchInput, cursor: null });
+									}
 								}}
+							/>
+							{#if searchInput}
+								<button
+									class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+									onclick={() => {
+										searchInput = '';
+										updateParams({ search: '', cursor: null });
+									}}
+								>
+									<X class="size-4" />
+								</button>
+							{/if}
+						</div>
+						<div class="flex shrink-0 items-center gap-1">
+							<Button
+								variant={layoutMode === 'bento' ? 'ghost' : 'ghost'}
+								size="icon-sm"
+								class={layoutMode === 'bento' ? 'text-primary' : 'text-muted-foreground'}
+								onclick={() => (layoutMode = 'bento')}
+								aria-label="Bento layout"
 							>
-								<X class="size-4" />
-							</button>
-						{/if}
+								<LayoutGrid class="size-4" />
+							</Button>
+							<Button
+								variant={layoutMode === 'list' ? 'ghost' : 'ghost'}
+								size="icon-sm"
+								class={layoutMode === 'list' ? 'text-primary' : 'text-muted-foreground'}
+								onclick={() => (layoutMode = 'list')}
+								aria-label="List layout"
+							>
+								<List class="size-4" />
+							</Button>
+						</div>
 					</div>
 				</div>
 
@@ -208,35 +242,123 @@
 				/>
 				{#if (feedQuery.data?.page?.length ?? 0) === 0}
 					<p class="text-sm text-muted-foreground">No posts yet.</p>
-				{:else}
+				{:else if layoutMode === 'list'}
 					<div class="space-y-3">
 						{#each feedQuery.data?.page ?? [] as post (post._id)}
 							<Card class="gap-0 py-4">
 								<CardContent>
-									<a href="/post/{post._id}" class="font-medium hover:underline">{post.title}</a>
-									<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
-									<p class="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-										<span>score {post.score} • {post.commentCount} comments</span>
+									<a href="/post/{post._id}" class="text-lg font-semibold hover:underline">
+										{post.title}
+									</a>
+									<p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
+									<div class="mt-3 flex flex-wrap items-center gap-1.5">
 										{#if (post.tags?.length ?? 0) > 0}
 											{#each post.tags as tag}
-												<Badge variant="secondary" class="-ml-1 scale-90 gap-1 bg-secondary/30">
-													<Tag class="size-2.5" />
-													{tag}
+												<Badge variant="secondary" class="gap-1 bg-secondary/50">
+													<Tag class="size-3" />
+													<span class="text-xs">{tag}</span>
 												</Badge>
 											{/each}
 										{/if}
 										{#if post.sourceType}
-											<Badge
-												variant="outline"
-												class="-ml-1 scale-90 gap-1 border-dashed bg-muted/20"
-											>
-												<Archive class="size-2.5" />
-												{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
+											<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
+												<Archive class="size-3" />
+												<span class="text-xs">
+													{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
+												</span>
 											</Badge>
 										{/if}
-									</p>
+									</div>
+									<div class="mt-3 flex items-center justify-between gap-3">
+										<div class="flex items-center gap-3 text-xs text-muted-foreground">
+											<span class="inline-flex items-center gap-1">
+												<MessageSquare class="size-3.5" />
+												{post.commentCount}
+											</span>
+											<span>score {post.score}</span>
+										</div>
+										<a
+											href="/post/{post._id}"
+											class="text-sm font-medium text-primary hover:underline"
+										>
+											Read more →
+										</a>
+									</div>
 								</CardContent>
 							</Card>
+						{/each}
+					</div>
+				{:else}
+					<div
+						class="grid auto-rows-auto gap-4 sm:grid-cols-2 lg:grid-cols-3"
+						style="grid-auto-flow: dense;"
+					>
+						{#each feedQuery.data?.page ?? [] as post, index (post._id)}
+							{@const isLarge = post.score > 30 || post.commentCount > 15}
+							{@const isMedium = !isLarge && (post.score > 10 || post.commentCount > 5)}
+							<article
+								class={`group relative overflow-hidden bg-background transition-colors hover:bg-muted/20 ${
+									isLarge ? 'sm:col-span-2 sm:row-span-2' : isMedium ? 'sm:row-span-2' : ''
+								}`}
+							>
+								<div class="flex h-full flex-col p-5">
+									<div class="flex-1">
+										<h1
+											class={`font-bold leading-tight tracking-tight ${
+												isLarge
+													? 'text-2xl sm:text-3xl lg:text-4xl'
+													: isMedium
+														? 'text-xl sm:text-2xl'
+														: 'text-lg sm:text-xl'
+											}`}
+										>
+											<a href="/post/{post._id}" class="hover:underline">
+												{post.title}
+											</a>
+										</h1>
+										<p
+											class={`mt-3 text-muted-foreground ${
+												isLarge ? 'line-clamp-6 text-base' : isMedium ? 'line-clamp-4 text-sm' : 'line-clamp-3 text-sm'
+											}`}
+										>
+											{post.snippet}
+										</p>
+									</div>
+									<div class="mt-4 space-y-3">
+										<div class="flex flex-wrap items-center gap-1.5">
+											{#if (post.tags?.length ?? 0) > 0}
+												{#each post.tags as tag}
+													<Badge variant="secondary" class="gap-1 bg-secondary/50">
+														<Tag class="size-3" />
+														<span class="text-xs">{tag}</span>
+													</Badge>
+												{/each}
+											{/if}
+											{#if post.sourceType}
+												<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
+													<Archive class="size-3" />
+													<span class="text-xs">
+														{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
+													</span>
+												</Badge>
+											{/if}
+										</div>
+										<div class="flex items-center gap-3 text-xs text-muted-foreground">
+											<span class="inline-flex items-center gap-1">
+												<MessageSquare class="size-3.5" />
+												{post.commentCount}
+											</span>
+											<span>score {post.score}</span>
+										</div>
+										<a
+											href="/post/{post._id}"
+											class="inline-flex items-center text-sm font-medium text-primary hover:underline"
+										>
+											Read more →
+										</a>
+									</div>
+								</div>
+							</article>
 						{/each}
 					</div>
 				{/if}

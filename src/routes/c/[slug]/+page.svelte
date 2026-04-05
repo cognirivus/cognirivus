@@ -18,7 +18,9 @@
 		TrendingUp,
 		Plus,
 		Heart,
-		Rss
+		Rss,
+		LayoutGrid,
+		List
 	} from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Badge } from '$lib/components/ui/badge';
@@ -43,9 +45,19 @@
 	const cursor = $derived(page.url.searchParams.get('cursor'));
 
 	let searchInput = $state('');
+	let layoutMode = $state<'bento' | 'list'>(
+		(typeof localStorage !== 'undefined' && (localStorage.getItem('feedLayoutMode') as 'bento' | 'list')) || 'bento'
+	);
 
 	$effect(() => {
 		searchInput = search;
+	});
+
+	// Persist layout mode to localStorage
+	$effect(() => {
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('feedLayoutMode', layoutMode);
+		}
 	});
 	const signInHref = $derived(
 		`/signin?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
@@ -226,37 +238,59 @@
 		<div class="mt-6">
 			<div>
 				<!-- Tab bar -->
-				<div class="mb-4 flex items-center overflow-x-auto border-b">
-					<button
-						class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab ===
-						'new'
-							? 'border-primary text-foreground'
-							: 'border-transparent text-muted-foreground hover:text-foreground'}"
-						onclick={() => updateParams({ tab: 'new', cursor: null })}
-					>
-						<Clock class="size-4" />
-						New
-					</button>
-					<button
-						class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab ===
-						'top'
-							? 'border-primary text-foreground'
-							: 'border-transparent text-muted-foreground hover:text-foreground'}"
-						onclick={() => updateParams({ tab: 'top', cursor: null })}
-					>
-						<TrendingUp class="size-4" />
-						Top
-					</button>
-					<button
-						class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab ===
-						'discussed'
-							? 'border-primary text-foreground'
-							: 'border-transparent text-muted-foreground hover:text-foreground'}"
-						onclick={() => updateParams({ tab: 'discussed', cursor: null })}
-					>
-						<MessageSquare class="size-4" />
-						Discussed
-					</button>
+				<div class="mb-4 flex items-center justify-between overflow-x-auto border-b">
+					<div class="flex items-center">
+						<button
+							class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab ===
+							'new'
+								? 'border-primary text-foreground'
+								: 'border-transparent text-muted-foreground hover:text-foreground'}"
+							onclick={() => updateParams({ tab: 'new', cursor: null })}
+						>
+							<Clock class="size-4" />
+							New
+						</button>
+						<button
+							class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab ===
+							'top'
+								? 'border-primary text-foreground'
+								: 'border-transparent text-muted-foreground hover:text-foreground'}"
+							onclick={() => updateParams({ tab: 'top', cursor: null })}
+						>
+							<TrendingUp class="size-4" />
+							Top
+						</button>
+						<button
+							class="inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4 sm:py-2.5 {tab ===
+							'discussed'
+								? 'border-primary text-foreground'
+								: 'border-transparent text-muted-foreground hover:text-foreground'}"
+							onclick={() => updateParams({ tab: 'discussed', cursor: null })}
+						>
+							<MessageSquare class="size-4" />
+							Discussed
+						</button>
+					</div>
+					<div class="flex shrink-0 items-center gap-1">
+						<Button
+							variant={layoutMode === 'bento' ? 'ghost' : 'ghost'}
+							size="icon-sm"
+							class={layoutMode === 'bento' ? 'text-primary' : 'text-muted-foreground'}
+							onclick={() => (layoutMode = 'bento')}
+							aria-label="Bento layout"
+						>
+							<LayoutGrid class="size-4" />
+						</Button>
+						<Button
+							variant={layoutMode === 'list' ? 'ghost' : 'ghost'}
+							size="icon-sm"
+							class={layoutMode === 'list' ? 'text-primary' : 'text-muted-foreground'}
+							onclick={() => (layoutMode = 'list')}
+							aria-label="List layout"
+						>
+							<List class="size-4" />
+						</Button>
+					</div>
 				</div>
 
 				<!-- Search & tag filter -->
@@ -305,104 +339,205 @@
 						<Archive class="mb-3 size-10 text-muted-foreground/50" />
 						<p class="text-sm text-muted-foreground">No posts in this community yet.</p>
 					</div>
-				{:else}
+				{:else if layoutMode === 'list'}
 					<div class="space-y-3">
 						{#each feedQuery.data?.page ?? [] as post (post._id)}
-							<Card class="gap-0 py-0 transition-shadow hover:shadow-md">
-								<CardContent class="p-0">
-									<div class="flex">
-										<!-- Vote column -->
-										<div
-											class="flex flex-col items-center gap-0.5 rounded-l-xl border-r bg-muted/30 px-2.5 py-3"
-										>
+							<Card class="gap-0 py-4">
+								<CardContent>
+									<a href="/post/{post._id}" class="text-lg font-semibold hover:underline">
+										{post.title}
+									</a>
+									<p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{post.snippet}</p>
+									<div class="mt-3 flex flex-wrap items-center gap-1.5">
+										{#if post.authorUsername}
+											<Badge href="/u/{post.authorUsername}" variant="outline" class="gap-1">
+												<User class="size-3" />
+												<span class="text-xs">u/{post.authorUsername}</span>
+											</Badge>
+										{:else}
+											<Badge variant="outline" class="gap-1">
+												<User class="size-3" />
+												<span class="text-xs">{post.authorName}</span>
+											</Badge>
+										{/if}
+										{#if (post.tags?.length ?? 0) > 0}
+											{#each post.tags as tag}
+												<Badge variant="secondary" class="gap-1 bg-secondary/50">
+													<Tag class="size-3" />
+													<span class="text-xs">{tag}</span>
+												</Badge>
+											{/each}
+										{/if}
+										{#if post.sourceType}
+											<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
+												<Archive class="size-3" />
+												<span class="text-xs">
+													{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
+												</span>
+											</Badge>
+										{/if}
+									</div>
+									<div class="mt-3 flex items-center justify-between gap-3">
+										<div class="flex items-center gap-3 text-xs text-muted-foreground">
+											<span class="inline-flex items-center gap-1">
+												<MessageSquare class="size-3.5" />
+												{post.commentCount}
+											</span>
+											<span class="inline-flex items-center gap-1">
+												<ThumbsUp class="size-3.5" />
+												{post.likes ?? 0}
+											</span>
+											<span class="inline-flex items-center gap-1">
+												<ThumbsDown class="size-3.5" />
+												{post.dislikes ?? 0}
+											</span>
+										</div>
+										<div class="flex items-center gap-2">
 											<Button
 												size="icon-sm"
-												variant="ghost"
-												class="size-7 {post.userVote === 1
-													? 'text-primary [&_svg_path]:fill-current!'
-													: 'text-muted-foreground hover:text-primary'}"
+												variant={post.userVote === 1 ? 'secondary' : 'ghost'}
+												class={`h-7 w-7 ${post.userVote === 1 ? 'text-primary' : ''}`}
 												disabled={!auth.isAuthenticated}
 												onclick={() => vote(post._id, 1)}
-												aria-label="Like post"
+												aria-label="Like"
 											>
-												<ThumbsUp class="size-4" />
+												<ThumbsUp class="size-3.5" />
 											</Button>
-											<span class="text-sm font-bold tabular-nums">{post.score}</span>
 											<Button
 												size="icon-sm"
-												variant="ghost"
-												class="size-7 {post.userVote === -1
-													? 'text-destructive [&_svg_path]:fill-current!'
-													: 'text-muted-foreground hover:text-destructive'}"
+												variant={post.userVote === -1 ? 'secondary' : 'ghost'}
+												class={`h-7 w-7 ${post.userVote === -1 ? 'text-destructive' : ''}`}
 												disabled={!auth.isAuthenticated}
 												onclick={() => vote(post._id, -1)}
-												aria-label="Dislike post"
+												aria-label="Dislike"
 											>
-												<ThumbsDown class="size-4" />
+												<ThumbsDown class="size-3.5" />
 											</Button>
-										</div>
-
-										<!-- Post content -->
-										<div class="min-w-0 flex-1 px-3 py-3 sm:px-4">
 											<a
 												href="/post/{post._id}"
-												class="line-clamp-2 text-base leading-snug font-medium hover:underline"
+												class="ml-2 text-sm font-medium text-primary hover:underline"
 											>
-												{post.title}
+												Read more →
 											</a>
-
-											<p class="mt-1 line-clamp-2 text-sm text-muted-foreground">
-												{post.snippet}
-											</p>
-
-											<!-- Metadata row -->
-											<div class="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
-												{#if post.authorUsername}
-													<Badge href="/u/{post.authorUsername}" variant="outline" class="gap-1">
-														<User class="size-3" />
-														u/{post.authorUsername}
-													</Badge>
-												{:else}
-													<Badge variant="outline" class="gap-1">
-														<User class="size-3" />
-														{post.authorName}
-													</Badge>
-												{/if}
-
-												{#if (post.tags?.length ?? 0) > 0}
-													{#each post.tags as tag}
-														<Badge variant="secondary" class="gap-1 bg-secondary/50">
-															<Tag class="size-3" />
-															{tag}
-														</Badge>
-													{/each}
-												{/if}
-
-												{#if post.sourceType}
-													<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
-														<Archive class="size-3" />
-														{post.sourceType === 'chrome_import'
-															? 'Chrome Bookmark'
-															: post.sourceType}
-													</Badge>
-												{/if}
-
-												<span
-													class="inline-flex items-center gap-1 text-muted-foreground sm:ml-auto"
-												>
-													<Calendar class="size-3" />
-													{new Date(post.createdAt).toLocaleDateString()}
-												</span>
-
-												<span class="inline-flex items-center gap-1 text-muted-foreground">
-													<MessageSquare class="size-3" />
-													{post.commentCount}
-												</span>
-											</div>
 										</div>
 									</div>
 								</CardContent>
 							</Card>
+						{/each}
+					</div>
+				{:else}
+					<div
+						class="grid auto-rows-auto gap-4 sm:grid-cols-2 lg:grid-cols-3"
+						style="grid-auto-flow: dense;"
+					>
+						{#each feedQuery.data?.page ?? [] as post, index (post._id)}
+							{@const isLarge = post.score > 30 || post.commentCount > 15}
+							{@const isMedium = !isLarge && (post.score > 10 || post.commentCount > 5)}
+							<article
+								class={`group relative overflow-hidden bg-background transition-colors hover:bg-muted/20 ${
+									isLarge ? 'sm:col-span-2 sm:row-span-2' : isMedium ? 'sm:row-span-2' : ''
+								}`}
+							>
+								<div class="flex h-full flex-col p-5">
+									<div class="flex-1">
+										<h1
+											class={`font-bold leading-tight tracking-tight ${
+												isLarge
+													? 'text-2xl sm:text-3xl lg:text-4xl'
+													: isMedium
+														? 'text-xl sm:text-2xl'
+														: 'text-lg sm:text-xl'
+											}`}
+										>
+											<a href="/post/{post._id}" class="hover:underline">
+												{post.title}
+											</a>
+										</h1>
+										<p
+											class={`mt-3 text-muted-foreground ${
+												isLarge ? 'line-clamp-6 text-base' : isMedium ? 'line-clamp-4 text-sm' : 'line-clamp-3 text-sm'
+											}`}
+										>
+											{post.snippet}
+										</p>
+									</div>
+									<div class="mt-4 space-y-3">
+										<div class="flex flex-wrap items-center gap-1.5">
+											{#if post.authorUsername}
+												<Badge href="/u/{post.authorUsername}" variant="outline" class="gap-1">
+													<User class="size-3" />
+													<span class="text-xs">u/{post.authorUsername}</span>
+												</Badge>
+											{:else}
+												<Badge variant="outline" class="gap-1">
+													<User class="size-3" />
+													<span class="text-xs">{post.authorName}</span>
+												</Badge>
+											{/if}
+											{#if (post.tags?.length ?? 0) > 0}
+												{#each post.tags as tag}
+													<Badge variant="secondary" class="gap-1 bg-secondary/50">
+														<Tag class="size-3" />
+														<span class="text-xs">{tag}</span>
+													</Badge>
+												{/each}
+											{/if}
+											{#if post.sourceType}
+												<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
+													<Archive class="size-3" />
+													<span class="text-xs">
+														{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
+													</span>
+												</Badge>
+											{/if}
+										</div>
+										<div class="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+											<div class="flex items-center gap-3">
+												<span class="inline-flex items-center gap-1">
+													<MessageSquare class="size-3.5" />
+													{post.commentCount}
+												</span>
+												<span class="inline-flex items-center gap-1">
+													<ThumbsUp class="size-3.5" />
+													{post.likes ?? 0}
+												</span>
+												<span class="inline-flex items-center gap-1">
+													<ThumbsDown class="size-3.5" />
+													{post.dislikes ?? 0}
+												</span>
+											</div>
+											<div class="flex items-center gap-1.5">
+												<Button
+													size="icon-sm"
+													variant={post.userVote === 1 ? 'secondary' : 'ghost'}
+													class={`h-7 w-7 ${post.userVote === 1 ? 'text-primary' : ''}`}
+													disabled={!auth.isAuthenticated}
+													onclick={() => vote(post._id, 1)}
+													aria-label="Like"
+												>
+													<ThumbsUp class="size-3.5" />
+												</Button>
+												<Button
+													size="icon-sm"
+													variant={post.userVote === -1 ? 'secondary' : 'ghost'}
+													class={`h-7 w-7 ${post.userVote === -1 ? 'text-destructive' : ''}`}
+													disabled={!auth.isAuthenticated}
+													onclick={() => vote(post._id, -1)}
+													aria-label="Dislike"
+												>
+													<ThumbsDown class="size-3.5" />
+												</Button>
+											</div>
+										</div>
+										<a
+											href="/post/{post._id}"
+											class="inline-flex items-center text-sm font-medium text-primary hover:underline"
+										>
+											Read more →
+										</a>
+									</div>
+								</div>
+							</article>
 						{/each}
 					</div>
 				{/if}
