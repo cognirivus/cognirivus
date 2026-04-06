@@ -455,7 +455,9 @@
 									const existingMessages = localStore.getQuery(api.dm.getMessages, queryArgs);
 									if (!existingMessages) return;
 
-									const messageIndex = existingMessages.findIndex((m) => m._id === args.messageId);
+									const messageIndex = existingMessages.findIndex(
+										(m: DmMessage) => m._id === args.messageId
+									);
 									if (messageIndex === -1) return;
 
 									const message = existingMessages[messageIndex];

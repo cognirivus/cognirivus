@@ -24,3 +24,8 @@ vite.config.ts.timestamp-*
 
 # Modal
 modal/__pycache__
+
+#AI
+.agents
+skills
+skills-lock.json

@@ -4,15 +4,17 @@ import { action, internalAction, internalMutation, mutation, query } from './_ge
 import { getAuthUser } from './auth';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { deleteR2MetadataOnly, deleteR2ObjectOnly, r2 } from './lib/r2';
+import { r2 } from './lib/r2';
 import { rateLimiter } from './lib/rateLimits';
-import { trackPostDeleted, trackPostInserted } from './lib/aggregates';
+import { trackPostInserted } from './lib/aggregates';
+import { deletePostCascadeByDoc, type DeletePostCascadeResult } from './lib/postDeletion';
 import { requireUserWithUsername } from './lib/usernameGate';
 
 const POST_BODY_INLINE_LIMIT = 1000;
 const POST_SNIPPET_LIMIT = 500;
 const MAX_TAGS_PER_POST = 10;
 const MAX_TAG_LENGTH = 32;
+const DELETE_POSTS_BULK_CHUNK_SIZE = 10;
 
 const postTypeValidator = v.union(v.literal('text'), v.literal('link'), v.literal('media'));
 const voteValueValidator = v.union(v.literal(1), v.literal(-1));
@@ -66,6 +68,30 @@ const commentValidator = v.object({
 	updatedAt: v.number(),
 	userVote: userVoteValidator
 });
+
+const deletePostDbResultValidator = v.object({
+	deleted: v.boolean(),
+	postId: v.id('posts'),
+	commentCount: v.number(),
+	commentVoteCount: v.number(),
+	voteCount: v.number(),
+	postTagCount: v.number(),
+	embeddingCount: v.number(),
+	summaryCount: v.number(),
+	r2Key: v.optional(v.string())
+});
+
+const bulkDeletePostsResultValidator = v.object({
+	requestedCount: v.number(),
+	deletedCount: v.number(),
+	r2DeletedCount: v.number()
+});
+
+type BulkDeletePostsResult = {
+	requestedCount: number;
+	deletedCount: number;
+	r2DeletedCount: number;
+};
 
 const getOptionalAuthUser = async (ctx: any) => {
 	try {
@@ -179,6 +205,38 @@ const requirePostWriteAccess = async (ctx: any, post: any, authUserId: string) =
 	if (!membership || membership.status !== 'active') {
 		throw new Error('Active community membership required.');
 	}
+};
+
+const canActorDeletePost = async (
+	ctx: any,
+	post: any,
+	actorAuthId: string,
+	communityPermissionCache: Map<Id<'communities'>, boolean>
+) => {
+	if (actorAuthId === post.authorAuthId) {
+		return true;
+	}
+	if (!post.communityId) {
+		return false;
+	}
+
+	const cached = communityPermissionCache.get(post.communityId);
+	if (cached !== undefined) {
+		return cached;
+	}
+
+	const membership = await ctx.db
+		.query('community_memberships')
+		.withIndex('by_communityId_and_userAuthId', (q: any) =>
+			q.eq('communityId', post.communityId).eq('userAuthId', actorAuthId)
+		)
+		.unique();
+	const canDelete =
+		!!membership &&
+		membership.status === 'active' &&
+		(membership.role === 'owner' || membership.role === 'admin');
+	communityPermissionCache.set(post.communityId, canDelete);
+	return canDelete;
 };
 
 const patchPostVoteCounters = async (
@@ -807,6 +865,54 @@ export const setVisibility = mutation({
 	}
 });
 
+export const deletePostsForActorFromDb = internalMutation({
+	args: {
+		actorAuthId: v.string(),
+		postIds: v.array(v.id('posts'))
+	},
+	returns: v.array(deletePostDbResultValidator),
+	handler: async (ctx, args): Promise<Array<DeletePostCascadeResult>> => {
+		const results: Array<DeletePostCascadeResult> = [];
+		const postsToDelete: Array<any> = [];
+		const communityPermissionCache = new Map<Id<'communities'>, boolean>();
+		const uniquePostIds = [...new Set(args.postIds)];
+
+		for (const postId of uniquePostIds) {
+			const post = await ctx.db.get(postId);
+			if (!post) {
+				results.push({
+					deleted: false,
+					postId,
+					commentCount: 0,
+					commentVoteCount: 0,
+					voteCount: 0,
+					postTagCount: 0,
+					embeddingCount: 0,
+					summaryCount: 0
+				});
+				continue;
+			}
+
+			const canDelete = await canActorDeletePost(
+				ctx,
+				post,
+				args.actorAuthId,
+				communityPermissionCache
+			);
+			if (!canDelete) {
+				throw new Error('Not authorized to delete this post.');
+			}
+			postsToDelete.push(post);
+		}
+
+		for (const post of postsToDelete) {
+			results.push(await deletePostCascadeByDoc(ctx, post));
+		}
+
+		return results;
+	}
+});
+
 export const deletePost = mutation({
 	args: {
 		postId: v.id('posts')
@@ -816,64 +922,19 @@ export const deletePost = mutation({
 		const authUser = await requireUserWithUsername(ctx);
 		await rateLimiter.limit(ctx, 'deletePost', { key: authUser._id, throws: true });
 
-		const post = await ctx.db.get(args.postId);
-		if (!post) {
-			return null;
-		}
-
-		let canDelete = authUser._id === post.authorAuthId;
-		if (!canDelete && post.communityId) {
-			const membership = await ctx.db
-				.query('community_memberships')
-				.withIndex('by_communityId_and_userAuthId', (q) =>
-					q.eq('communityId', post.communityId!).eq('userAuthId', authUser._id)
-				)
-				.unique();
-			canDelete =
-				!!membership &&
-				membership.status === 'active' &&
-				(membership.role === 'owner' || membership.role === 'admin');
-		}
-		if (!canDelete) {
-			throw new Error('Not authorized to delete this post.');
-		}
-
-		const votes = await ctx.db
-			.query('post_votes')
-			.withIndex('by_postId_and_createdAt', (q) => q.eq('postId', args.postId))
-			.collect();
-		for (const voteDoc of votes) {
-			await ctx.db.delete(voteDoc._id);
-		}
-
-		const comments = await ctx.db
-			.query('post_comments')
-			.withIndex('by_postId_and_createdAt', (q) => q.eq('postId', args.postId))
-			.collect();
-		for (const comment of comments) {
-			const commentVotes = await ctx.db
-				.query('post_comment_votes')
-				.withIndex('by_commentId_and_createdAt', (q) => q.eq('commentId', comment._id))
-				.collect();
-			for (const commentVote of commentVotes) {
-				await ctx.db.delete(commentVote._id);
+		const results: Array<DeletePostCascadeResult> = await ctx.runMutation(
+			(internal as any).posts.deletePostsForActorFromDb,
+			{
+				actorAuthId: authUser._id,
+				postIds: [args.postId]
 			}
-			await ctx.db.delete(comment._id);
-		}
-
-		const postTags = await ctx.db
-			.query('post_tags')
-			.withIndex('by_postId', (q) => q.eq('postId', args.postId))
-			.collect();
-		for (const postTag of postTags) {
-			await ctx.db.delete(postTag._id);
-		}
-
-		await trackPostDeleted(ctx, post);
-		await ctx.db.delete(post._id);
-		if (post.r2Key) {
-			await ctx.scheduler.runAfter(0, internal.posts.deleteStoredBody, {
-				r2Key: post.r2Key
+		);
+		const result = results[0];
+		if (result?.r2Key) {
+			await ctx.scheduler.runAfter(0, (internal as any).posts.deleteStoredBody, {
+				entityType: 'post',
+				entityId: result.postId,
+				r2Keys: [result.r2Key]
 			});
 		}
 
@@ -883,18 +944,65 @@ export const deletePost = mutation({
 
 export { deletePost as delete };
 
+export const bulkDeletePosts = action({
+	args: {
+		postIds: v.array(v.id('posts'))
+	},
+	returns: bulkDeletePostsResultValidator,
+	handler: async (ctx, args): Promise<BulkDeletePostsResult> => {
+		const authUser = await requireUserWithUsername(ctx);
+		await rateLimiter.limit(ctx, 'bulkDeletePosts', { key: authUser._id, throws: true });
+
+		const uniquePostIds = [...new Set(args.postIds)];
+		let deletedCount = 0;
+		const r2Keys: Array<string> = [];
+
+		for (let index = 0; index < uniquePostIds.length; index += DELETE_POSTS_BULK_CHUNK_SIZE) {
+			const chunk = uniquePostIds.slice(index, index + DELETE_POSTS_BULK_CHUNK_SIZE);
+			const results: Array<DeletePostCascadeResult> = await ctx.runMutation(
+				(internal as any).posts.deletePostsForActorFromDb,
+				{
+					actorAuthId: authUser._id,
+					postIds: chunk
+				}
+			);
+			for (const result of results) {
+				if (!result.deleted) {
+					continue;
+				}
+				deletedCount += 1;
+				if (result.r2Key) {
+					r2Keys.push(result.r2Key);
+				}
+			}
+		}
+
+		const r2DeletedCount: number =
+			r2Keys.length > 0
+				? await ctx.runAction((internal as any).admin.deleteR2KeysWithRetry, {
+						entityType: 'post_bulk',
+						entityId: authUser._id,
+						r2Keys
+					})
+				: 0;
+
+		return {
+			requestedCount: uniquePostIds.length,
+			deletedCount,
+			r2DeletedCount
+		};
+	}
+});
+
 export const deleteStoredBody = internalAction({
 	args: {
-		r2Key: v.string()
+		entityType: v.string(),
+		entityId: v.string(),
+		r2Keys: v.array(v.string())
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		try {
-			await deleteR2ObjectOnly(ctx, args.r2Key);
-			await deleteR2MetadataOnly(ctx, args.r2Key);
-		} catch (error) {
-			console.error('Failed to delete R2 object', args.r2Key, error);
-		}
+		await ctx.runAction((internal as any).admin.deleteR2KeysWithRetry, args);
 		return null;
 	}
 });

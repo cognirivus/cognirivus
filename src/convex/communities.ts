@@ -1,10 +1,15 @@
 import { v } from 'convex/values';
 import { paginationOptsValidator } from 'convex/server';
-import { mutation, query } from './_generated/server';
+import { action, internalMutation, internalQuery, mutation, query } from './_generated/server';
+import { internal } from './_generated/api';
 import { getAuthUser } from './auth';
 import type { Id } from './_generated/dataModel';
 import { rateLimiter } from './lib/rateLimits';
 import { requireUserWithUsername } from './lib/usernameGate';
+import {
+	deleteCommunityCascadeByDoc,
+	type DeleteCommunityCascadeResult
+} from './lib/communityDeletion';
 
 const COMMUNITY_SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 
@@ -48,6 +53,46 @@ const pendingRequestValidator = v.object({
 	requesterName: v.string(),
 	requesterEmail: v.string(),
 	requesterUsername: v.union(v.null(), v.string())
+});
+
+const memberListItemValidator = v.object({
+	membershipId: v.id('community_memberships'),
+	userAuthId: v.string(),
+	role: membershipRoleValidator,
+	joinedAt: v.number(),
+	name: v.string(),
+	username: v.union(v.null(), v.string()),
+	image: v.optional(v.union(v.null(), v.string()))
+});
+
+const communityDeleteResultValidator = v.object({
+	deleted: v.boolean(),
+	communityId: v.id('communities'),
+	postCount: v.number(),
+	collectionCount: v.number(),
+	chatMessageCount: v.number(),
+	r2DeletedCount: v.number()
+});
+
+const communityDeleteDbResultValidator = v.object({
+	deleted: v.boolean(),
+	communityId: v.id('communities'),
+	membershipCount: v.number(),
+	followCount: v.number(),
+	chatMessageCount: v.number(),
+	chatReactionCount: v.number(),
+	collectionCount: v.number(),
+	collectionItemCount: v.number(),
+	collectionFollowCount: v.number(),
+	collectionSuggestionCount: v.number(),
+	postCount: v.number(),
+	postCommentCount: v.number(),
+	postCommentVoteCount: v.number(),
+	postVoteCount: v.number(),
+	postTagCount: v.number(),
+	embeddingCount: v.number(),
+	summaryCount: v.number(),
+	r2Keys: v.array(v.string())
 });
 
 type AuthenticatedUser = {
@@ -144,6 +189,22 @@ const requireManager = async (ctx: any, communityId: Id<'communities'>, userAuth
 		throw new Error('Community manager permission required');
 	}
 	return membership;
+};
+
+const removeCommunityFollow = async (
+	ctx: any,
+	userAuthId: string,
+	communityId: Id<'communities'>
+) => {
+	const existingFollow = await ctx.db
+		.query('follows_communities')
+		.withIndex('by_followerAuthId_and_communityId', (q: any) =>
+			q.eq('followerAuthId', userAuthId).eq('communityId', communityId)
+		)
+		.unique();
+	if (existingFollow) {
+		await ctx.db.delete(existingFollow._id);
+	}
 };
 
 export const create = mutation({
@@ -326,6 +387,118 @@ export const rejectJoin = mutation({
 	}
 });
 
+export const leaveCommunity = mutation({
+	args: {
+		communityId: v.id('communities')
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const authUser = await requireUserWithUsername(ctx);
+
+		const membership = await getMembership(ctx, args.communityId, authUser._id);
+		if (!membership || membership.status !== 'active') {
+			throw new Error('Active membership required.');
+		}
+		if (membership.role === 'owner') {
+			throw new Error('Community owners must delete the community instead of leaving it.');
+		}
+
+		await removeCommunityFollow(ctx, authUser._id, args.communityId);
+		await ctx.db.delete(membership._id);
+		return null;
+	}
+});
+
+export const removeMember = mutation({
+	args: {
+		membershipId: v.id('community_memberships')
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const authUser = await requireUserWithUsername(ctx);
+		const targetMembership = await ctx.db.get(args.membershipId);
+		if (!targetMembership) {
+			throw new Error('Membership not found.');
+		}
+
+		const actorMembership = await requireManager(ctx, targetMembership.communityId, authUser._id);
+		if (targetMembership.status !== 'active') {
+			throw new Error('Only active members can be removed.');
+		}
+		if (targetMembership.userAuthId === authUser._id) {
+			throw new Error('Use the leave action to remove yourself from a community.');
+		}
+		if (targetMembership.role === 'owner') {
+			throw new Error('Community owners cannot be removed.');
+		}
+		if (actorMembership.role !== 'owner' && targetMembership.role !== 'member') {
+			throw new Error('Only owners can remove admins.');
+		}
+
+		await removeCommunityFollow(ctx, targetMembership.userAuthId, targetMembership.communityId);
+		await ctx.db.delete(targetMembership._id);
+		return null;
+	}
+});
+
+export const deleteCommunityCascadeFromDb = internalMutation({
+	args: {
+		communityId: v.id('communities')
+	},
+	returns: communityDeleteDbResultValidator,
+	handler: async (ctx, args): Promise<DeleteCommunityCascadeResult> => {
+		const community = await ctx.db.get(args.communityId);
+		if (!community) {
+			throw new Error('Community not found.');
+		}
+		return await deleteCommunityCascadeByDoc(ctx, community);
+	}
+});
+
+export const deleteCommunity = action({
+	args: {
+		communityId: v.id('communities')
+	},
+	returns: communityDeleteResultValidator,
+	handler: async (ctx, args) => {
+		const authUser = await requireUserWithUsername(ctx);
+		const community: { _id: Id<'communities'>; ownerAuthId: string } | null = await ctx.runQuery(
+			(internal as any).communities.getCommunityByIdInternal,
+			{
+				communityId: args.communityId
+			}
+		);
+		if (!community) {
+			throw new Error('Community not found.');
+		}
+		if (community.ownerAuthId !== authUser._id) {
+			throw new Error('Only the community owner can delete this community.');
+		}
+
+		const result: DeleteCommunityCascadeResult = await ctx.runMutation(
+			(internal as any).communities.deleteCommunityCascadeFromDb,
+			{ communityId: args.communityId }
+		);
+		const r2DeletedCount: number =
+			result.r2Keys.length > 0
+				? await ctx.runAction((internal as any).admin.deleteR2KeysWithRetry, {
+						entityType: 'community',
+						entityId: result.communityId,
+						r2Keys: result.r2Keys
+					})
+				: 0;
+
+		return {
+			deleted: true,
+			communityId: result.communityId,
+			postCount: result.postCount,
+			collectionCount: result.collectionCount,
+			chatMessageCount: result.chatMessageCount,
+			r2DeletedCount
+		};
+	}
+});
+
 export const listPublic = query({
 	args: {
 		limit: v.optional(v.number())
@@ -434,6 +607,11 @@ export const listMembers = query({
 		communityId: v.id('communities'),
 		paginationOpts: paginationOptsValidator
 	},
+	returns: v.object({
+		page: v.array(memberListItemValidator),
+		isDone: v.boolean(),
+		continueCursor: v.union(v.string(), v.null())
+	}),
 	handler: async (ctx, args) => {
 		const community = await ctx.db.get(args.communityId);
 		if (!community) {
@@ -467,6 +645,7 @@ export const listMembers = query({
 					.unique();
 
 				return {
+					membershipId: membership._id,
 					userAuthId: membership.userAuthId,
 					role: membership.role,
 					joinedAt: membership.respondedAt ?? membership.createdAt,
@@ -478,8 +657,9 @@ export const listMembers = query({
 		);
 
 		return {
-			...result,
-			page: pageWithProfiles
+			page: pageWithProfiles,
+			isDone: result.isDone,
+			continueCursor: result.continueCursor
 		};
 	}
 });
@@ -493,9 +673,11 @@ export const getBySlug = query({
 		v.object({
 			community: communitySummaryValidator,
 			membershipStatus: membershipStatusValidator,
+			membershipRole: v.union(v.null(), membershipRoleValidator),
 			canRead: v.boolean(),
 			canPost: v.boolean(),
-			isManager: v.boolean()
+			isManager: v.boolean(),
+			isOwner: v.boolean()
 		})
 	),
 	handler: async (ctx, args) => {
@@ -514,17 +696,47 @@ export const getBySlug = query({
 			| 'pending'
 			| 'active'
 			| 'rejected';
+		const membershipRole =
+			membershipStatus === 'active'
+				? ((membership?.role ?? null) as 'owner' | 'admin' | 'member')
+				: null;
 		const isMember = membershipStatus === 'active';
 		const isManager = isMember && (membership?.role === 'owner' || membership?.role === 'admin');
+		const isOwner = membership?.role === 'owner' && isMember;
 		const canRead = community.visibility === 'public' || isMember;
 		const canPost = isMember;
 
 		return {
 			community: await toCommunitySummary(ctx, community),
 			membershipStatus,
+			membershipRole,
 			canRead,
 			canPost,
-			isManager
+			isManager,
+			isOwner
+		};
+	}
+});
+
+export const getCommunityByIdInternal = internalQuery({
+	args: {
+		communityId: v.id('communities')
+	},
+	returns: v.union(
+		v.null(),
+		v.object({
+			_id: v.id('communities'),
+			ownerAuthId: v.string()
+		})
+	),
+	handler: async (ctx, args) => {
+		const community = await ctx.db.get(args.communityId);
+		if (!community) {
+			return null;
+		}
+		return {
+			_id: community._id,
+			ownerAuthId: community.ownerAuthId
 		};
 	}
 });

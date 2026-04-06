@@ -14,12 +14,12 @@ import { requireAdminUser } from './lib/adminAuth';
 import { actionRetrier } from './lib/actionRetrier';
 import {
 	countSourceItemsForSource,
-	trackPostDeleted,
 	trackPostReplaced,
 	trackSourceItemDeleted
 } from './lib/aggregates';
 import { JOB_FAILURE_CODE, toFailureMessage } from './lib/jobFailure';
 import { assertDeletionJobTransition, assertR2RetryJobTransition } from './lib/jobTransitions';
+import { deletePostCascadeByDoc } from './lib/postDeletion';
 import { toR2RetryJobResponse, type R2RetryJobResponse } from './lib/serializers';
 
 const stringifyDetails = (value: unknown): string => {
@@ -48,11 +48,7 @@ const logAdminAuditEvent = async (
 	}
 };
 
-const sourceTypeValidator = v.union(
-	v.literal('website'),
-	v.literal('rss'),
-	v.literal('youtube')
-);
+const sourceTypeValidator = v.union(v.literal('website'), v.literal('rss'), v.literal('youtube'));
 
 const sourceStatusValidator = v.union(
 	v.literal('active'),
@@ -367,6 +363,111 @@ const parseStoredDeleteResult = <T>(value: string | undefined): T | null => {
 	}
 };
 
+const deleteCollectionItemsForSource = async (ctx: any, sourceId: Id<'sources'>) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('source_collection_items')
+			.withIndex('by_sourceId_and_createdAt', (q: any) => q.eq('sourceId', sourceId))
+			.take(200);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
+const deleteCollectionSuggestionsForSource = async (ctx: any, sourceId: Id<'sources'>) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('source_collection_suggestions')
+			.withIndex('by_sourceId_and_updatedAt', (q: any) => q.eq('sourceId', sourceId))
+			.take(200);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
+const deleteCollectionItemsForSourceItem = async (ctx: any, sourceItemId: Id<'source_items'>) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('source_collection_items')
+			.withIndex('by_sourceItemId_and_createdAt', (q: any) => q.eq('sourceItemId', sourceItemId))
+			.take(200);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
+const deleteCollectionSuggestionsForSourceItem = async (
+	ctx: any,
+	sourceItemId: Id<'source_items'>
+) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('source_collection_suggestions')
+			.withIndex('by_sourceItemId_and_updatedAt', (q: any) => q.eq('sourceItemId', sourceItemId))
+			.take(200);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
+const deleteRssFeedsForSource = async (ctx: any, sourceId: Id<'sources'>) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('source_rss_feeds')
+			.withIndex('by_sourceId_and_updatedAt', (q: any) => q.eq('sourceId', sourceId))
+			.take(100);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
+const deleteSubscriptionsForSource = async (ctx: any, sourceId: Id<'sources'>) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('source_subscriptions')
+			.withIndex('by_sourceId_and_updatedAt', (q: any) => q.eq('sourceId', sourceId))
+			.take(200);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
 export const listDashboard = query({
 	args: {},
 	returns: v.object({
@@ -665,15 +766,18 @@ export const quarantineMissingPostR2Refs = internalMutation({
 				continue;
 			}
 			const previous = post;
-			await ctx.db.patch(postId, {
+			const next = {
+				...post,
 				r2Key: undefined,
 				body: post.body ?? post.snippet,
 				updatedAt: Date.now()
+			};
+			await ctx.db.patch(postId, {
+				r2Key: next.r2Key,
+				body: next.body,
+				updatedAt: next.updatedAt
 			});
-			const next = await ctx.db.get(postId);
-			if (next) {
-				await trackPostReplaced(ctx, previous, next);
-			}
+			await trackPostReplaced(ctx, previous, next);
 			updated += 1;
 		}
 		return updated;
@@ -1093,15 +1197,18 @@ export const deleteSourceCascadeFromDb = internalMutation({
 					}
 					for (const post of linkedPosts) {
 						const oldPost = post;
-						await ctx.db.patch(post._id, {
+						const updatedPost = {
+							...post,
 							sourceId: undefined,
 							sourceItemId: undefined,
 							updatedAt: Date.now()
+						};
+						await ctx.db.patch(post._id, {
+							sourceId: updatedPost.sourceId,
+							sourceItemId: updatedPost.sourceItemId,
+							updatedAt: updatedPost.updatedAt
 						});
-						const updatedPost = await ctx.db.get(post._id);
-						if (updatedPost) {
-							await trackPostReplaced(ctx, oldPost, updatedPost);
-						}
+						await trackPostReplaced(ctx, oldPost, updatedPost);
 						unlinkedPostCount += 1;
 					}
 				}
@@ -1135,48 +1242,19 @@ export const deleteSourceCascadeFromDb = internalMutation({
 			}
 			for (const post of remainingPosts) {
 				const oldPost = post as any;
-				await ctx.db.patch(post._id, {
+				const updatedPost = {
+					...post,
 					sourceId: undefined,
 					sourceItemId: undefined,
 					updatedAt: Date.now()
+				};
+				await ctx.db.patch(post._id, {
+					sourceId: updatedPost.sourceId,
+					sourceItemId: updatedPost.sourceItemId,
+					updatedAt: updatedPost.updatedAt
 				});
-				const updatedPost = await ctx.db.get(post._id);
-				if (updatedPost) {
-					await trackPostReplaced(ctx, oldPost, updatedPost as any);
-				}
+				await trackPostReplaced(ctx, oldPost, updatedPost as any);
 				unlinkedPostCount += 1;
-			}
-		}
-
-		while (true) {
-			const activeBatch = await ctx.db
-				.query('source_subscriptions')
-				.withIndex('by_sourceId_and_status', (q) =>
-					q.eq('sourceId', args.sourceId).eq('status', 'active')
-				)
-				.take(200);
-			if (activeBatch.length === 0) {
-				break;
-			}
-			for (const subscription of activeBatch) {
-				await ctx.db.delete(subscription._id);
-				subscriptionCount += 1;
-			}
-		}
-
-		while (true) {
-			const pausedBatch = await ctx.db
-				.query('source_subscriptions')
-				.withIndex('by_sourceId_and_status', (q) =>
-					q.eq('sourceId', args.sourceId).eq('status', 'paused')
-				)
-				.take(200);
-			if (pausedBatch.length === 0) {
-				break;
-			}
-			for (const subscription of pausedBatch) {
-				await ctx.db.delete(subscription._id);
-				subscriptionCount += 1;
 			}
 		}
 
@@ -1193,6 +1271,11 @@ export const deleteSourceCascadeFromDb = internalMutation({
 				jobCount += 1;
 			}
 		}
+
+		subscriptionCount += await deleteSubscriptionsForSource(ctx, args.sourceId);
+		await deleteRssFeedsForSource(ctx, args.sourceId);
+		await deleteCollectionItemsForSource(ctx, args.sourceId);
+		await deleteCollectionSuggestionsForSource(ctx, args.sourceId);
 		await ctx.db.delete(args.sourceId);
 
 		return {
@@ -1235,15 +1318,18 @@ export const deleteSourceItemCascadeFromDb = internalMutation({
 			}
 			for (const post of linkedPosts) {
 				const oldPost = post;
-				await ctx.db.patch(post._id, {
+				const updatedPost = {
+					...post,
 					sourceId: undefined,
 					sourceItemId: undefined,
 					updatedAt: Date.now()
+				};
+				await ctx.db.patch(post._id, {
+					sourceId: updatedPost.sourceId,
+					sourceItemId: updatedPost.sourceItemId,
+					updatedAt: updatedPost.updatedAt
 				});
-				const updatedPost = await ctx.db.get(post._id);
-				if (updatedPost) {
-					await trackPostReplaced(ctx, oldPost, updatedPost);
-				}
+				await trackPostReplaced(ctx, oldPost, updatedPost);
 				unlinkedPostCount += 1;
 			}
 		}
@@ -1262,6 +1348,9 @@ export const deleteSourceItemCascadeFromDb = internalMutation({
 				deliveryCount += 1;
 			}
 		}
+
+		await deleteCollectionItemsForSourceItem(ctx, args.sourceItemId);
+		await deleteCollectionSuggestionsForSourceItem(ctx, args.sourceItemId);
 
 		await trackSourceItemDeleted(ctx, sourceItem);
 		await ctx.db.delete(args.sourceItemId);
@@ -1301,71 +1390,7 @@ export const deletePostCascadeFromDb = internalMutation({
 			};
 		}
 
-		const votes = await ctx.db
-			.query('post_votes')
-			.withIndex('by_postId_and_createdAt', (q) => q.eq('postId', args.postId))
-			.collect();
-		for (const vote of votes) {
-			await ctx.db.delete(vote._id);
-		}
-
-		const comments = await ctx.db
-			.query('post_comments')
-			.withIndex('by_postId_and_createdAt', (q) => q.eq('postId', args.postId))
-			.collect();
-		let commentVoteCount = 0;
-		for (const comment of comments) {
-			const commentVotes = await ctx.db
-				.query('post_comment_votes')
-				.withIndex('by_commentId_and_createdAt', (q) => q.eq('commentId', comment._id))
-				.collect();
-			for (const commentVote of commentVotes) {
-				await ctx.db.delete(commentVote._id);
-			}
-			commentVoteCount += commentVotes.length;
-			await ctx.db.delete(comment._id);
-		}
-
-		const postTags = await ctx.db
-			.query('post_tags')
-			.withIndex('by_postId', (q) => q.eq('postId', args.postId))
-			.collect();
-		for (const postTag of postTags) {
-			await ctx.db.delete(postTag._id);
-		}
-
-		const embeddings = await ctx.db
-			.query('post_embeddings')
-			.withIndex('by_postId', (q) => q.eq('postId', args.postId))
-			.collect();
-		for (const embedding of embeddings) {
-			await ctx.db.delete(embedding._id);
-		}
-
-		const summaries = await ctx.db
-			.query('ai_summary_cache')
-			.withIndex('by_entityType_and_entityId', (q) =>
-				q.eq('entityType', 'post').eq('entityId', args.postId)
-			)
-			.collect();
-		for (const summary of summaries) {
-			await ctx.db.delete(summary._id);
-		}
-
-		await trackPostDeleted(ctx, post);
-		await ctx.db.delete(args.postId);
-
-		return {
-			deleted: true,
-			postId: args.postId,
-			commentCount: comments.length,
-			commentVoteCount,
-			voteCount: votes.length,
-			postTagCount: postTags.length,
-			embeddingCount: embeddings.length,
-			summaryCount: summaries.length,
-			r2Key: post.r2Key
-		};
+		return await deletePostCascadeByDoc(ctx, post);
 	}
 });
 
@@ -1839,6 +1864,18 @@ const deleteR2Keys = async (
 	}
 	return deletedCount;
 };
+
+export const deleteR2KeysWithRetry = internalAction({
+	args: {
+		entityType: v.string(),
+		entityId: v.string(),
+		r2Keys: v.array(v.string())
+	},
+	returns: v.number(),
+	handler: async (ctx, args) => {
+		return await deleteR2Keys(ctx, args);
+	}
+});
 
 export const deleteSourcePermanently = action({
 	args: {

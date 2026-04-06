@@ -5,7 +5,6 @@
 	import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
 	import FolderIcon from '@lucide/svelte/icons/folder';
 	import ForwardIcon from '@lucide/svelte/icons/forward';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 
 	let {
 		projects
@@ -54,11 +53,6 @@
 						<DropdownMenu.Item>
 							<ForwardIcon class="text-muted-foreground" />
 							<span>Share Project</span>
-						</DropdownMenu.Item>
-						<DropdownMenu.Separator />
-						<DropdownMenu.Item>
-							<Trash2Icon class="text-muted-foreground" />
-							<span>Delete Project</span>
 						</DropdownMenu.Item>
 					</DropdownMenu.Content>
 				</DropdownMenu.Root>

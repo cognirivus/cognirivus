@@ -8,6 +8,7 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
 	moderateJoin: { kind: 'token bucket', rate: 30, period: HOUR, capacity: 10 },
 	createPost: { kind: 'token bucket', rate: 20, period: HOUR, capacity: 5 },
 	deletePost: { kind: 'token bucket', rate: 20, period: HOUR, capacity: 5 },
+	bulkDeletePosts: { kind: 'token bucket', rate: 10, period: HOUR, capacity: 2 },
 	createComment: { kind: 'token bucket', rate: 60, period: HOUR, capacity: 10 },
 	votePost: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 },
 	voteComment: { kind: 'token bucket', rate: 200, period: HOUR, capacity: 40 },

@@ -21,9 +21,12 @@ import type * as http from "../http.js";
 import type * as lib_actionRetrier from "../lib/actionRetrier.js";
 import type * as lib_adminAuth from "../lib/adminAuth.js";
 import type * as lib_aggregates from "../lib/aggregates.js";
+import type * as lib_collectionDeletion from "../lib/collectionDeletion.js";
+import type * as lib_communityDeletion from "../lib/communityDeletion.js";
 import type * as lib_feedRanking from "../lib/feedRanking.js";
 import type * as lib_jobFailure from "../lib/jobFailure.js";
 import type * as lib_jobTransitions from "../lib/jobTransitions.js";
+import type * as lib_postDeletion from "../lib/postDeletion.js";
 import type * as lib_r2 from "../lib/r2.js";
 import type * as lib_rateLimits from "../lib/rateLimits.js";
 import type * as lib_serializers from "../lib/serializers.js";
@@ -63,9 +66,12 @@ declare const fullApi: ApiFromModules<{
   "lib/actionRetrier": typeof lib_actionRetrier;
   "lib/adminAuth": typeof lib_adminAuth;
   "lib/aggregates": typeof lib_aggregates;
+  "lib/collectionDeletion": typeof lib_collectionDeletion;
+  "lib/communityDeletion": typeof lib_communityDeletion;
   "lib/feedRanking": typeof lib_feedRanking;
   "lib/jobFailure": typeof lib_jobFailure;
   "lib/jobTransitions": typeof lib_jobTransitions;
+  "lib/postDeletion": typeof lib_postDeletion;
   "lib/r2": typeof lib_r2;
   "lib/rateLimits": typeof lib_rateLimits;
   "lib/serializers": typeof lib_serializers;
@@ -973,6 +979,7 @@ export declare const components: {
           name: string;
           next?: Array<{ fnHandle: string; name: string }>;
           oneBatchOnly?: boolean;
+          reset?: boolean;
         },
         {
           batchSize?: number;
@@ -1273,6 +1280,20 @@ export declare const components: {
                     | { error: string; kind: "failed" }
                     | { kind: "canceled" };
                   startedAt: number;
+                }
+              | {
+                  args: any;
+                  argsSize: number;
+                  completedAt?: number;
+                  inProgress: boolean;
+                  kind: "sleep";
+                  name: string;
+                  runResult?:
+                    | { kind: "success"; returnValue: any }
+                    | { error: string; kind: "failed" }
+                    | { kind: "canceled" };
+                  startedAt: number;
+                  workId?: string;
                 };
             stepNumber: number;
             workflowId: string;
@@ -1352,6 +1373,20 @@ export declare const components: {
                     | { error: string; kind: "failed" }
                     | { kind: "canceled" };
                   startedAt: number;
+                }
+              | {
+                  args: any;
+                  argsSize: number;
+                  completedAt?: number;
+                  inProgress: boolean;
+                  kind: "sleep";
+                  name: string;
+                  runResult?:
+                    | { kind: "success"; returnValue: any }
+                    | { error: string; kind: "failed" }
+                    | { kind: "canceled" };
+                  startedAt: number;
+                  workId?: string;
                 };
           }>;
           workflowId: string;
@@ -1414,6 +1449,20 @@ export declare const components: {
                   | { error: string; kind: "failed" }
                   | { kind: "canceled" };
                 startedAt: number;
+              }
+            | {
+                args: any;
+                argsSize: number;
+                completedAt?: number;
+                inProgress: boolean;
+                kind: "sleep";
+                name: string;
+                runResult?:
+                  | { kind: "success"; returnValue: any }
+                  | { error: string; kind: "failed" }
+                  | { kind: "canceled" };
+                startedAt: number;
+                workId?: string;
               };
           stepNumber: number;
           workflowId: string;
@@ -1430,7 +1479,7 @@ export declare const components: {
       cleanup: FunctionReference<
         "mutation",
         "internal",
-        { workflowId: string },
+        { force?: boolean; workflowId: string },
         boolean
       >;
       complete: FunctionReference<
@@ -1512,6 +1561,20 @@ export declare const components: {
                     | { error: string; kind: "failed" }
                     | { kind: "canceled" };
                   startedAt: number;
+                }
+              | {
+                  args: any;
+                  argsSize: number;
+                  completedAt?: number;
+                  inProgress: boolean;
+                  kind: "sleep";
+                  name: string;
+                  runResult?:
+                    | { kind: "success"; returnValue: any }
+                    | { error: string; kind: "failed" }
+                    | { kind: "canceled" };
+                  startedAt: number;
+                  workId?: string;
                 };
             stepNumber: number;
             workflowId: string;
@@ -1620,7 +1683,7 @@ export declare const components: {
             args: any;
             completedAt?: number;
             eventId?: string;
-            kind: "function" | "workflow" | "event";
+            kind: "function" | "workflow" | "event" | "sleep";
             name: string;
             nestedWorkflowId?: string;
             runResult?:
@@ -1636,6 +1699,12 @@ export declare const components: {
           pageStatus?: "SplitRecommended" | "SplitRequired" | null;
           splitCursor?: string | null;
         }
+      >;
+      restart: FunctionReference<
+        "mutation",
+        "internal",
+        { from?: number | string; startAsync?: boolean; workflowId: string },
+        null
       >;
     };
   };

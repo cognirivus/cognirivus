@@ -26,6 +26,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent } from '$lib/components/ui/card';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import { Input } from '$lib/components/ui/input';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
@@ -45,8 +46,11 @@
 	const cursor = $derived(page.url.searchParams.get('cursor'));
 
 	let searchInput = $state('');
+	let leaveDialogOpen = $state(false);
 	let layoutMode = $state<'bento' | 'list'>(
-		(typeof localStorage !== 'undefined' && (localStorage.getItem('feedLayoutMode') as 'bento' | 'list')) || 'bento'
+		(typeof localStorage !== 'undefined' &&
+			(localStorage.getItem('feedLayoutMode') as 'bento' | 'list')) ||
+			'bento'
 	);
 
 	$effect(() => {
@@ -154,6 +158,26 @@
 		}
 	}
 
+	function requestLeaveCommunity() {
+		if (communityQuery.data?.membershipStatus !== 'active') return;
+		if (communityQuery.data.membershipRole === 'owner') return;
+		leaveDialogOpen = true;
+	}
+
+	async function leaveCommunity() {
+		if (!communityQuery.data) return;
+		try {
+			await client.mutation((api as any).communities.leaveCommunity, {
+				communityId: communityQuery.data.community._id
+			});
+			leaveDialogOpen = false;
+			toast.success('Left community');
+			goto('/c');
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to leave community');
+		}
+	}
+
 	async function vote(postId: string, value: 1 | -1) {
 		if (!auth.isAuthenticated) {
 			return;
@@ -178,6 +202,7 @@
 	{:else}
 		{@const membershipStatus = communityQuery.data.membershipStatus}
 		{@const canPost = communityQuery.data.canPost}
+		{@const membershipRole = communityQuery.data.membershipRole}
 
 		<CommunitySubpageHeader communityData={communityQuery.data} activeNav="feed" />
 
@@ -186,8 +211,11 @@
 			{#if membershipStatus === 'active'}
 				<Button variant="secondary" size="sm" disabled>
 					<Users class="size-4" />
-					Joined
+					{membershipRole === 'owner' ? 'Owner' : 'Joined'}
 				</Button>
+				{#if membershipRole !== 'owner'}
+					<Button variant="outline" size="sm" onclick={requestLeaveCommunity}>Leave</Button>
+				{/if}
 			{:else if membershipStatus === 'pending'}
 				<Button variant="secondary" size="sm" disabled>
 					<Clock class="size-4" />
@@ -376,7 +404,9 @@
 											<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
 												<Archive class="size-3" />
 												<span class="text-xs">
-													{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
+													{post.sourceType === 'chrome_import'
+														? 'Chrome Bookmark'
+														: post.sourceType}
 												</span>
 											</Badge>
 										{/if}
@@ -434,7 +464,7 @@
 						class="grid auto-rows-auto gap-4 sm:grid-cols-2 lg:grid-cols-3"
 						style="grid-auto-flow: dense;"
 					>
-						{#each feedQuery.data?.page ?? [] as post, index (post._id)}
+						{#each feedQuery.data?.page ?? [] as post (post._id)}
 							{@const isLarge = post.score > 30 || post.commentCount > 15}
 							{@const isMedium = !isLarge && (post.score > 10 || post.commentCount > 5)}
 							<article
@@ -445,7 +475,7 @@
 								<div class="flex h-full flex-col p-5">
 									<div class="flex-1">
 										<h1
-											class={`font-bold leading-tight tracking-tight ${
+											class={`leading-tight font-bold tracking-tight ${
 												isLarge
 													? 'text-2xl sm:text-3xl lg:text-4xl'
 													: isMedium
@@ -459,7 +489,11 @@
 										</h1>
 										<p
 											class={`mt-3 text-muted-foreground ${
-												isLarge ? 'line-clamp-6 text-base' : isMedium ? 'line-clamp-4 text-sm' : 'line-clamp-3 text-sm'
+												isLarge
+													? 'line-clamp-6 text-base'
+													: isMedium
+														? 'line-clamp-4 text-sm'
+														: 'line-clamp-3 text-sm'
 											}`}
 										>
 											{post.snippet}
@@ -494,12 +528,16 @@
 												<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
 													<Archive class="size-3" />
 													<span class="text-xs">
-														{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
+														{post.sourceType === 'chrome_import'
+															? 'Chrome Bookmark'
+															: post.sourceType}
 													</span>
 												</Badge>
 											{/if}
 										</div>
-										<div class="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+										<div
+											class="flex items-center justify-between gap-3 text-xs text-muted-foreground"
+										>
 											<div class="flex items-center gap-3">
 												<span class="inline-flex items-center gap-1">
 													<MessageSquare class="size-3.5" />
@@ -553,3 +591,18 @@
 		</div>
 	{/if}
 </main>
+
+<Dialog.Root bind:open={leaveDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Leave Community</Dialog.Title>
+			<Dialog.Description>
+				Leave this community? You can request access again later if it is public or approved.
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (leaveDialogOpen = false)}>Cancel</Button>
+			<Button variant="destructive" onclick={leaveCommunity}>Leave</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

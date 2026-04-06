@@ -228,6 +228,8 @@ const schema = defineSchema({
 			'sourceItemId',
 			'status'
 		])
+		.index('by_sourceId_and_updatedAt', ['sourceId', 'updatedAt'])
+		.index('by_sourceItemId_and_updatedAt', ['sourceItemId', 'updatedAt'])
 		.index('by_suggestedByAuthId_and_createdAt', ['suggestedByAuthId', 'createdAt']),
 	source_subscriptions: defineTable({
 		userAuthId: v.string(),
@@ -241,6 +243,7 @@ const schema = defineSchema({
 	})
 		.index('by_userAuthId_and_sourceId', ['userAuthId', 'sourceId'])
 		.index('by_userAuthId_and_updatedAt', ['userAuthId', 'updatedAt'])
+		.index('by_sourceId_and_updatedAt', ['sourceId', 'updatedAt'])
 		.index('by_sourceId_and_status', ['sourceId', 'status']),
 	source_items: defineTable({
 		sourceId: v.id('sources'),
@@ -481,7 +484,9 @@ const schema = defineSchema({
 		editedAt: v.optional(v.number()),
 		isDeleted: v.boolean(),
 		createdAt: v.number()
-	}).index('by_communityId_and_createdAt', ['communityId', 'createdAt']),
+	})
+		.index('by_communityId_and_createdAt', ['communityId', 'createdAt'])
+		.index('by_userAuthId_and_createdAt', ['userAuthId', 'createdAt']),
 	community_chat_reactions: defineTable({
 		communityId: v.id('communities'),
 		messageId: v.id('community_chat_messages'),
@@ -490,7 +495,8 @@ const schema = defineSchema({
 		createdAt: v.number()
 	})
 		.index('by_communityId_and_messageId', ['communityId', 'messageId'])
-		.index('by_messageId_and_userAuthId', ['messageId', 'userAuthId']),
+		.index('by_messageId_and_userAuthId', ['messageId', 'userAuthId'])
+		.index('by_userAuthId_and_createdAt', ['userAuthId', 'createdAt']),
 	post_embeddings: defineTable({
 		postId: v.id('posts'),
 		model: v.optional(v.string()),
@@ -580,7 +586,9 @@ const schema = defineSchema({
 		editedAt: v.optional(v.number()),
 		isDeleted: v.boolean(),
 		createdAt: v.number()
-	}).index('by_conversationId_and_createdAt', ['conversationId', 'createdAt']),
+	})
+		.index('by_conversationId_and_createdAt', ['conversationId', 'createdAt'])
+		.index('by_senderAuthId_and_createdAt', ['senderAuthId', 'createdAt']),
 	dm_reactions: defineTable({
 		messageId: v.id('dm_messages'),
 		userAuthId: v.string(),
@@ -588,7 +596,8 @@ const schema = defineSchema({
 		createdAt: v.number()
 	})
 		.index('by_messageId', ['messageId'])
-		.index('by_messageId_and_userAuthId', ['messageId', 'userAuthId']),
+		.index('by_messageId_and_userAuthId', ['messageId', 'userAuthId'])
+		.index('by_userAuthId_and_createdAt', ['userAuthId', 'createdAt']),
 	dm_read_cursors: defineTable({
 		conversationId: v.id('dm_conversations'),
 		userAuthId: v.string(),

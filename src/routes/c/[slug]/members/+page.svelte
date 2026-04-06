@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { useConvexClient, useQuery } from 'convex-svelte';
-	import { Crown, Loader2, Shield, User, Users } from '@lucide/svelte';
+	import { Crown, Loader2, Shield, User, UserMinus, Users } from '@lucide/svelte';
 	import { api } from '$convex/_generated/api';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
@@ -9,6 +9,7 @@
 	import { toast } from 'svelte-sonner';
 
 	type MemberItem = {
+		membershipId: string;
 		userAuthId: string;
 		role: 'owner' | 'admin' | 'member';
 		joinedAt: number;
@@ -22,12 +23,14 @@
 	const slug = $derived(page.params.slug);
 	const client = useConvexClient();
 	const communityQuery = useQuery((api as any).communities.getBySlug, () => ({ slug }));
+	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
 
 	let allMembers = $state<Array<MemberItem>>([]);
 	let continueCursor = $state<string | null>(null);
 	let isDone = $state(false);
 	let loading = $state(false);
 	let initialized = $state(false);
+	let removingMembershipId = $state<string | null>(null);
 
 	function resetMembersState() {
 		initialized = false;
@@ -107,6 +110,30 @@
 		if (role === 'admin') return 'secondary' as const;
 		return 'outline' as const;
 	}
+
+	function canRemoveMember(member: MemberItem) {
+		if (!communityQuery.data?.isManager) return false;
+		if (!communityQuery.data.membershipRole) return false;
+		if (currentUserQuery.data?.id === member.userAuthId) return false;
+		if (member.role === 'owner') return false;
+		if (communityQuery.data.membershipRole === 'owner') return true;
+		return member.role === 'member';
+	}
+
+	async function removeMember(member: MemberItem) {
+		removingMembershipId = member.membershipId;
+		try {
+			await client.mutation((api as any).communities.removeMember, {
+				membershipId: member.membershipId
+			});
+			toast.success(`Removed ${member.username ? `u/${member.username}` : member.name}`);
+			await loadPage(null);
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to remove member');
+		} finally {
+			removingMembershipId = null;
+		}
+	}
 </script>
 
 <main class="mx-auto w-full max-w-6xl overflow-x-hidden px-4 py-6 sm:px-6">
@@ -153,7 +180,9 @@
 						<div class="flex items-center gap-3 rounded-lg border bg-card px-4 py-3">
 							<!-- Avatar -->
 							<div
-								class="{nameToColor(displayName)} flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+								class="{nameToColor(
+									displayName
+								)} flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
 							>
 								{avatarLetter}
 							</div>
@@ -162,10 +191,7 @@
 							<div class="min-w-0 flex-1">
 								<div class="flex flex-wrap items-center gap-2">
 									{#if member.username}
-										<a
-											href="/u/{member.username}"
-											class="text-sm font-medium hover:underline"
-										>
+										<a href="/u/{member.username}" class="text-sm font-medium hover:underline">
 											u/{member.username}
 										</a>
 									{:else}
@@ -182,6 +208,17 @@
 							<span class="hidden shrink-0 text-xs text-muted-foreground sm:block">
 								Joined {new Date(member.joinedAt).toLocaleDateString()}
 							</span>
+							{#if canRemoveMember(member)}
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={removingMembershipId === member.membershipId}
+									onclick={() => removeMember(member)}
+								>
+									<UserMinus class="size-3.5" />
+									Remove
+								</Button>
+							{/if}
 						</div>
 					{/each}
 				</div>

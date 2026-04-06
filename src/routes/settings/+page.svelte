@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { useQuery } from 'convex-svelte';
+	import { useConvexClient, useQuery } from 'convex-svelte';
 	import { api } from '$convex/_generated/api';
 	import { Button } from '$lib/components/ui/button';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
+	import * as Dialog from '$lib/components/ui/dialog';
 	import {
 		Card,
 		CardContent,
@@ -11,13 +12,33 @@
 		CardTitle,
 		CardDescription
 	} from '$lib/components/ui/card';
-	import { ExternalLink, LockKeyhole, ShieldCheck, UserRound } from '@lucide/svelte';
+	import { ExternalLink, LockKeyhole, ShieldCheck, Trash2, UserRound } from '@lucide/svelte';
+	import { toast } from 'svelte-sonner';
 
+	const client = useConvexClient();
 	const meQuery = useQuery(api.auth.getCurrentUser, {});
 	const profileQuery = useQuery((api as any).profiles.getMyProfile, {});
 	const publicProfileHref = $derived(
 		meQuery.data?.username ? `/u/${meQuery.data.username}` : '/profile'
 	);
+	let deleteDialogOpen = $state(false);
+	let deletingAccount = $state(false);
+
+	async function deleteAccountData() {
+		deletingAccount = true;
+		try {
+			const result = await client.action((api as any).profiles.deleteMyAccountData, {});
+			deleteDialogOpen = false;
+			toast.success(
+				`Deleted ${result.deletedPostCount} posts, ${result.deletedCollectionCount} collections, ${result.deletedCommunityCount} communities, and ${result.deletedSubscriptionCount} source subscriptions`
+			);
+			window.location.assign('/logout');
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to delete account data');
+		} finally {
+			deletingAccount = false;
+		}
+	}
 </script>
 
 <main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
@@ -105,6 +126,23 @@
 					</div>
 				</CardContent>
 			</Card>
+
+			<Card class="border-destructive/30 bg-destructive/5">
+				<CardHeader class="gap-2">
+					<CardTitle class="text-destructive">Danger Zone</CardTitle>
+					<CardDescription>
+						Delete your Cognirivus account data. This removes communities you own, collections,
+						posts, subscriptions, votes, and scrubs your chat messages. Your WorkOS login itself is
+						not deleted here.
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<Button variant="destructive" class="gap-2" onclick={() => (deleteDialogOpen = true)}>
+						<Trash2 class="size-4" />
+						Delete Account Data
+					</Button>
+				</CardContent>
+			</Card>
 		</div>
 	{/if}
 
@@ -116,3 +154,21 @@
 		</div>
 	{/if}
 </main>
+
+<Dialog.Root bind:open={deleteDialogOpen}>
+	<Dialog.Content class="sm:max-w-md">
+		<Dialog.Header>
+			<Dialog.Title>Delete Account Data</Dialog.Title>
+			<Dialog.Description>
+				Delete your Cognirivus data and sign out? This keeps your upstream WorkOS identity but
+				removes your app data from this workspace.
+			</Dialog.Description>
+		</Dialog.Header>
+		<Dialog.Footer>
+			<Button variant="outline" onclick={() => (deleteDialogOpen = false)}>Cancel</Button>
+			<Button variant="destructive" disabled={deletingAccount} onclick={deleteAccountData}>
+				{deletingAccount ? 'Deleting...' : 'Delete Account Data'}
+			</Button>
+		</Dialog.Footer>
+	</Dialog.Content>
+</Dialog.Root>

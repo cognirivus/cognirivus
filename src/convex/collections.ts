@@ -9,6 +9,7 @@ import {
 import type { Doc, Id } from './_generated/dataModel';
 import { getAuthUser, getOptionalAuthUser } from './auth';
 import { requireUserWithUsername } from './lib/usernameGate';
+import { deleteCollectionCascadeByDoc } from './lib/collectionDeletion';
 
 const visibilityValidator = v.union(v.literal('public'), v.literal('private'));
 const ownerKindValidator = v.union(v.literal('user'), v.literal('community'));
@@ -631,50 +632,7 @@ export const remove = mutation({
 			throw new Error('Collection edit permission required.');
 		}
 
-		const [items, follows, pendingSuggestions, approvedSuggestions, rejectedSuggestions] =
-			await Promise.all([
-				ctx.db
-					.query('source_collection_items')
-					.withIndex('by_collectionId_and_position', (q) => q.eq('collectionId', collection._id))
-					.collect(),
-				ctx.db
-					.query('source_collection_follows')
-					.withIndex('by_collectionId_and_createdAt', (q) => q.eq('collectionId', collection._id))
-					.collect(),
-				ctx.db
-					.query('source_collection_suggestions')
-					.withIndex('by_collectionId_and_status', (q) =>
-						q.eq('collectionId', collection._id).eq('status', 'pending')
-					)
-					.collect(),
-				ctx.db
-					.query('source_collection_suggestions')
-					.withIndex('by_collectionId_and_status', (q) =>
-						q.eq('collectionId', collection._id).eq('status', 'approved')
-					)
-					.collect(),
-				ctx.db
-					.query('source_collection_suggestions')
-					.withIndex('by_collectionId_and_status', (q) =>
-						q.eq('collectionId', collection._id).eq('status', 'rejected')
-					)
-					.collect()
-			]);
-
-		for (const item of items) {
-			await ctx.db.delete(item._id);
-		}
-		for (const follow of follows) {
-			await ctx.db.delete(follow._id);
-		}
-		for (const suggestion of [
-			...pendingSuggestions,
-			...approvedSuggestions,
-			...rejectedSuggestions
-		]) {
-			await ctx.db.delete(suggestion._id);
-		}
-		await ctx.db.delete(collection._id);
+		await deleteCollectionCascadeByDoc(ctx, collection);
 		return null;
 	}
 });
@@ -1032,7 +990,7 @@ export const listPendingSuggestions = query({
 				q.eq('collectionId', args.collectionId).eq('status', 'pending')
 			)
 			.collect();
-		return await Promise.all(
+		const rows = await Promise.all(
 			suggestions.map(async (suggestion) => {
 				const [profile, source, sourceItem] = await Promise.all([
 					getProfileByAuthId(ctx, suggestion.suggestedByAuthId),
@@ -1040,7 +998,7 @@ export const listPendingSuggestions = query({
 					suggestion.sourceItemId ? ctx.db.get(suggestion.sourceItemId) : Promise.resolve(null)
 				]);
 				if (!source) {
-					throw new Error('Suggested source not found.');
+					return null;
 				}
 				return {
 					_id: suggestion._id,
@@ -1064,6 +1022,7 @@ export const listPendingSuggestions = query({
 				};
 			})
 		);
+		return rows.filter((row): row is NonNullable<typeof row> => !!row);
 	}
 });
 

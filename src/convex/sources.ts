@@ -1887,8 +1887,7 @@ export const runSourceSync = internalAction({
 						);
 						processed += rssResult.processed;
 					} catch (feedError) {
-						const errorMessage =
-							feedError instanceof Error ? feedError.message : String(feedError);
+						const errorMessage = feedError instanceof Error ? feedError.message : String(feedError);
 						await logSecurityEvent(ctx, {
 							eventType: 'rss_feed_sync_failed',
 							severity: 'warn',
@@ -2265,6 +2264,93 @@ export const getSourceRssFeeds = query({
 	}
 });
 
+export const detachRssFeed = mutation({
+	args: {
+		feedId: v.id('source_rss_feeds')
+	},
+	returns: v.object({
+		detached: v.boolean(),
+		sourceId: v.id('sources'),
+		reassignedItemCount: v.number(),
+		remainingFeedCount: v.number()
+	}),
+	handler: async (ctx, args) => {
+		const authUser = await requireUserWithUsername(ctx);
+
+		const feed = await ctx.db.get(args.feedId);
+		if (!feed) {
+			throw new Error('RSS feed not found.');
+		}
+
+		const source = await ctx.db.get(feed.sourceId);
+		if (!source) {
+			throw new Error('Source not found.');
+		}
+		if (source.type !== 'website') {
+			throw new Error('Only website sources support detaching attached RSS feeds.');
+		}
+
+		const subscription = await ctx.db
+			.query('source_subscriptions')
+			.withIndex('by_userAuthId_and_sourceId', (q) =>
+				q.eq('userAuthId', authUser._id).eq('sourceId', source._id)
+			)
+			.unique();
+		if (!subscription && !isAdminRole(authUser.role)) {
+			throw new Error('You can only detach RSS feeds from sources you manage.');
+		}
+
+		const sourceSubscriptions = await ctx.db
+			.query('source_subscriptions')
+			.withIndex('by_sourceId_and_updatedAt', (q) => q.eq('sourceId', source._id))
+			.collect();
+		const hasOtherSubscribers = sourceSubscriptions.some((row) => row.userAuthId !== authUser._id);
+		if (hasOtherSubscribers && !isAdminRole(authUser.role)) {
+			throw new Error(
+				'This source is shared with other users. Ask an admin before detaching its RSS feed.'
+			);
+		}
+
+		const sourceFeeds = await ctx.db
+			.query('source_rss_feeds')
+			.withIndex('by_sourceId_and_updatedAt', (q) => q.eq('sourceId', source._id))
+			.order('desc')
+			.collect();
+		const remainingFeeds = sourceFeeds.filter((row) => row._id !== feed._id);
+
+		const sourceItems = await ctx.db
+			.query('source_items')
+			.withIndex('by_rssFeedId_and_publishedAt', (q) => q.eq('rssFeedId', feed._id))
+			.collect();
+		for (const sourceItem of sourceItems) {
+			await ctx.db.patch(sourceItem._id, {
+				rssFeedId: undefined,
+				updatedAt: Date.now()
+			});
+		}
+
+		await ctx.db.delete(feed._id);
+
+		const wasPrimaryFeed =
+			source.rssFeedUrl === feed.feedUrl || source.rssFeedNormalizedKey === feed.feedNormalizedKey;
+		const nextPrimaryFeed = wasPrimaryFeed ? remainingFeeds[0] : null;
+		await ctx.db.patch(source._id, {
+			rssFeedUrl: wasPrimaryFeed ? nextPrimaryFeed?.feedUrl : source.rssFeedUrl,
+			rssFeedNormalizedKey: wasPrimaryFeed
+				? nextPrimaryFeed?.feedNormalizedKey
+				: source.rssFeedNormalizedKey,
+			updatedAt: Date.now()
+		});
+
+		return {
+			detached: true,
+			sourceId: source._id,
+			reassignedItemCount: sourceItems.length,
+			remainingFeedCount: remainingFeeds.length
+		};
+	}
+});
+
 export const listMySources = query({
 	args: {
 		paginationOpts: paginationOptsValidator
@@ -2585,15 +2671,18 @@ export const cleanupUnsubscribeBatch = internalMutation({
 			.take(args.limit);
 		for (const post of posts) {
 			const oldPost = post;
-			await ctx.db.patch(post._id, {
+			const updatedPost = {
+				...post,
 				sourceId: undefined,
 				sourceItemId: undefined,
 				updatedAt: Date.now()
+			};
+			await ctx.db.patch(post._id, {
+				sourceId: updatedPost.sourceId,
+				sourceItemId: updatedPost.sourceItemId,
+				updatedAt: updatedPost.updatedAt
 			});
-			const updatedPost = await ctx.db.get(post._id);
-			if (updatedPost) {
-				await trackPostReplaced(ctx, oldPost, updatedPost);
-			}
+			await trackPostReplaced(ctx, oldPost, updatedPost);
 		}
 
 		let subscriptionRemoved = false;

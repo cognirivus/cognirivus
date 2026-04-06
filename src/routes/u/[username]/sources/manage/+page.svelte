@@ -19,7 +19,16 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table';
-	import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Pause, Play, RefreshCw, Trash2 } from '@lucide/svelte';
+	import {
+		ArrowLeft,
+		ChevronDown,
+		ChevronRight,
+		Loader2,
+		Pause,
+		Play,
+		RefreshCw,
+		Trash2
+	} from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	const auth = useAppAuth();
@@ -45,6 +54,7 @@
 	let selectedSourceIds = $state<Array<string>>([]);
 	let runningJobId = $state<Id<'source_jobs'> | null>(null);
 	let busySourceId = $state<string | null>(null);
+	let busyRssFeedId = $state<string | null>(null);
 	let busySimilarDomain = $state<string | null>(null);
 	let bulkUnsubscribeDialogOpen = $state(false);
 	let activeTab = $state('sources');
@@ -181,6 +191,20 @@
 		}
 	}
 
+	async function detachRssFeed(feedId: Id<'source_rss_feeds'>) {
+		busyRssFeedId = feedId;
+		try {
+			const result = await client.mutation((api as any).sources.detachRssFeed, { feedId });
+			toast.success(
+				`RSS feed detached${result.reassignedItemCount > 0 ? `, ${result.reassignedItemCount} items updated` : ''}`
+			);
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to detach RSS feed');
+		} finally {
+			busyRssFeedId = null;
+		}
+	}
+
 	function requestBulkUnsubscribe() {
 		if (selectedSourceIds.length === 0) {
 			return;
@@ -200,7 +224,6 @@
 			toast.error(error?.message ?? 'Failed to queue bulk unsubscribe');
 		}
 	}
-
 </script>
 
 <main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
@@ -337,8 +360,8 @@
 												<div class="max-w-[360px]">
 													<div class="flex flex-wrap items-center gap-2">
 														<button
-															class="flex items-center gap-1 hover:text-primary transition-colors"
-															onclick={() => expandedSourceId = isExpanded ? null : row.sourceId}
+															class="flex items-center gap-1 transition-colors hover:text-primary"
+															onclick={() => (expandedSourceId = isExpanded ? null : row.sourceId)}
 														>
 															{#if isExpanded}
 																<ChevronDown class="size-3.5" />
@@ -358,24 +381,46 @@
 													{#if isExpanded}
 														<div class="mt-2 space-y-1 border-l-2 border-muted-foreground/20 pl-3">
 															{#if rssFeedsQuery.isLoading}
-																<p class="text-xs text-muted-foreground italic">Loading RSS feeds...</p>
+																<p class="text-xs text-muted-foreground italic">
+																	Loading RSS feeds...
+																</p>
 															{:else if rssFeedsQuery.data && rssFeedsQuery.data.length > 0}
-																<p class="text-xs font-medium text-muted-foreground">RSS Feeds ({rssFeedsQuery.data.length}):</p>
+																<p class="text-xs font-medium text-muted-foreground">
+																	RSS Feeds ({rssFeedsQuery.data.length}):
+																</p>
 																{#each rssFeedsQuery.data as feed (feed._id)}
 																	<div class="space-y-0.5">
 																		<div class="flex items-center gap-2">
-																			<p class="text-xs truncate max-w-[300px]">{feed.feedUrl}</p>
-																			<Badge variant={feed.status === 'active' ? 'outline' : 'secondary'} class="text-[10px] px-1.5 py-0">
+																			<p class="max-w-[300px] truncate text-xs">{feed.feedUrl}</p>
+																			<Badge
+																				variant={feed.status === 'active' ? 'outline' : 'secondary'}
+																				class="px-1.5 py-0 text-[10px]"
+																			>
 																				{feed.status}
 																			</Badge>
+																			<Button
+																				variant="ghost"
+																				size="sm"
+																				class="h-6 px-2 text-[11px]"
+																				disabled={busyRssFeedId === feed._id}
+																				onclick={() => detachRssFeed(feed._id)}
+																			>
+																				Detach
+																			</Button>
 																		</div>
 																		{#if feed.lastError}
-																			<p class="text-[10px] text-destructive truncate max-w-[300px]">{feed.lastError}</p>
+																			<p
+																				class="max-w-[300px] truncate text-[10px] text-destructive"
+																			>
+																				{feed.lastError}
+																			</p>
 																		{/if}
 																	</div>
 																{/each}
 															{:else}
-																<p class="text-xs text-muted-foreground italic">No RSS feeds configured</p>
+																<p class="text-xs text-muted-foreground italic">
+																	No RSS feeds configured
+																</p>
 															{/if}
 														</div>
 													{/if}

@@ -107,7 +107,7 @@
 	async function deletePost() {
 		if (!postQuery.data?.canDelete) return;
 		try {
-			await client.mutation((api as any).posts.delete, { postId });
+			await client.mutation((api as any).posts.deletePost, { postId });
 			goto('/feed');
 		} catch (error: any) {
 			toast.error(error?.message ?? 'Delete failed');

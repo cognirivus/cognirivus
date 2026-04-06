@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { resolve } from '$app/paths';
 	import { useAppAuth } from '$lib/auth.svelte';
 	import { useConvexClient, useQuery } from 'convex-svelte';
 	import type { Id } from '$convex/_generated/dataModel';
@@ -95,18 +96,19 @@
 		if (postIds.length === 0) return;
 		bulkDeleting = true;
 		try {
-			const results = await Promise.allSettled(
-				postIds.map((postId) =>
-					client.mutation((api as any).posts.deletePost, { postId: postId as Id<'posts'> })
-				)
-			);
-			const successCount = results.filter((r) => r.status === 'fulfilled').length;
-			const failCount = results.length - successCount;
+			const result = await client.action((api as any).posts.bulkDeletePosts, { postIds });
 			selectedPostIds = [];
-			if (successCount > 0) {
-				toast.success(`Deleted ${successCount} post${successCount === 1 ? '' : 's'}`);
+			if (result.deletedCount > 0) {
+				const r2Suffix =
+					result.r2DeletedCount > 0
+						? `, ${result.r2DeletedCount} R2 bod${result.r2DeletedCount === 1 ? 'y' : 'ies'} removed`
+						: '';
+				toast.success(
+					`Deleted ${result.deletedCount} post${result.deletedCount === 1 ? '' : 's'}${r2Suffix}`
+				);
 			}
-			if (failCount > 0) {
+			if (result.deletedCount < result.requestedCount) {
+				const failCount = result.requestedCount - result.deletedCount;
 				toast.error(`${failCount} post deletion${failCount === 1 ? '' : 's'} failed`);
 			}
 		} finally {
@@ -218,7 +220,10 @@
 								</TableCell>
 								<TableCell>
 									<div class="max-w-[420px]">
-										<a href="/post/{post._id}" class="line-clamp-1 font-medium hover:underline">
+										<a
+											href={resolve(`/post/${post._id}`)}
+											class="line-clamp-1 font-medium hover:underline"
+										>
 											{post.title}
 										</a>
 										<p class="line-clamp-1 text-xs text-muted-foreground">{post.snippet}</p>
