@@ -8,6 +8,7 @@
 		BookMarked,
 		ChevronDown,
 		Globe,
+		Rss,
 		MessageSquare,
 		ThumbsDown,
 		ThumbsUp,
@@ -426,35 +427,74 @@
 			return null;
 		}
 	}
+
+	function getSourceDomainLabel(sourceTitle: string, sourceCanonicalUrl: string) {
+		try {
+			return new URL(sourceCanonicalUrl).hostname.replace(/^www\./, '');
+		} catch {
+			return decodeHtmlEntities(sourceTitle);
+		}
+	}
+
+	function getRssFeedLabel(rssFeedUrl: string, sourceCanonicalUrl: string) {
+		try {
+			const feedUrl = new URL(rssFeedUrl);
+			const sourceUrl = new URL(sourceCanonicalUrl);
+			const feedPath = `${feedUrl.pathname}${feedUrl.search}` || '/';
+			if (feedUrl.hostname === sourceUrl.hostname) {
+				return feedPath;
+			}
+			return `${feedUrl.hostname.replace(/^www\./, '')}${feedPath}`;
+		} catch {
+			return rssFeedUrl;
+		}
+	}
 </script>
 
-{#snippet directFollowSourceBadge(sourceTitle: string, sourceCanonicalUrl: string)}
+{#snippet directFollowSourceBadge(sourceTitle: string, sourceCanonicalUrl: string, rssFeedUrl?: string)}
 	{@const faviconUrl = getSourceFaviconUrl(sourceCanonicalUrl)}
-	<Badge variant="outline" class="max-w-full gap-1.5 border-border/70 bg-muted/20 pr-2">
-		<span
-			class="flex size-3.5 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-background"
-		>
-			{#if faviconUrl}
-				<img
-					src={faviconUrl}
-					alt=""
-					class="size-3 object-contain"
-					onerror={(event) => {
-						(event.currentTarget as HTMLImageElement).style.display = 'none';
-						(event.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove(
-							'hidden'
-						);
-					}}
-				/>
-				<Globe class="hidden size-3 text-muted-foreground" />
-			{:else}
-				<Globe class="size-3 text-muted-foreground" />
-			{/if}
-		</span>
-		<span class="max-w-[180px] truncate text-xs sm:max-w-[240px]" title={decodeHtmlEntities(sourceTitle)}>
-			{decodeHtmlEntities(sourceTitle)}
-		</span>
-	</Badge>
+	{@const sourceLabel = getSourceDomainLabel(sourceTitle, sourceCanonicalUrl)}
+	<div class="min-w-0 space-y-1">
+		<Badge variant="outline" class="max-w-full gap-1.5 border-border/70 bg-muted/20 pr-2">
+			<span
+				class="flex size-3.5 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-background"
+			>
+				{#if faviconUrl}
+					<img
+						src={faviconUrl}
+						alt=""
+						class="size-3 object-contain"
+						onerror={(event) => {
+							(event.currentTarget as HTMLImageElement).style.display = 'none';
+							(event.currentTarget as HTMLImageElement).nextElementSibling?.classList.remove(
+								'hidden'
+							);
+						}}
+					/>
+					<Globe class="hidden size-3 text-muted-foreground" />
+				{:else}
+					<Globe class="size-3 text-muted-foreground" />
+				{/if}
+			</span>
+			<span class="max-w-[180px] truncate text-xs sm:max-w-[240px]" title={sourceLabel}>
+				{sourceLabel}
+			</span>
+		</Badge>
+		{#if rssFeedUrl}
+			<div
+				class="ml-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground"
+				title={rssFeedUrl}
+			>
+				<span
+					class="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 font-medium uppercase tracking-[0.08em] text-[10px] text-foreground/75"
+				>
+					<Rss class="size-2.5" />
+					RSS
+				</span>
+				<span class="truncate">Feed: {getRssFeedLabel(rssFeedUrl, sourceCanonicalUrl)}</span>
+			</div>
+		{/if}
+	</div>
 {/snippet}
 
 <main class="mx-auto w-full max-w-6xl overflow-x-hidden px-4 py-4 sm:px-6 sm:py-5">
@@ -852,7 +892,7 @@
 							<div class="mt-3 space-y-2">
 								<div class="flex flex-wrap items-center gap-1.5">
 									{#if item.provenance.kind === 'direct_follow'}
-										{@render directFollowSourceBadge(item.sourceTitle, item.sourceCanonicalUrl)}
+										{@render directFollowSourceBadge(item.sourceTitle, item.sourceCanonicalUrl, item.rssFeedUrl)}
 									{:else if item.provenance.collectionSlug}
 										<Badge
 											href={`/collections/${item.provenance.collectionSlug}`}
@@ -1128,7 +1168,7 @@
 								<div class="space-y-2">
 									<div class="flex flex-wrap items-center gap-1.5">
 										{#if item.provenance.kind === 'direct_follow'}
-											{@render directFollowSourceBadge(item.sourceTitle, item.sourceCanonicalUrl)}
+											{@render directFollowSourceBadge(item.sourceTitle, item.sourceCanonicalUrl, item.rssFeedUrl)}
 										{:else if item.provenance.collectionSlug}
 											<Badge
 												href={`/collections/${item.provenance.collectionSlug}`}

@@ -112,6 +112,9 @@ const sourceFeedItemValidator = v.object({
 	sourceType: v.union(v.literal('website'), v.literal('rss'), v.literal('youtube')),
 	sourceTitle: v.string(),
 	sourceCanonicalUrl: v.string(),
+	rssFeedId: v.optional(v.id('source_rss_feeds')),
+	rssFeedUrl: v.optional(v.string()),
+	rssFeedTitle: v.optional(v.string()),
 	title: v.string(),
 	snippet: v.string(),
 	url: v.string(),
@@ -591,6 +594,15 @@ const loadUserSourceFeedItems = async (
 		.take(limit);
 
 	const sourceItems = await Promise.all(deliveredRows.map((row) => ctx.db.get(row.sourceItemId)));
+	const rssFeedIds = [
+		...new Set(
+			sourceItems
+				.filter((item): item is Doc<'source_items'> => !!item && !!item.rssFeedId)
+				.map((item) => item.rssFeedId!)
+		)
+	];
+	const rssFeeds = await Promise.all(rssFeedIds.map((rssFeedId) => ctx.db.get(rssFeedId)));
+	const rssFeedById = new Map(rssFeedIds.map((rssFeedId, index) => [rssFeedId, rssFeeds[index]]));
 	const uniqueSourceIds = [
 		...new Set(
 			sourceItems.filter((item): item is Doc<'source_items'> => !!item).map((item) => item.sourceId)
@@ -610,6 +622,7 @@ const loadUserSourceFeedItems = async (
 			if (!source) {
 				return null;
 			}
+			const rssFeed = sourceItem.rssFeedId ? rssFeedById.get(sourceItem.rssFeedId) : null;
 			const searchable =
 				`${sourceItem.title} ${sourceItem.snippet} ${sourceItem.url}`.toLowerCase();
 			if (search && !searchable.includes(search)) {
@@ -625,6 +638,9 @@ const loadUserSourceFeedItems = async (
 				sourceType: source.type,
 				sourceTitle: source.title,
 				sourceCanonicalUrl: source.canonicalUrl,
+				rssFeedId: sourceItem.rssFeedId,
+				rssFeedUrl: rssFeed?.feedUrl,
+				rssFeedTitle: rssFeed?.title,
 				title: sourceItem.title,
 				snippet: sourceItem.snippet,
 				url: sourceItem.url,
@@ -686,6 +702,9 @@ const loadTrustedCollectionFeedItems = async (
 		sourceType: SourceType;
 		sourceTitle: string;
 		sourceCanonicalUrl: string;
+		rssFeedId?: Id<'source_rss_feeds'>;
+		rssFeedUrl?: string;
+		rssFeedTitle?: string;
 		title: string;
 		snippet: string;
 		url: string;
@@ -721,6 +740,12 @@ const loadTrustedCollectionFeedItems = async (
 				if (sourceItem.publishedAt < windowStart) {
 					return [];
 				}
+
+				let rssFeed = null;
+				if (sourceItem.rssFeedId) {
+					rssFeed = await ctx.db.get(sourceItem.rssFeedId);
+				}
+
 				return [
 					{
 						kind: 'source_item' as const,
@@ -729,6 +754,9 @@ const loadTrustedCollectionFeedItems = async (
 						sourceType: source.type,
 						sourceTitle: source.title,
 						sourceCanonicalUrl: source.canonicalUrl,
+						rssFeedId: sourceItem.rssFeedId,
+						rssFeedUrl: rssFeed?.feedUrl,
+						rssFeedTitle: rssFeed?.title,
 						title: sourceItem.title,
 						snippet: sourceItem.snippet,
 						url: sourceItem.url,
@@ -748,6 +776,11 @@ const loadTrustedCollectionFeedItems = async (
 				.withIndex('by_sourceId_and_publishedAt', (q) => q.eq('sourceId', entry.sourceId))
 				.order('desc')
 				.take(8);
+
+			const rssFeedIds = items.map((item) => item.rssFeedId).filter((id): id is Id<'source_rss_feeds'> => !!id);
+			const rssFeeds = await Promise.all(rssFeedIds.map((id) => ctx.db.get(id)));
+			const rssFeedMap = new Map(rssFeedIds.map((id, index) => [id, rssFeeds[index]]));
+
 			return items
 				.map((sourceItem) => {
 					const searchable =
@@ -758,6 +791,9 @@ const loadTrustedCollectionFeedItems = async (
 					if (sourceItem.publishedAt < windowStart) {
 						return null;
 					}
+
+					const rssFeed = sourceItem.rssFeedId ? rssFeedMap.get(sourceItem.rssFeedId) : null;
+
 					return {
 						kind: 'source_item' as const,
 						_id: sourceItem._id,
@@ -765,6 +801,9 @@ const loadTrustedCollectionFeedItems = async (
 						sourceType: source.type,
 						sourceTitle: source.title,
 						sourceCanonicalUrl: source.canonicalUrl,
+						rssFeedId: sourceItem.rssFeedId,
+						rssFeedUrl: rssFeed?.feedUrl,
+						rssFeedTitle: rssFeed?.title,
 						title: sourceItem.title,
 						snippet: sourceItem.snippet,
 						url: sourceItem.url,

@@ -151,6 +151,21 @@ const schema = defineSchema({
 		.index('by_rssFeedNormalizedKey', ['rssFeedNormalizedKey'])
 		.index('by_type_and_updatedAt', ['type', 'updatedAt'])
 		.index('by_status_and_updatedAt', ['status', 'updatedAt']),
+	source_rss_feeds: defineTable({
+		sourceId: v.id('sources'),
+		feedUrl: v.string(),
+		feedNormalizedKey: v.string(),
+		title: v.optional(v.string()),
+		status: v.union(v.literal('active'), v.literal('paused'), v.literal('error')),
+		lastFetchedAt: v.optional(v.number()),
+		lastSuccessAt: v.optional(v.number()),
+		lastError: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_sourceId_and_updatedAt', ['sourceId', 'updatedAt'])
+		.index('by_feedNormalizedKey', ['feedNormalizedKey'])
+		.index('by_status_and_updatedAt', ['status', 'updatedAt']),
 	source_collections: defineTable({
 		slug: v.string(),
 		title: v.string(),
@@ -229,6 +244,7 @@ const schema = defineSchema({
 		.index('by_sourceId_and_status', ['sourceId', 'status']),
 	source_items: defineTable({
 		sourceId: v.id('sources'),
+		rssFeedId: v.optional(v.id('source_rss_feeds')),
 		externalId: v.optional(v.string()),
 		url: v.string(),
 		urlHash: v.string(),
@@ -254,6 +270,7 @@ const schema = defineSchema({
 			'sourceId',
 			'suggestedSourceNormalizedKey'
 		])
+		.index('by_rssFeedId_and_publishedAt', ['rssFeedId', 'publishedAt'])
 		.index('by_r2Key_and_publishedAt', ['r2Key', 'publishedAt'])
 		.index('by_publishedAt', ['publishedAt']),
 	user_source_items: defineTable({

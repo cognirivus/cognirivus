@@ -421,7 +421,8 @@ const tryThirdPartyIngestionFallback = async (): Promise<{
 export const syncRssSource = internalAction({
 	args: {
 		sourceId: v.id('sources'),
-		canonicalUrl: v.string()
+		canonicalUrl: v.string(),
+		rssFeedId: v.optional(v.id('source_rss_feeds'))
 	},
 	returns: v.object({
 		processed: v.number()
@@ -511,6 +512,7 @@ export const syncRssSource = internalAction({
 
 			await ctx.runMutation((internal as any).sources.ingestSourceItemFromInput, {
 				sourceId: args.sourceId,
+				rssFeedId: args.rssFeedId,
 				externalId: typeof externalIdRaw === 'string' ? externalIdRaw : undefined,
 				url: itemUrl,
 				title,

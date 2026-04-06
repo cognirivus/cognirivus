@@ -549,29 +549,49 @@ export const attachRssFeedToSource = internalMutation({
 	args: {
 		sourceId: v.id('sources'),
 		rssFeedUrl: v.string(),
-		rssFeedNormalizedKey: v.string()
+		rssFeedNormalizedKey: v.string(),
+		title: v.optional(v.string())
 	},
-	returns: v.null(),
+	returns: v.id('source_rss_feeds'),
 	handler: async (ctx, args) => {
 		const source = await ctx.db.get(args.sourceId);
 		if (!source) {
 			throw new Error('Source not found.');
 		}
-		if (source.type !== 'website') {
-			return null;
+		if (source.type !== 'website' && source.type !== 'rss') {
+			throw new Error('Can only attach RSS feeds to website or RSS sources.');
 		}
-		if (
-			source.rssFeedUrl === args.rssFeedUrl &&
-			source.rssFeedNormalizedKey === args.rssFeedNormalizedKey
-		) {
-			return null;
+
+		const existing = await ctx.db
+			.query('source_rss_feeds')
+			.withIndex('by_feedNormalizedKey', (q) =>
+				q.eq('feedNormalizedKey', args.rssFeedNormalizedKey)
+			)
+			.filter((q) => q.eq(q.field('sourceId'), args.sourceId))
+			.first();
+
+		if (existing) {
+			return existing._id;
 		}
+
+		const now = Date.now();
+		const feedId = await ctx.db.insert('source_rss_feeds', {
+			sourceId: args.sourceId,
+			feedUrl: args.rssFeedUrl,
+			feedNormalizedKey: args.rssFeedNormalizedKey,
+			title: args.title,
+			status: 'active',
+			createdAt: now,
+			updatedAt: now
+		});
+
 		await ctx.db.patch(args.sourceId, {
 			rssFeedUrl: args.rssFeedUrl,
 			rssFeedNormalizedKey: args.rssFeedNormalizedKey,
-			updatedAt: Date.now()
+			updatedAt: now
 		});
-		return null;
+
+		return feedId;
 	}
 });
 
@@ -737,6 +757,7 @@ export const runSourceItemFanoutBatch = internalAction({
 export const ingestSourceItemFromInput = internalMutation({
 	args: {
 		sourceId: v.id('sources'),
+		rssFeedId: v.optional(v.id('source_rss_feeds')),
 		externalId: v.optional(v.string()),
 		url: v.string(),
 		title: v.string(),
@@ -791,6 +812,7 @@ export const ingestSourceItemFromInput = internalMutation({
 		if (existing) {
 			const previous = existing;
 			await ctx.db.patch(existing._id, {
+				rssFeedId: args.rssFeedId,
 				url: normalizedUrl,
 				urlHash: normalizedUrlHash,
 				title: normalizedTitle,
@@ -815,6 +837,7 @@ export const ingestSourceItemFromInput = internalMutation({
 		} else {
 			sourceItemId = await ctx.db.insert('source_items', {
 				sourceId: args.sourceId,
+				rssFeedId: args.rssFeedId,
 				externalId: args.externalId?.trim() || undefined,
 				url: normalizedUrl,
 				urlHash: normalizedUrlHash,
@@ -1368,6 +1391,41 @@ export const getSourceForSync = internalQuery({
 	}
 });
 
+export const getRssFeedsForSource = internalQuery({
+	args: {
+		sourceId: v.id('sources')
+	},
+	returns: v.array(
+		v.object({
+			_id: v.id('source_rss_feeds'),
+			feedUrl: v.string(),
+			feedNormalizedKey: v.string(),
+			title: v.optional(v.string()),
+			status: v.union(v.literal('active'), v.literal('paused'), v.literal('error')),
+			lastFetchedAt: v.optional(v.number()),
+			lastSuccessAt: v.optional(v.number()),
+			lastError: v.optional(v.string())
+		})
+	),
+	handler: async (ctx, args) => {
+		const feeds = await ctx.db
+			.query('source_rss_feeds')
+			.withIndex('by_sourceId_and_updatedAt', (q) => q.eq('sourceId', args.sourceId))
+			.collect();
+
+		return feeds.map((feed) => ({
+			_id: feed._id,
+			feedUrl: feed.feedUrl,
+			feedNormalizedKey: feed.feedNormalizedKey,
+			title: feed.title,
+			status: feed.status,
+			lastFetchedAt: feed.lastFetchedAt,
+			lastSuccessAt: feed.lastSuccessAt,
+			lastError: feed.lastError
+		}));
+	}
+});
+
 export const getSourceItemForSharing = internalQuery({
 	args: {
 		sourceItemId: v.id('source_items'),
@@ -1810,7 +1868,38 @@ export const runSourceSync = internalAction({
 
 			let processed = 0;
 
-			if (source.rssFeedUrl || source.type === 'rss') {
+			const rssFeeds: Array<{ _id: Id<'source_rss_feeds'>; feedUrl: string; status: string }> =
+				await ctx.runQuery((internal as any).sources.getRssFeedsForSource, {
+					sourceId: source._id
+				});
+
+			if (rssFeeds.length > 0) {
+				for (const feed of rssFeeds) {
+					if (feed.status !== 'active') continue;
+					try {
+						const rssResult: { processed: number } = await ctx.runAction(
+							(internal as any).sources_node.syncRssSource,
+							{
+								sourceId: source._id,
+								canonicalUrl: feed.feedUrl,
+								rssFeedId: feed._id
+							}
+						);
+						processed += rssResult.processed;
+					} catch (feedError) {
+						const errorMessage =
+							feedError instanceof Error ? feedError.message : String(feedError);
+						await logSecurityEvent(ctx, {
+							eventType: 'rss_feed_sync_failed',
+							severity: 'warn',
+							surface: 'sources.runSourceSync',
+							message: `RSS feed sync failed: ${errorMessage}`,
+							entityType: 'source',
+							entityId: source._id
+						});
+					}
+				}
+			} else if (source.rssFeedUrl || source.type === 'rss') {
 				const rssResult: { processed: number } = await ctx.runAction(
 					(internal as any).sources_node.syncRssSource,
 					{
@@ -2133,6 +2222,46 @@ export const runNightlySourceRefreshBatch = internalAction({
 		}
 
 		return null;
+	}
+});
+
+export const getSourceRssFeeds = query({
+	args: {
+		sourceId: v.id('sources')
+	},
+	returns: v.array(
+		v.object({
+			_id: v.id('source_rss_feeds'),
+			feedUrl: v.string(),
+			title: v.optional(v.string()),
+			status: v.union(v.literal('active'), v.literal('paused'), v.literal('error')),
+			lastFetchedAt: v.optional(v.number()),
+			lastSuccessAt: v.optional(v.number()),
+			lastError: v.optional(v.string()),
+			createdAt: v.number(),
+			updatedAt: v.number()
+		})
+	),
+	handler: async (ctx, args) => {
+		await getAuthUser(ctx);
+
+		const feeds = await ctx.db
+			.query('source_rss_feeds')
+			.withIndex('by_sourceId_and_updatedAt', (q) => q.eq('sourceId', args.sourceId))
+			.order('desc')
+			.collect();
+
+		return feeds.map((feed) => ({
+			_id: feed._id,
+			feedUrl: feed.feedUrl,
+			title: feed.title,
+			status: feed.status,
+			lastFetchedAt: feed.lastFetchedAt,
+			lastSuccessAt: feed.lastSuccessAt,
+			lastError: feed.lastError,
+			createdAt: feed.createdAt,
+			updatedAt: feed.updatedAt
+		}));
 	}
 });
 

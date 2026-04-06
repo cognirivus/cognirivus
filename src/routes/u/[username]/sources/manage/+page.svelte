@@ -19,12 +19,13 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table';
-	import { ArrowLeft, Loader2, Pause, Play, RefreshCw, Trash2 } from '@lucide/svelte';
+	import { ArrowLeft, ChevronDown, ChevronRight, Loader2, Pause, Play, RefreshCw, Trash2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	const auth = useAppAuth();
 	const client = useConvexClient();
 	const username = $derived(page.params.username);
+	let expandedSourceId = $state<string | null>(null);
 
 	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
 	const isAuthorized = $derived(
@@ -321,6 +322,10 @@
 													? `Daily limit reached. Resets ${refreshResetsAtUtc} UTC`
 													: 'Daily limit reached'
 												: 'Refresh now'}
+										{@const isExpanded = expandedSourceId === row.sourceId}
+										{@const rssFeedsQuery = useQuery((api as any).sources.getSourceRssFeeds, () =>
+											isExpanded ? { sourceId: row.sourceId } : 'skip'
+										)}
 										<TableRow>
 											<TableCell>
 												<Checkbox
@@ -331,7 +336,17 @@
 											<TableCell>
 												<div class="max-w-[360px]">
 													<div class="flex flex-wrap items-center gap-2">
-														<p class="truncate font-medium">{row.title}</p>
+														<button
+															class="flex items-center gap-1 hover:text-primary transition-colors"
+															onclick={() => expandedSourceId = isExpanded ? null : row.sourceId}
+														>
+															{#if isExpanded}
+																<ChevronDown class="size-3.5" />
+															{:else}
+																<ChevronRight class="size-3.5" />
+															{/if}
+															<p class="truncate font-medium">{row.title}</p>
+														</button>
 														{#if row.rssFeedUrl}
 															<Badge variant="outline">RSS-backed</Badge>
 														{/if}
@@ -340,6 +355,30 @@
 														{/if}
 													</div>
 													<p class="truncate text-xs text-muted-foreground">{row.canonicalUrl}</p>
+													{#if isExpanded}
+														<div class="mt-2 space-y-1 border-l-2 border-muted-foreground/20 pl-3">
+															{#if rssFeedsQuery.isLoading}
+																<p class="text-xs text-muted-foreground italic">Loading RSS feeds...</p>
+															{:else if rssFeedsQuery.data && rssFeedsQuery.data.length > 0}
+																<p class="text-xs font-medium text-muted-foreground">RSS Feeds ({rssFeedsQuery.data.length}):</p>
+																{#each rssFeedsQuery.data as feed (feed._id)}
+																	<div class="space-y-0.5">
+																		<div class="flex items-center gap-2">
+																			<p class="text-xs truncate max-w-[300px]">{feed.feedUrl}</p>
+																			<Badge variant={feed.status === 'active' ? 'outline' : 'secondary'} class="text-[10px] px-1.5 py-0">
+																				{feed.status}
+																			</Badge>
+																		</div>
+																		{#if feed.lastError}
+																			<p class="text-[10px] text-destructive truncate max-w-[300px]">{feed.lastError}</p>
+																		{/if}
+																	</div>
+																{/each}
+															{:else}
+																<p class="text-xs text-muted-foreground italic">No RSS feeds configured</p>
+															{/if}
+														</div>
+													{/if}
 												</div>
 											</TableCell>
 											<TableCell class="uppercase">{row.type}</TableCell>
