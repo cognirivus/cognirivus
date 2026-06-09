@@ -95,9 +95,7 @@ describe('similarLinks helpers', () => {
 		];
 
 		expect(filterResultsByScopeDomains(results, 'sources', ['collabfund.com'])).toHaveLength(2);
-		expect(filterResultsByScopeDomains(results, 'web', ['collabfund.com'])).toEqual([
-			results[2]
-		]);
+		expect(filterResultsByScopeDomains(results, 'web', ['collabfund.com'])).toEqual([results[2]]);
 		expect(filterResultsByScopeDomains(results, 'sources', [])).toEqual([]);
 	});
 

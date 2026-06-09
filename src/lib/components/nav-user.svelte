@@ -103,9 +103,7 @@
 							<FileText class="size-4" />
 							Manage posts
 						</DropdownMenu.Item>
-						<DropdownMenu.Item
-							onclick={() => goto(resolvePath(`${profileHref}/sources/manage`))}
-						>
+						<DropdownMenu.Item onclick={() => goto(resolvePath(`${profileHref}/sources/manage`))}>
 							<Archive class="size-4" />
 							Manage sources
 						</DropdownMenu.Item>

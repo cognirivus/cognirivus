@@ -1,0 +1,1 @@
+/* Documentation styles are consolidated into src/routes/layout.css to prevent SSR module evaluation errors in Tailwind 4 */

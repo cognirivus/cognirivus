@@ -95,9 +95,7 @@
 				? (tabs.sources.newDomains as Array<string>)
 				: [],
 			removedDomainCount:
-				typeof tabs?.sources?.removedDomainCount === 'number'
-					? tabs.sources.removedDomainCount
-					: 0
+				typeof tabs?.sources?.removedDomainCount === 'number' ? tabs.sources.removedDomainCount : 0
 		};
 		const web: TabView = {
 			state: typeof tabs?.web?.state === 'string' ? tabs.web.state : null,
@@ -391,7 +389,7 @@
 					}}
 					class={`min-w-0 flex-1 px-2 py-1.5 text-center text-[10px] font-semibold transition-colors ${
 						activeTab === tab.key
-							? 'text-foreground border-b-2 border-foreground'
+							? 'border-b-2 border-foreground text-foreground'
 							: 'text-muted-foreground hover:text-foreground'
 					}`}
 				>
@@ -427,7 +425,8 @@
 									{activeTab === 'sources' ? 'Included domains' : 'Excluded domains'}
 								</p>
 								<p class="mt-0.5 text-[10px] text-muted-foreground">
-									{sourceDomainCount} {sourceDomainCount === 1 ? 'domain' : 'domains'}
+									{sourceDomainCount}
+									{sourceDomainCount === 1 ? 'domain' : 'domains'}
 								</p>
 							</div>
 							<div class="max-h-[280px] overflow-y-auto p-1">
@@ -444,7 +443,9 @@
 		</div>
 
 		{#if domainStaleMessage}
-			<div class="mx-3 mt-2 rounded-lg border border-amber-300/70 bg-amber-50 px-2.5 py-2 text-amber-950">
+			<div
+				class="mx-3 mt-2 rounded-lg border border-amber-300/70 bg-amber-50 px-2.5 py-2 text-amber-950"
+			>
 				<div class="flex items-start justify-between gap-2">
 					<div class="min-w-0">
 						<p class="text-[10px] font-medium">{domainStaleMessage}</p>
@@ -465,12 +466,16 @@
 										<ChevronDown class="size-3" />
 									</button>
 								</Popover.Trigger>
-								<Popover.Content class="w-[240px] border bg-background p-0 text-foreground shadow-lg" align="end">
+								<Popover.Content
+									class="w-[240px] border bg-background p-0 text-foreground shadow-lg"
+									align="end"
+								>
 									<div class="flex flex-col">
 										<div class="border-b px-3 py-2">
 											<p class="text-xs font-semibold">New domains since last refresh</p>
 											<p class="mt-0.5 text-[10px] text-muted-foreground">
-												{activeNewDomains.length} {activeNewDomains.length === 1 ? 'domain' : 'domains'}
+												{activeNewDomains.length}
+												{activeNewDomains.length === 1 ? 'domain' : 'domains'}
 											</p>
 										</div>
 										<div class="max-h-[240px] overflow-y-auto p-1">
