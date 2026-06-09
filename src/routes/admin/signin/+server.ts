@@ -21,10 +21,7 @@ export const GET: RequestHandler = async (event) => {
 			throw redirect(302, returnTo);
 		}
 
-		if (
-			hasAttemptedSwitch ||
-			locals.auth.organizationId === env.WORKOS_ADMIN_ORG_ID
-		) {
+		if (hasAttemptedSwitch || locals.auth.organizationId === env.WORKOS_ADMIN_ORG_ID) {
 			return new Response(
 				[
 					'Admin sign-in failed: this WorkOS session does not have admin access.',

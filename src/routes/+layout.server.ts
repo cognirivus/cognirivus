@@ -23,6 +23,7 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	);
 	const pathname = url.pathname;
 	const isProfileRoute = pathname === '/profile' || pathname.startsWith('/profile/');
+	const isDocsRoute = pathname === '/docs' || pathname.startsWith('/docs/');
 	let currentUser: App.PageData['currentUser'] = null;
 	let syncedUser: App.PageData['currentUser'] = null;
 
@@ -48,10 +49,10 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 		currentUser = syncedUser;
 	}
 
-	if (!currentUser && !isProfileRoute) {
+	if (!currentUser && !isProfileRoute && !isDocsRoute) {
 		redirect(302, '/profile');
 	}
-	if (currentUser && !currentUser.hasUsername && !isProfileRoute) {
+	if (currentUser && !currentUser.hasUsername && !isProfileRoute && !isDocsRoute) {
 		redirect(302, '/profile');
 	}
 	if (currentUser?.hasUsername && isProfileRoute) {

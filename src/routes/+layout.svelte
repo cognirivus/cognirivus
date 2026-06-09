@@ -58,6 +58,7 @@
 	};
 
 	const isAuthPage = $derived(page.url.pathname === '/signin' || page.url.pathname === '/signup');
+	const isDocsRoute = $derived(page.url.pathname === '/docs' || page.url.pathname.startsWith('/docs/'));
 
 	let breadcrumbs = $derived.by(() => {
 		const segments = page.url.pathname.split('/').filter((s) => s !== '');
@@ -92,76 +93,81 @@
 </svelte:head>
 
 <ModeWatcher />
-<Sidebar.Provider>
-	<AppSidebar />
-	<Sidebar.Inset>
-		<header
-			class="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border/50 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12"
-		>
-			<div class="flex min-w-0 items-center gap-2 overflow-hidden">
-				<Sidebar.Trigger class="-ms-1 shrink-0" />
-				<Separator orientation="vertical" class="me-2 shrink-0 data-[orientation=vertical]:h-4" />
-				<Breadcrumb.Root class="min-w-0 truncate">
-					<Breadcrumb.List class="flex-nowrap">
-						{#each breadcrumbs as crumb, i (crumb.href)}
-							{#if i > 0}
-								<Breadcrumb.Separator class="shrink-0" />
-							{/if}
-							<Breadcrumb.Item class="truncate">
-								{#if i === breadcrumbs.length - 1}
-									<Breadcrumb.Page class="truncate">{crumb.label}</Breadcrumb.Page>
-								{:else}
-									<Breadcrumb.Link href={crumb.href} class="truncate">
-										{crumb.label}
-									</Breadcrumb.Link>
+
+{#if isDocsRoute}
+	{@render children()}
+{:else}
+	<Sidebar.Provider>
+		<AppSidebar />
+		<Sidebar.Inset>
+			<header
+				class="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border/50 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12"
+			>
+				<div class="flex min-w-0 items-center gap-2 overflow-hidden">
+					<Sidebar.Trigger class="-ms-1 shrink-0" />
+					<Separator orientation="vertical" class="me-2 shrink-0 data-[orientation=vertical]:h-4" />
+					<Breadcrumb.Root class="min-w-0 truncate">
+						<Breadcrumb.List class="flex-nowrap">
+							{#each breadcrumbs as crumb, i (crumb.href)}
+								{#if i > 0}
+									<Breadcrumb.Separator class="shrink-0" />
 								{/if}
-							</Breadcrumb.Item>
-						{/each}
-					</Breadcrumb.List>
-				</Breadcrumb.Root>
-			</div>
-			<div class="flex shrink-0 items-center gap-2">
-				{#if isChatPage && communityId}
-					<Sheet.Root>
-						<Sheet.Trigger>
-							{#snippet child({ props })}
-								<Button {...props} variant="ghost" size="icon" class="relative h-9 w-9 lg:hidden">
-									<PanelRight class="h-4.5 w-4.5" />
-									<span class="sr-only">Toggle members</span>
-								</Button>
-							{/snippet}
-						</Sheet.Trigger>
-						<Sheet.Content side="right" class="w-[85vw] p-0 sm:w-80">
-							<Sheet.Header class="border-b p-4">
-								<Sheet.Title>Community Members</Sheet.Title>
-							</Sheet.Header>
-							<div class="h-full overflow-y-auto p-4">
+								<Breadcrumb.Item class="truncate">
+									{#if i === breadcrumbs.length - 1}
+										<Breadcrumb.Page class="truncate">{crumb.label}</Breadcrumb.Page>
+									{:else}
+										<Breadcrumb.Link href={crumb.href} class="truncate">
+											{crumb.label}
+										</Breadcrumb.Link>
+									{/if}
+								</Breadcrumb.Item>
+							{/each}
+						</Breadcrumb.List>
+					</Breadcrumb.Root>
+				</div>
+				<div class="flex shrink-0 items-center gap-2">
+					{#if isChatPage && communityId}
+						<Sheet.Root>
+							<Sheet.Trigger>
+								{#snippet child({ props })}
+									<Button {...props} variant="ghost" size="icon" class="relative h-9 w-9 lg:hidden">
+										<PanelRight class="h-4.5 w-4.5" />
+										<span class="sr-only">Toggle members</span>
+									</Button>
+								{/snippet}
+							</Sheet.Trigger>
+							<Sheet.Content side="right" class="w-[85vw] p-0 sm:w-80">
+								<Sheet.Header class="border-b p-4">
+									<Sheet.Title>Community Members</Sheet.Title>
+								</Sheet.Header>
+								<div class="h-full overflow-y-auto p-4">
+									<CommunityPresenceWidget {communityId} />
+								</div>
+							</Sheet.Content>
+						</Sheet.Root>
+					{/if}
+					<ThemeToggle />
+				</div>
+			</header>
+			<div class="flex min-h-0 flex-1 overflow-hidden">
+				<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+					{@render children()}
+				</div>
+				{#if !isAuthPage}
+					<aside
+						class="hidden min-h-0 w-80 shrink-0 overflow-hidden border-l border-border/50 bg-background lg:block"
+					>
+						{#if communityId && isChatPage}
+							<div class="px-4 py-6">
 								<CommunityPresenceWidget {communityId} />
 							</div>
-						</Sheet.Content>
-					</Sheet.Root>
+						{:else}
+							<SimilarLinksSidebar />
+						{/if}
+					</aside>
 				{/if}
-				<ThemeToggle />
 			</div>
-		</header>
-		<div class="flex min-h-0 flex-1 overflow-hidden">
-			<div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-				{@render children()}
-			</div>
-			{#if !isAuthPage}
-				<aside
-					class="hidden min-h-0 w-80 shrink-0 overflow-hidden border-l border-border/50 bg-background lg:block"
-				>
-					{#if communityId && isChatPage}
-						<div class="px-4 py-6">
-							<CommunityPresenceWidget {communityId} />
-						</div>
-					{:else}
-						<SimilarLinksSidebar />
-					{/if}
-				</aside>
-			{/if}
-		</div>
-	</Sidebar.Inset>
-</Sidebar.Provider>
-<Toaster />
+		</Sidebar.Inset>
+	</Sidebar.Provider>
+	<Toaster />
+{/if}

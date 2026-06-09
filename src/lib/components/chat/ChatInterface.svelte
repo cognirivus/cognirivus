@@ -4,7 +4,16 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Avatar from '$lib/components/ui/avatar';
-	import { ArrowDown, MessageSquare, Pencil, Reply, SendHorizontal, Trash2, X, Check } from '@lucide/svelte';
+	import {
+		ArrowDown,
+		MessageSquare,
+		Pencil,
+		Reply,
+		SendHorizontal,
+		Trash2,
+		X,
+		Check
+	} from '@lucide/svelte';
 
 	interface Message {
 		_id: string;
@@ -780,9 +789,7 @@
 
 	<div class="shrink-0 border-t border-border/40 px-4 py-3 sm:px-6">
 		{#if replyingToMessage}
-			<div
-				class="mb-2 flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-1.5"
-			>
+			<div class="mb-2 flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-1.5">
 				<div class="flex min-w-0 items-center gap-2">
 					<Reply class="size-3 text-primary" />
 					<span class="truncate text-xs text-muted-foreground">

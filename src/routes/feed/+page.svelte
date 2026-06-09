@@ -126,7 +126,9 @@
 
 	let searchInput = $state('');
 	let layoutMode = $state<'bento' | 'list'>(
-		(typeof localStorage !== 'undefined' && (localStorage.getItem('feedLayoutMode') as 'bento' | 'list')) || 'bento'
+		(typeof localStorage !== 'undefined' &&
+			(localStorage.getItem('feedLayoutMode') as 'bento' | 'list')) ||
+			'bento'
 	);
 
 	// Sync input with URL search param
@@ -451,7 +453,11 @@
 	}
 </script>
 
-{#snippet directFollowSourceBadge(sourceTitle: string, sourceCanonicalUrl: string, rssFeedUrl?: string)}
+{#snippet directFollowSourceBadge(
+	sourceTitle: string,
+	sourceCanonicalUrl: string,
+	rssFeedUrl?: string
+)}
 	{@const faviconUrl = getSourceFaviconUrl(sourceCanonicalUrl)}
 	{@const sourceLabel = getSourceDomainLabel(sourceTitle, sourceCanonicalUrl)}
 	<div class="min-w-0 space-y-1">
@@ -486,7 +492,7 @@
 				title={rssFeedUrl}
 			>
 				<span
-					class="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 font-medium uppercase tracking-[0.08em] text-[10px] text-foreground/75"
+					class="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-[0.08em] text-foreground/75 uppercase"
 				>
 					<Rss class="size-2.5" />
 					RSS
@@ -861,7 +867,8 @@
 										<DropdownMenuContent align="end">
 											<DropdownMenuItem
 												disabled={!auth.isAuthenticated}
-												onclick={() => openSaveToCollectionDialog(item.sourceId, item.title, item._id)}
+												onclick={() =>
+													openSaveToCollectionDialog(item.sourceId, item.title, item._id)}
 											>
 												<BookMarked class="mr-2 size-4" />
 												Save to Collection
@@ -876,7 +883,8 @@
 											{#if (communitiesQuery.data?.length ?? 0) > 0}
 												<DropdownMenuItem
 													disabled={!auth.isAuthenticated}
-													onclick={() => openCommunityShareDialog(item._id, item.communityShares ?? [])}
+													onclick={() =>
+														openCommunityShareDialog(item._id, item.communityShares ?? [])}
 												>
 													<Users class="mr-2 size-4" />
 													Share to Community
@@ -892,7 +900,11 @@
 							<div class="mt-3 space-y-2">
 								<div class="flex flex-wrap items-center gap-1.5">
 									{#if item.provenance.kind === 'direct_follow'}
-										{@render directFollowSourceBadge(item.sourceTitle, item.sourceCanonicalUrl, item.rssFeedUrl)}
+										{@render directFollowSourceBadge(
+											item.sourceTitle,
+											item.sourceCanonicalUrl,
+											item.rssFeedUrl
+										)}
 									{:else if item.provenance.collectionSlug}
 										<Badge
 											href={`/collections/${item.provenance.collectionSlug}`}
@@ -953,12 +965,11 @@
 			style="grid-auto-flow: dense;"
 		>
 			{#each feedQuery.data?.page ?? [] as item, index (item._id)}
-				{@const isLarge = item.kind === 'post' 
-					? (item.score > 30 || item.commentCount > 15)
-					: (item.shareCount > 10)}
-				{@const isMedium = !isLarge && (item.kind === 'post'
-					? (item.score > 10 || item.commentCount > 5)
-					: (item.shareCount > 5))}
+				{@const isLarge =
+					item.kind === 'post' ? item.score > 30 || item.commentCount > 15 : item.shareCount > 10}
+				{@const isMedium =
+					!isLarge &&
+					(item.kind === 'post' ? item.score > 10 || item.commentCount > 5 : item.shareCount > 5)}
 				<article
 					class={`group relative overflow-hidden bg-background transition-colors hover:bg-muted/20 ${
 						isLarge ? 'sm:col-span-2 sm:row-span-2' : isMedium ? 'sm:row-span-2' : ''
@@ -969,7 +980,7 @@
 							<div class="flex-1">
 								<div class="flex items-start gap-2">
 									<h1
-										class={`font-bold leading-tight tracking-tight ${
+										class={`leading-tight font-bold tracking-tight ${
 											isLarge
 												? 'text-2xl sm:text-3xl lg:text-4xl'
 												: isMedium
@@ -997,7 +1008,11 @@
 								</div>
 								<p
 									class={`mt-3 text-muted-foreground ${
-										isLarge ? 'line-clamp-6 text-base' : isMedium ? 'line-clamp-4 text-sm' : 'line-clamp-3 text-sm'
+										isLarge
+											? 'line-clamp-6 text-base'
+											: isMedium
+												? 'line-clamp-4 text-sm'
+												: 'line-clamp-3 text-sm'
 									}`}
 								>
 									{sanitizeDisplayText(item.snippet)}
@@ -1094,7 +1109,7 @@
 									<div class="min-w-0 flex-1">
 										<div class="flex items-start gap-2">
 											<h1
-												class={`min-w-0 font-bold leading-tight tracking-tight ${
+												class={`min-w-0 leading-tight font-bold tracking-tight ${
 													isLarge
 														? 'text-2xl sm:text-3xl lg:text-4xl'
 														: isMedium
@@ -1131,7 +1146,8 @@
 											<DropdownMenuContent align="end">
 												<DropdownMenuItem
 													disabled={!auth.isAuthenticated}
-													onclick={() => openSaveToCollectionDialog(item.sourceId, item.title, item._id)}
+													onclick={() =>
+														openSaveToCollectionDialog(item.sourceId, item.title, item._id)}
 												>
 													<BookMarked class="mr-2 size-4" />
 													Save to Collection
@@ -1146,7 +1162,8 @@
 												{#if (communitiesQuery.data?.length ?? 0) > 0}
 													<DropdownMenuItem
 														disabled={!auth.isAuthenticated}
-														onclick={() => openCommunityShareDialog(item._id, item.communityShares ?? [])}
+														onclick={() =>
+															openCommunityShareDialog(item._id, item.communityShares ?? [])}
 													>
 														<Users class="mr-2 size-4" />
 														Share to Community
@@ -1158,7 +1175,11 @@
 								</div>
 								<p
 									class={`mt-3 text-muted-foreground ${
-										isLarge ? 'line-clamp-6 text-base' : isMedium ? 'line-clamp-4 text-sm' : 'line-clamp-3 text-sm'
+										isLarge
+											? 'line-clamp-6 text-base'
+											: isMedium
+												? 'line-clamp-4 text-sm'
+												: 'line-clamp-3 text-sm'
 									}`}
 								>
 									{decodeHtmlEntities(item.snippet)}
@@ -1168,7 +1189,11 @@
 								<div class="space-y-2">
 									<div class="flex flex-wrap items-center gap-1.5">
 										{#if item.provenance.kind === 'direct_follow'}
-											{@render directFollowSourceBadge(item.sourceTitle, item.sourceCanonicalUrl, item.rssFeedUrl)}
+											{@render directFollowSourceBadge(
+												item.sourceTitle,
+												item.sourceCanonicalUrl,
+												item.rssFeedUrl
+											)}
 										{:else if item.provenance.collectionSlug}
 											<Badge
 												href={`/collections/${item.provenance.collectionSlug}`}
@@ -1203,10 +1228,7 @@
 											</Badge>
 										{/if}
 										{#if item.shareCount > 0}
-											<Badge
-												variant="secondary"
-												class="gap-1 bg-muted/70 text-muted-foreground"
-											>
+											<Badge variant="secondary" class="gap-1 bg-muted/70 text-muted-foreground">
 												<MessageSquare class="size-3" />
 												<span class="text-xs">Shared {item.shareCount}</span>
 											</Badge>

@@ -777,7 +777,9 @@ const loadTrustedCollectionFeedItems = async (
 				.order('desc')
 				.take(8);
 
-			const rssFeedIds = items.map((item) => item.rssFeedId).filter((id): id is Id<'source_rss_feeds'> => !!id);
+			const rssFeedIds = items
+				.map((item) => item.rssFeedId)
+				.filter((id): id is Id<'source_rss_feeds'> => !!id);
 			const rssFeeds = await Promise.all(rssFeedIds.map((id) => ctx.db.get(id)));
 			const rssFeedMap = new Map(rssFeedIds.map((id, index) => [id, rssFeeds[index]]));
 

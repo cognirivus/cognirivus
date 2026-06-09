@@ -57,7 +57,8 @@ export type SimilarLinksRowLike = {
 	lastFetchedAt?: number;
 };
 
-export const createSourceDomainFingerprint = (domains: Array<string>) => dedupeDomains(domains).join('|');
+export const createSourceDomainFingerprint = (domains: Array<string>) =>
+	dedupeDomains(domains).join('|');
 
 export const diffSourceDomains = (cached: Array<string>, current: Array<string>) => {
 	const cachedSet = new Set(dedupeDomains(cached));
@@ -143,7 +144,8 @@ export const dedupeDomains = (values: Iterable<string | null | undefined>) => {
 	return Array.from(deduped);
 };
 
-const matchesDomain = (host: string, domain: string) => host === domain || host.endsWith(`.${domain}`);
+const matchesDomain = (host: string, domain: string) =>
+	host === domain || host.endsWith(`.${domain}`);
 
 export const buildExaDomainFilters = (scope: SimilarLinksScope, domains: Array<string>) => {
 	const normalizedDomains = dedupeDomains(domains);

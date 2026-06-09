@@ -34,7 +34,9 @@
 
 	let searchInput = $state('');
 	let layoutMode = $state<'bento' | 'list'>(
-		(typeof localStorage !== 'undefined' && (localStorage.getItem('feedLayoutMode') as 'bento' | 'list')) || 'bento'
+		(typeof localStorage !== 'undefined' &&
+			(localStorage.getItem('feedLayoutMode') as 'bento' | 'list')) ||
+			'bento'
 	);
 
 	// Sync input with URL search param
@@ -187,7 +189,9 @@
 					<h2 class="text-lg font-semibold">Recent Posts</h2>
 					<div class="flex items-center gap-4">
 						<div class="relative w-full max-w-sm">
-							<Search class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+							<Search
+								class="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+							/>
 							<Input
 								placeholder="Search posts..."
 								class="pr-9 pl-9 text-sm"
@@ -264,7 +268,9 @@
 											<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
 												<Archive class="size-3" />
 												<span class="text-xs">
-													{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
+													{post.sourceType === 'chrome_import'
+														? 'Chrome Bookmark'
+														: post.sourceType}
 												</span>
 											</Badge>
 										{/if}
@@ -304,7 +310,7 @@
 								<div class="flex h-full flex-col p-5">
 									<div class="flex-1">
 										<h1
-											class={`font-bold leading-tight tracking-tight ${
+											class={`leading-tight font-bold tracking-tight ${
 												isLarge
 													? 'text-2xl sm:text-3xl lg:text-4xl'
 													: isMedium
@@ -318,7 +324,11 @@
 										</h1>
 										<p
 											class={`mt-3 text-muted-foreground ${
-												isLarge ? 'line-clamp-6 text-base' : isMedium ? 'line-clamp-4 text-sm' : 'line-clamp-3 text-sm'
+												isLarge
+													? 'line-clamp-6 text-base'
+													: isMedium
+														? 'line-clamp-4 text-sm'
+														: 'line-clamp-3 text-sm'
 											}`}
 										>
 											{post.snippet}
@@ -338,7 +348,9 @@
 												<Badge variant="outline" class="gap-1 border-dashed bg-muted/30">
 													<Archive class="size-3" />
 													<span class="text-xs">
-														{post.sourceType === 'chrome_import' ? 'Chrome Bookmark' : post.sourceType}
+														{post.sourceType === 'chrome_import'
+															? 'Chrome Bookmark'
+															: post.sourceType}
 													</span>
 												</Badge>
 											{/if}

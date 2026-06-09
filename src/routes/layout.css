@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@plugin '@tailwindcss/typography';
 @source '../../node_modules/svelte-streamdown/**/*';
 
 @import 'tw-animate-css';
@@ -229,4 +230,86 @@ a {
 }
 a:hover {
 	text-decoration-thickness: 2px;
+}
+
+/* Docs-specific typography customizations matching monochrome theme */
+.docs-prose {
+	@apply prose max-w-none prose-neutral dark:prose-invert;
+
+	/* Layout spacing tweaks */
+	--tw-prose-body: var(--foreground);
+	--tw-prose-headings: var(--foreground);
+	--tw-prose-lead: var(--muted-foreground);
+	--tw-prose-links: var(--foreground);
+	--tw-prose-bold: var(--foreground);
+	--tw-prose-counters: var(--muted-foreground);
+	--tw-prose-bullets: var(--muted-foreground);
+	--tw-prose-hr: var(--border);
+	--tw-prose-quotes: var(--foreground);
+	--tw-prose-quote-borders: var(--border);
+	--tw-prose-captions: var(--muted-foreground);
+	--tw-prose-code: var(--foreground);
+	--tw-prose-pre-code: var(--foreground);
+	--tw-prose-pre-bg: var(--muted);
+	--tw-prose-th-borders: var(--border);
+	--tw-prose-td-borders: var(--border);
+}
+
+.docs-prose h1 {
+	@apply mt-0 mb-4 text-3xl font-semibold tracking-tight;
+}
+
+.docs-prose h2 {
+	@apply mt-8 mb-4 border-b border-border/50 pb-2 text-2xl font-semibold tracking-tight;
+}
+
+.docs-prose h3 {
+	@apply mt-6 mb-3 text-xl font-semibold tracking-tight;
+}
+
+.docs-prose p {
+	@apply mb-4 leading-7 text-muted-foreground;
+}
+
+.docs-prose a {
+	@apply font-medium underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground;
+}
+
+.docs-prose code {
+	@apply rounded bg-muted px-1.5 py-0.5 font-mono text-sm font-medium text-foreground before:content-none after:content-none;
+}
+
+.docs-prose pre {
+	@apply my-6 overflow-x-auto rounded-xl border border-border bg-card p-4;
+}
+
+.docs-prose pre code {
+	@apply bg-transparent p-0 font-mono text-sm leading-relaxed text-foreground before:content-none after:content-none;
+}
+
+/* Callouts styled using markdown blockquote syntax */
+.docs-prose blockquote {
+	@apply my-6 rounded-r-xl border-l-4 border-border bg-muted/20 px-6 py-4 not-italic;
+}
+
+.docs-prose blockquote p {
+	@apply m-0 font-normal text-foreground;
+}
+
+/* Alert styling overrides inside blockquotes */
+.docs-prose blockquote strong {
+	@apply font-semibold;
+}
+
+/* Tables style */
+.docs-prose table {
+	@apply my-6 w-full border-collapse text-sm;
+}
+
+.docs-prose th {
+	@apply border-b border-border py-2 text-left font-semibold text-foreground;
+}
+
+.docs-prose td {
+	@apply border-b border-border/50 py-2 text-muted-foreground;
 }
