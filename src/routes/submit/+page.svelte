@@ -9,6 +9,7 @@
 	import { Textarea } from '$lib/components/ui/textarea';
 	import { Label } from '$lib/components/ui/label';
 	import { Tabs, TabsContent, TabsList, TabsTrigger } from '$lib/components/ui/tabs';
+	import { getErrorMessage } from '$lib/utils';
 	import {
 		BookMarked,
 		Globe,
@@ -25,7 +26,7 @@
 
 	const client = useConvexClient();
 	const meQuery = useQuery(api.auth.getCurrentUser, {});
-	const communitiesQuery = useQuery((api as any).communities.listPublic, { limit: 100 });
+	const communitiesQuery = useQuery((api as any).communities.listPostable, { limit: 100 });
 	const myCollectionsQuery = useQuery((api as any).collections.listMine, {});
 	const communityCollectionsQuery = useQuery(
 		(api as any).collections.listSuggestableCommunityCollections,
@@ -49,6 +50,15 @@
 	let targetCommunityCollectionId = $state('');
 	let collectionNote = $state('');
 	let addingSource = $state(false);
+
+	const trimmedTitle = $derived(title.trim());
+	const titleError = $derived(
+		trimmedTitle.length > 0 && trimmedTitle.length < 4
+			? 'Title must be at least 4 characters.'
+			: trimmedTitle.length > 220
+				? 'Title must be 220 characters or fewer.'
+				: ''
+	);
 
 	$effect(() => {
 		if (!targetCollectionId && (myCollectionsQuery.data?.length ?? 0) > 0) {
@@ -89,7 +99,7 @@
 			toast.success('Post created');
 			goto(resolve(`/post/${postId}`));
 		} catch (error: any) {
-			const message = error?.message ?? 'Failed to create post';
+			const message = getErrorMessage(error, 'Failed to create post');
 			if (message.includes('/profile')) {
 				toast.error('Set your username first');
 				goto(resolve('/profile'));
@@ -162,7 +172,7 @@
 				})()
 			);
 		} catch (error: any) {
-			toast.error(error?.message ?? 'Failed to add source');
+			toast.error(getErrorMessage(error, 'Failed to add source'));
 		} finally {
 			addingSource = false;
 		}
@@ -292,7 +302,11 @@
 						required
 						maxlength={220}
 						placeholder="Give your post a descriptive title"
+						class={titleError ? 'border-destructive focus-visible:ring-destructive/20' : ''}
 					/>
+					{#if titleError}
+						<p class="text-xs text-destructive">{titleError}</p>
+					{/if}
 				</div>
 
 				{#if type === 'link'}
@@ -326,7 +340,7 @@
 				{/if}
 
 				<div class="flex items-center gap-3 border-t border-border pt-5">
-					<Button type="submit" disabled={submitting} class="gap-2">
+					<Button type="submit" disabled={submitting || !!titleError} class="gap-2">
 						{#if submitting}
 							<Loader2 class="size-4 animate-spin" />
 							Publishing...

@@ -1,5 +1,5 @@
 import { paginationOptsValidator } from 'convex/server';
-import { v } from 'convex/values';
+import { ConvexError, v } from 'convex/values';
 import { action, internalAction, internalMutation, mutation, query } from './_generated/server';
 import { getAuthUser } from './auth';
 import { internal } from './_generated/api';
@@ -322,19 +322,17 @@ export const createStored = internalMutation({
 		if (args.communityId) {
 			const community = await ctx.db.get(args.communityId);
 			if (!community) {
-				throw new Error('Community not found.');
+				throw new ConvexError('Community not found.');
 			}
 
-			if (community.visibility === 'private') {
-				const membership = await ctx.db
-					.query('community_memberships')
-					.withIndex('by_communityId_and_userAuthId', (q) =>
-						q.eq('communityId', args.communityId!).eq('userAuthId', args.authorAuthId)
-					)
-					.unique();
-				if (!membership || membership.status !== 'active') {
-					throw new Error('Active community membership required to submit in a private community.');
-				}
+			const membership = await ctx.db
+				.query('community_memberships')
+				.withIndex('by_communityId_and_userAuthId', (q) =>
+					q.eq('communityId', args.communityId!).eq('userAuthId', args.authorAuthId)
+				)
+				.unique();
+			if (!membership || membership.status !== 'active') {
+				throw new ConvexError('Active community membership required to submit in this community.');
 			}
 		}
 
@@ -397,15 +395,15 @@ export const create = action({
 
 		const title = normalizeTitle(args.title);
 		if (title.length < 4 || title.length > 220) {
-			throw new Error('Post title must be 4-220 characters.');
+			throw new ConvexError('Post title must be 4-220 characters.');
 		}
 
 		if (args.type === 'link') {
 			if (!args.url || !args.url.trim()) {
-				throw new Error('Link posts require a URL.');
+				throw new ConvexError('Link posts require a URL.');
 			}
 		} else if (!args.body || !args.body.trim()) {
-			throw new Error('Text/media posts require a body.');
+			throw new ConvexError('Text/media posts require a body.');
 		}
 
 		const normalizedBody = args.body ? normalizeBody(args.body) : undefined;
@@ -462,7 +460,7 @@ export const shareSourceItemAsPost = action({
 		});
 
 		if (!sourceItem) {
-			throw new Error('Source item not found.');
+			throw new ConvexError('Source item not found.');
 		}
 
 		return await ctx.runMutation((internal as any).posts.createStored, {

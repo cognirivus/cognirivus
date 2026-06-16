@@ -58,6 +58,7 @@
 	<Dialog.Content class="overflow-hidden p-0 sm:max-w-xl">
 		<div class="flex items-center border-b border-border/50 px-4 py-3">
 			<Search class="mr-2 h-4 w-4 shrink-0 text-muted-foreground opacity-60" />
+			<!-- svelte-ignore a11y_autofocus -->
 			<input
 				type="text"
 				bind:value={query}

@@ -18,6 +18,7 @@
 		ExternalLink,
 		Globe,
 		Loader2,
+		Lock,
 		NotebookText,
 		Trash2,
 		Users
@@ -36,7 +37,7 @@
 	const detailsQuery = useQuery((api as any).sources.getSourceItem, () =>
 		sourceItemId ? { sourceItemId } : 'skip'
 	);
-	const communitiesQuery = useQuery((api as any).communities.listPublic, { limit: 100 });
+	const communitiesQuery = useQuery((api as any).communities.listPostable, { limit: 100 });
 
 	let shareCommunityId = $state('');
 	let fullBody = $state('');
@@ -405,7 +406,7 @@
 			<Dialog.Description>Select a community to publish this item in.</Dialog.Description>
 		</Dialog.Header>
 		{#if (communitiesQuery.data?.length ?? 0) === 0}
-			<p class="text-sm text-muted-foreground">No communities available yet.</p>
+			<p class="text-sm text-muted-foreground">Join a community to share posts there.</p>
 		{:else}
 			<div class="max-h-64 space-y-2 overflow-y-auto">
 				{#each communitiesQuery.data ?? [] as c (c._id)}
@@ -419,7 +420,15 @@
 						}`}
 						onclick={() => (shareCommunityId = c._id)}
 					>
-						<div class="font-medium">{c.name}</div>
+						<div class="flex items-center gap-2 font-medium">
+							{c.name}
+							{#if c.visibility === 'private'}
+								<Badge variant="outline" class="gap-1 border-muted-foreground/30 bg-muted/20">
+									<Lock class="size-3" />
+									private
+								</Badge>
+							{/if}
+						</div>
 						<div class="text-xs text-muted-foreground">
 							c/{c.slug}
 							{#if existingSharePostId}

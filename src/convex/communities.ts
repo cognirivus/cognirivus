@@ -518,6 +518,38 @@ export const listPublic = query({
 	}
 });
 
+export const listPostable = query({
+	args: {
+		limit: v.optional(v.number())
+	},
+	returns: v.array(communitySummaryValidator),
+	handler: async (ctx, args) => {
+		const authUser = await getOptionalAuthUser(ctx);
+		if (!authUser) {
+			return [];
+		}
+
+		const limit = Math.min(Math.max(args.limit ?? 30, 1), 100);
+		const activeMemberships = await ctx.db
+			.query('community_memberships')
+			.withIndex('by_userAuthId_and_status', (q) =>
+				q.eq('userAuthId', authUser._id).eq('status', 'active')
+			)
+			.take(limit);
+
+		const communities = (
+			await Promise.all(activeMemberships.map((membership) => ctx.db.get(membership.communityId)))
+		)
+			.filter((community): community is NonNullable<typeof community> => community !== null)
+			.sort((a, b) => b.createdAt - a.createdAt)
+			.slice(0, limit);
+
+		return await Promise.all(
+			communities.map(async (community) => toCommunitySummary(ctx, community))
+		);
+	}
+});
+
 export const listMine = query({
 	args: {},
 	returns: v.array(myCommunityValidator),

@@ -164,6 +164,7 @@ const schema = defineSchema({
 		updatedAt: v.number()
 	})
 		.index('by_sourceId_and_updatedAt', ['sourceId', 'updatedAt'])
+		.index('by_sourceId_and_feedNormalizedKey', ['sourceId', 'feedNormalizedKey'])
 		.index('by_feedNormalizedKey', ['feedNormalizedKey'])
 		.index('by_status_and_updatedAt', ['status', 'updatedAt']),
 	source_collections: defineTable({

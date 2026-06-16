@@ -163,6 +163,11 @@ export const isAuthError = (error: unknown) => {
 	return /auth/i.test(message);
 };
 
+export const getErrorMessage = (error: unknown, fallback = 'An error occurred') =>
+	(error instanceof ConvexError && typeof error.data === 'string' && error.data) ||
+	(error instanceof Error && error.message) ||
+	fallback;
+
 export type WithoutChild<T> = T extends { child?: any } ? Omit<T, 'child'> : T;
 export type WithoutChildren<T> = T extends { children?: any } ? Omit<T, 'children'> : T;
 export type WithoutChildrenOrChild<T> = WithoutChildren<WithoutChild<T>>;

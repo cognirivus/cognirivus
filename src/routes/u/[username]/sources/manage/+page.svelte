@@ -23,6 +23,8 @@
 		ArrowLeft,
 		ChevronDown,
 		ChevronRight,
+		ExternalLink,
+		Globe,
 		Loader2,
 		Pause,
 		Play,
@@ -34,7 +36,7 @@
 	const auth = useAppAuth();
 	const client = useConvexClient();
 	const username = $derived(page.params.username);
-	let expandedSourceId = $state<string | null>(null);
+	let expandedSourceIds = $state<Set<string>>(new Set());
 
 	const currentUserQuery = useQuery(api.auth.getCurrentUser, {});
 	const isAuthorized = $derived(
@@ -96,6 +98,43 @@
 
 	function canRefreshSource(type: string, rssFeedUrl?: string) {
 		return type === 'rss' || type === 'youtube' || !!rssFeedUrl;
+	}
+
+	function getSourceFaviconUrl(url: string) {
+		try {
+			return new URL('/favicon.ico', url).toString();
+		} catch {
+			return null;
+		}
+	}
+
+	function getRssFeedLabel(feed: { feedUrl: string; title?: string | null }, sourceUrl: string) {
+		if (feed.title?.trim()) {
+			return feed.title.trim();
+		}
+
+		try {
+			const feedUrl = new URL(feed.feedUrl);
+			const canonicalUrl = new URL(sourceUrl);
+			const feedPath = `${feedUrl.pathname}${feedUrl.search}` || '/';
+			const pathLabel = feedPath
+				.replace(/^\/+/, '')
+				.replace(/\.(xml|rss|atom)$/i, '')
+				.replace(/[-_/]+/g, ' ')
+				.trim();
+
+			if (pathLabel) {
+				return pathLabel.replace(/\b\w/g, (letter) => letter.toUpperCase());
+			}
+
+			if (feedUrl.hostname !== canonicalUrl.hostname) {
+				return feedUrl.hostname.replace(/^www\./, '');
+			}
+		} catch {
+			// Fall back below.
+		}
+
+		return 'RSS feed';
 	}
 
 	const refreshResetsAtUtc = $derived.by(() => {
@@ -345,7 +384,7 @@
 													? `Daily limit reached. Resets ${refreshResetsAtUtc} UTC`
 													: 'Daily limit reached'
 												: 'Refresh now'}
-										{@const isExpanded = expandedSourceId === row.sourceId}
+										{@const isExpanded = expandedSourceIds.has(row.sourceId)}
 										{@const rssFeedsQuery = useQuery((api as any).sources.getSourceRssFeeds, () =>
 											isExpanded ? { sourceId: row.sourceId } : 'skip'
 										)}
@@ -360,26 +399,56 @@
 												<div class="max-w-[360px]">
 													<div class="flex flex-wrap items-center gap-2">
 														<button
+															type="button"
 															class="flex items-center gap-1 transition-colors hover:text-primary"
-															onclick={() => (expandedSourceId = isExpanded ? null : row.sourceId)}
+															aria-expanded={isExpanded}
+															aria-controls={`rss-feeds-${row.sourceId}`}
+															onclick={() => {
+																const next = new Set(expandedSourceIds);
+																if (next.has(row.sourceId)) {
+																	next.delete(row.sourceId);
+																} else {
+																	next.add(row.sourceId);
+																}
+																expandedSourceIds = next;
+															}}
 														>
 															{#if isExpanded}
 																<ChevronDown class="size-3.5" />
 															{:else}
 																<ChevronRight class="size-3.5" />
 															{/if}
+															{#if getSourceFaviconUrl(row.canonicalUrl)}
+																<img
+																	src={getSourceFaviconUrl(row.canonicalUrl)}
+																	alt=""
+																	class="size-4 shrink-0 rounded-sm object-contain"
+																	onerror={(event) => {
+																		(event.currentTarget as HTMLImageElement).style.display =
+																			'none';
+																		(
+																			event.currentTarget as HTMLImageElement
+																		).nextElementSibling?.classList.remove('hidden');
+																	}}
+																/>
+																<Globe class="hidden size-4 shrink-0 text-muted-foreground" />
+															{:else}
+																<Globe class="size-4 shrink-0 text-muted-foreground" />
+															{/if}
 															<p class="truncate font-medium">{row.title}</p>
 														</button>
-														{#if row.rssFeedUrl}
-															<Badge variant="outline">RSS-backed</Badge>
-														{/if}
-														{#if row.addedVia === 'manual'}
-															<Badge variant="outline">Manual</Badge>
-														{/if}
 													</div>
-													<p class="truncate text-xs text-muted-foreground">{row.canonicalUrl}</p>
+													{#if row.rssFeedUrl}
+														<Badge variant="outline">RSS-backed</Badge>
+													{/if}
+													{#if row.addedVia === 'manual'}
+														<Badge variant="outline">Manual</Badge>
+													{/if}
 													{#if isExpanded}
-														<div class="mt-2 space-y-1 border-l-2 border-muted-foreground/20 pl-3">
+														<div
+															id={`rss-feeds-${row.sourceId}`}
+															class="mt-2 space-y-1 border-l-2 border-muted-foreground/20 pl-3"
+														>
 															{#if rssFeedsQuery.isLoading}
 																<p class="text-xs text-muted-foreground italic">
 																	Loading RSS feeds...
@@ -389,9 +458,26 @@
 																	RSS Feeds ({rssFeedsQuery.data.length}):
 																</p>
 																{#each rssFeedsQuery.data as feed (feed._id)}
+																	{@const feedLabel = getRssFeedLabel(feed, row.canonicalUrl)}
 																	<div class="space-y-0.5">
 																		<div class="flex items-center gap-2">
-																			<p class="max-w-[300px] truncate text-xs">{feed.feedUrl}</p>
+																			<p
+																				class="max-w-[240px] truncate text-sm"
+																				title={feed.feedUrl}
+																			>
+																				{feedLabel}
+																			</p>
+																			<Button
+																				variant="ghost"
+																				size="icon-sm"
+																				class="size-6"
+																				href={feed.feedUrl}
+																				target="_blank"
+																				rel="noopener noreferrer"
+																				title="Open RSS feed"
+																			>
+																				<ExternalLink class="size-3.5" />
+																			</Button>
 																			<Badge
 																				variant={feed.status === 'active' ? 'outline' : 'secondary'}
 																				class="px-1.5 py-0 text-[10px]"

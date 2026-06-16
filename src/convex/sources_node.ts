@@ -63,6 +63,21 @@ const stripHtml = (html: string) =>
 		.replace(/\n{3,}/g, '\n\n')
 		.trim();
 
+const parsedFeedTitle = (parsedFeed: any) => {
+	const title = typeof parsedFeed?.title === 'string' ? parsedFeed.title.trim() : '';
+	return title ? title.slice(0, SOURCE_TITLE_LIMIT) : undefined;
+};
+
+const fetchFeedTitle = async (feedUrl: string) => {
+	try {
+		const fetched = await fetchTextWithGuards(feedUrl);
+		const parsedFeed = await parser.parseString(fetched.body);
+		return parsedFeedTitle(parsedFeed);
+	} catch {
+		return undefined;
+	}
+};
+
 const isIpv4Address = (value: string) => {
 	const parts = value.split('.');
 	if (parts.length !== 4) {
@@ -465,6 +480,14 @@ export const syncRssSource = internalAction({
 			throw new Error(normalizeFeedError(lastError));
 		}
 
+		const feedTitle = parsedFeedTitle(parsedFeed);
+		if (args.rssFeedId && feedTitle) {
+			await ctx.runMutation((internal as any).sources.patchRssFeedTitle, {
+				feedId: args.rssFeedId,
+				title: feedTitle
+			});
+		}
+
 		const items: Array<any> = Array.isArray(parsedFeed.items)
 			? parsedFeed.items.slice(0, SOURCE_SYNC_ITEM_LIMIT)
 			: [];
@@ -539,7 +562,8 @@ export const discoverWebsiteFollowTarget = internalAction({
 		canonicalUrl: v.string(),
 		normalizedKey: v.string(),
 		rssFeedUrl: v.optional(v.string()),
-		rssFeedNormalizedKey: v.optional(v.string())
+		rssFeedNormalizedKey: v.optional(v.string()),
+		rssFeedTitle: v.optional(v.string())
 	}),
 	handler: async (_ctx, args) => {
 		const websiteInput = deriveWebsiteSourceInput(args.siteUrl);
@@ -552,12 +576,19 @@ export const discoverWebsiteFollowTarget = internalAction({
 				(lowerContentType.includes('xml') && !lowerContentType.includes('html'));
 			if (looksLikeFeed) {
 				const rssFeedUrl = normalizeSharedHttpUrl(fetched.finalUrl).toString();
+				let rssFeedTitle: string | undefined;
+				try {
+					rssFeedTitle = parsedFeedTitle(await parser.parseString(fetched.body));
+				} catch {
+					rssFeedTitle = undefined;
+				}
 				return {
 					sourceType: 'website' as const,
 					canonicalUrl: websiteInput.canonicalUrl,
 					normalizedKey: websiteInput.normalizedKey,
 					rssFeedUrl,
-					rssFeedNormalizedKey: rssNormalizedKeyFromUrl(rssFeedUrl)
+					rssFeedNormalizedKey: rssNormalizedKeyFromUrl(rssFeedUrl),
+					rssFeedTitle
 				};
 			}
 
@@ -569,7 +600,8 @@ export const discoverWebsiteFollowTarget = internalAction({
 					canonicalUrl: websiteInput.canonicalUrl,
 					normalizedKey: websiteInput.normalizedKey,
 					rssFeedUrl,
-					rssFeedNormalizedKey: rssNormalizedKeyFromUrl(rssFeedUrl)
+					rssFeedNormalizedKey: rssNormalizedKeyFromUrl(rssFeedUrl),
+					rssFeedTitle: await fetchFeedTitle(rssFeedUrl)
 				};
 			}
 		} catch {
@@ -593,7 +625,8 @@ export const discoverRssFollowTarget = internalAction({
 		canonicalUrl: v.string(),
 		normalizedKey: v.string(),
 		rssFeedUrl: v.string(),
-		rssFeedNormalizedKey: v.string()
+		rssFeedNormalizedKey: v.string(),
+		rssFeedTitle: v.optional(v.string())
 	}),
 	handler: async (_ctx, args) => {
 		const normalizedFeedUrl = normalizeSharedHttpUrl(args.feedUrl).toString();
@@ -634,11 +667,14 @@ export const discoverRssFollowTarget = internalAction({
 			})
 			.filter((itemUrl: string | null): itemUrl is string => !!itemUrl);
 
-		return resolveSourceIdentityFromRss({
-			feedUrl: parsedFeedUrl ?? normalizedFeedUrl,
-			feedSiteUrl: typeof parsedFeed?.link === 'string' ? parsedFeed.link : null,
-			itemUrls
-		});
+		return {
+			...resolveSourceIdentityFromRss({
+				feedUrl: parsedFeedUrl ?? normalizedFeedUrl,
+				feedSiteUrl: typeof parsedFeed?.link === 'string' ? parsedFeed.link : null,
+				itemUrls
+			}),
+			rssFeedTitle: parsedFeedTitle(parsedFeed)
+		};
 	}
 });
 

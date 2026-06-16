@@ -222,6 +222,7 @@ const resolveWebsiteFollowTarget = async (ctx: any, inputUrl: string) => {
 			normalizedKey: string;
 			rssFeedUrl?: string;
 			rssFeedNormalizedKey?: string;
+			rssFeedTitle?: string;
 		} = await ctx.runAction((internal as any).sources_node.discoverWebsiteFollowTarget, {
 			siteUrl: websiteInput.canonicalUrl
 		});
@@ -232,7 +233,8 @@ const resolveWebsiteFollowTarget = async (ctx: any, inputUrl: string) => {
 			canonicalUrl: discovered.canonicalUrl,
 			normalizedKey: discovered.normalizedKey,
 			rssFeedUrl: discovered.rssFeedUrl,
-			rssFeedNormalizedKey: discovered.rssFeedNormalizedKey
+			rssFeedNormalizedKey: discovered.rssFeedNormalizedKey,
+			rssFeedTitle: discovered.rssFeedTitle
 		};
 	} catch {
 		return {
@@ -252,6 +254,7 @@ const resolveRssFollowTarget = async (ctx: any, inputUrl: string) => {
 		normalizedKey: string;
 		rssFeedUrl: string;
 		rssFeedNormalizedKey: string;
+		rssFeedTitle?: string;
 	} = await ctx.runAction((internal as any).sources_node.discoverRssFollowTarget, {
 		feedUrl: inputUrl
 	});
@@ -564,13 +567,19 @@ export const attachRssFeedToSource = internalMutation({
 
 		const existing = await ctx.db
 			.query('source_rss_feeds')
-			.withIndex('by_feedNormalizedKey', (q) =>
-				q.eq('feedNormalizedKey', args.rssFeedNormalizedKey)
+			.withIndex('by_sourceId_and_feedNormalizedKey', (q) =>
+				q.eq('sourceId', args.sourceId).eq('feedNormalizedKey', args.rssFeedNormalizedKey)
 			)
-			.filter((q) => q.eq(q.field('sourceId'), args.sourceId))
-			.first();
+			.unique();
+		const title = args.title?.trim().slice(0, SOURCE_TITLE_LIMIT);
 
 		if (existing) {
+			if (!existing.title && title) {
+				await ctx.db.patch(existing._id, {
+					title,
+					updatedAt: Date.now()
+				});
+			}
 			return existing._id;
 		}
 
@@ -579,7 +588,7 @@ export const attachRssFeedToSource = internalMutation({
 			sourceId: args.sourceId,
 			feedUrl: args.rssFeedUrl,
 			feedNormalizedKey: args.rssFeedNormalizedKey,
-			title: args.title,
+			...(title ? { title } : {}),
 			status: 'active',
 			createdAt: now,
 			updatedAt: now
@@ -592,6 +601,27 @@ export const attachRssFeedToSource = internalMutation({
 		});
 
 		return feedId;
+	}
+});
+
+export const patchRssFeedTitle = internalMutation({
+	args: {
+		feedId: v.id('source_rss_feeds'),
+		title: v.string()
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const feed = await ctx.db.get(args.feedId);
+		const title = args.title.trim().slice(0, SOURCE_TITLE_LIMIT);
+		if (!feed || !title || feed.title === title) {
+			return null;
+		}
+
+		await ctx.db.patch(args.feedId, {
+			title,
+			updatedAt: Date.now()
+		});
+		return null;
 	}
 });
 
@@ -1711,11 +1741,14 @@ export const addSource = action({
 		const attachedRssFeedUrl = resolvedWebsiteTarget?.rssFeedUrl ?? resolvedRssTarget?.rssFeedUrl;
 		const attachedRssFeedNormalizedKey =
 			resolvedWebsiteTarget?.rssFeedNormalizedKey ?? resolvedRssTarget?.rssFeedNormalizedKey;
+		const attachedRssFeedTitle =
+			resolvedWebsiteTarget?.rssFeedTitle ?? resolvedRssTarget?.rssFeedTitle;
 		if (resolvedType === 'website' && attachedRssFeedUrl && attachedRssFeedNormalizedKey) {
 			await ctx.runMutation((internal as any).sources.attachRssFeedToSource, {
 				sourceId: ensureResult.sourceId,
 				rssFeedUrl: attachedRssFeedUrl,
-				rssFeedNormalizedKey: attachedRssFeedNormalizedKey
+				rssFeedNormalizedKey: attachedRssFeedNormalizedKey,
+				title: attachedRssFeedTitle
 			});
 		}
 
