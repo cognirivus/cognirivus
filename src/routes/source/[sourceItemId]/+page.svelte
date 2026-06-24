@@ -10,7 +10,8 @@
 	import { Card, CardContent } from '$lib/components/ui/card';
 	import SaveSourceToCollectionDialog from '$lib/components/collections/SaveSourceToCollectionDialog.svelte';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import { decodeHtmlEntities, sanitizeDisplayText, splitReadableParagraphs } from '$lib/utils';
+	import { decodeHtmlEntities, sanitizeDisplayText } from '$lib/utils';
+	import { marked } from 'marked';
 	import {
 		ArrowLeft,
 		BookMarked,
@@ -20,6 +21,7 @@
 		Loader2,
 		Lock,
 		NotebookText,
+		RefreshCcw,
 		Trash2,
 		Users
 	} from '@lucide/svelte';
@@ -37,18 +39,32 @@
 	const detailsQuery = useQuery((api as any).sources.getSourceItem, () =>
 		sourceItemId ? { sourceItemId } : 'skip'
 	);
+	const synthesisJobQuery = useQuery((api as any).knowledgeNotes.getSourceItemJob, () =>
+		auth.isAuthenticated && sourceItemId ? { sourceItemId } : 'skip'
+	);
 	const communitiesQuery = useQuery((api as any).communities.listPostable, { limit: 100 });
 
 	let shareCommunityId = $state('');
 	let fullBody = $state('');
 	let loadingBody = $state(false);
 	let actionLoading = $state(false);
+	let knowledgeLoading = $state(false);
 	let shareCommunityDialogOpen = $state(false);
 	let saveToCollectionDialogOpen = $state(false);
 	let deleteShareDialogOpen = $state(false);
 	let pendingDeleteSharePostId = $state<Id<'posts'> | null>(null);
 	const bodyText = $derived(fullBody || decodeHtmlEntities(detailsQuery.data?.body ?? ''));
-	const bodyParagraphs = $derived(splitReadableParagraphs(bodyText));
+	const renderedHtml = $derived(marked.parse(bodyText) as string);
+	const synthesisJob = $derived(synthesisJobQuery.data);
+	const synthesisStatusLabel = $derived.by(() => {
+		if (!synthesisJob) return 'Not processed';
+		if (synthesisJob.status === 'ready_for_review') return 'Ready for review';
+		if (synthesisJob.status === 'failed') return 'Failed';
+		if (synthesisJob.status === 'skipped') return 'Skipped';
+		if (synthesisJob.status === 'queued') return 'Queued';
+		if (synthesisJob.status === 'running') return 'Processing';
+		return 'Cancelled';
+	});
 
 	$effect(() => {
 		if (!shareCommunityId && (communitiesQuery.data?.length ?? 0) > 0) {
@@ -71,6 +87,42 @@
 			toast.error('Failed to load full content');
 		} finally {
 			loadingBody = false;
+		}
+	}
+
+	async function useForKnowledge() {
+		if (!auth.isAuthenticated) {
+			toast.error('Sign in required');
+			return;
+		}
+		knowledgeLoading = true;
+		try {
+			await client.mutation((api as any).knowledgeNotes.markSourceItemConsumed, {
+				sourceItemId,
+				contributionType: 'manual'
+			});
+			toast.success('Queued for note analysis');
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to queue note analysis');
+		} finally {
+			knowledgeLoading = false;
+		}
+	}
+
+	async function retryKnowledgeJob() {
+		if (!synthesisJob) {
+			return;
+		}
+		knowledgeLoading = true;
+		try {
+			await client.mutation((api as any).knowledgeNotes.retrySynthesisJob, {
+				jobId: synthesisJob._id
+			});
+			toast.success('Retry queued');
+		} catch (error: any) {
+			toast.error(error?.message ?? 'Failed to retry note analysis');
+		} finally {
+			knowledgeLoading = false;
 		}
 	}
 
@@ -287,17 +339,75 @@
 
 						{#if loadingBody}
 							<p class="text-sm text-muted-foreground">Loading extracted content...</p>
-						{:else if bodyParagraphs.length > 0}
-							<article class="pt-1">
-								<div class="mx-auto max-w-3xl space-y-5 text-[15px] leading-8 text-foreground/95">
-									{#each bodyParagraphs as paragraph, index (`${index}-${paragraph.slice(0, 24)}`)}
-										<p class="text-pretty">{paragraph}</p>
-									{/each}
-								</div>
+						{:else if renderedHtml}
+							<article class="source-prose mx-auto max-w-3xl">
+								{@html renderedHtml}
 							</article>
 						{/if}
 					</section>
 				{/if}
+			</CardContent>
+		</Card>
+
+		<Card class="mb-4">
+			<CardContent class="space-y-4 py-5">
+				<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+					<div class="space-y-1">
+						<div class="flex flex-wrap items-center gap-2">
+							<h3 class="text-base font-semibold">Knowledge Processing</h3>
+							<Badge variant={synthesisJob?.status === 'failed' ? 'destructive' : 'outline'}>
+								{synthesisStatusLabel}
+							</Badge>
+						</div>
+						<p class="text-sm text-muted-foreground">
+							{synthesisJob?.progressMessage ??
+								'Send this item for AI-powered knowledge synthesis.'}
+						</p>
+						{#if synthesisJob?.errorMessage}
+							<p class="text-sm text-destructive">{synthesisJob.errorMessage}</p>
+						{/if}
+					</div>
+					<div class="flex flex-wrap gap-2">
+						{#if synthesisJob?.status === 'ready_for_review'}
+							<Button size="sm" href="/knowledge">
+								<NotebookText class="mr-1 size-4" />
+								Review Suggestion
+							</Button>
+						{:else if synthesisJob?.status === 'failed'}
+							<Button
+								size="sm"
+								variant="outline"
+								disabled={knowledgeLoading}
+								onclick={retryKnowledgeJob}
+							>
+								{#if knowledgeLoading}
+									<Loader2 class="mr-1 size-4 animate-spin" />
+								{:else}
+									<RefreshCcw class="mr-1 size-4" />
+								{/if}
+								Retry
+							</Button>
+						{:else}
+							<Button
+								size="sm"
+								variant="outline"
+								disabled={knowledgeLoading ||
+									synthesisJob?.status === 'queued' ||
+									synthesisJob?.status === 'running'}
+								onclick={useForKnowledge}
+							>
+								{#if knowledgeLoading || synthesisJob?.status === 'running'}
+									<Loader2 class="mr-1 size-4 animate-spin" />
+								{:else}
+									<NotebookText class="mr-1 size-4" />
+								{/if}
+								{synthesisJob?.status === 'queued' || synthesisJob?.status === 'running'
+									? 'Processing'
+									: 'Use for Knowledge'}
+							</Button>
+						{/if}
+					</div>
+				</div>
 			</CardContent>
 		</Card>
 

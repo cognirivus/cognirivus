@@ -21,7 +21,6 @@ const SOURCE_ITEM_INLINE_LIMIT = 1000;
 const SOURCE_ITEM_SNIPPET_LIMIT = 500;
 const SOURCE_TITLE_LIMIT = 220;
 const SOURCE_SYNC_ITEM_LIMIT = 25;
-const EXA_CONTENT_MAX_CHARACTERS = 20000;
 const SOURCE_URL_LIMIT = 2048;
 const MAX_FETCH_REDIRECTS = 15;
 const EXA_CONTENTS_ENDPOINT = 'https://api.exa.ai/contents';
@@ -391,7 +390,6 @@ const fetchExaContentsForUrl = async (url: string) => {
 		body: JSON.stringify({
 			urls: [url],
 			text: {
-				maxCharacters: EXA_CONTENT_MAX_CHARACTERS,
 				verbosity: 'standard'
 			}
 		})

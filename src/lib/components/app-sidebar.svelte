@@ -13,7 +13,18 @@
 		LogIn,
 		UserPlus,
 		MessageSquare,
-		Shield
+		NotebookText,
+		Shield,
+		Network,
+		BookOpen,
+		RotateCcw,
+		Target,
+		Route,
+		Sparkles,
+		AlertTriangle,
+		Bot,
+		Globe,
+		List
 	} from '@lucide/svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar/index.js';
 	import { useSidebar } from '$lib/components/ui/sidebar/index.js';
@@ -43,6 +54,13 @@
 		auth.isAuthenticated ? {} : 'skip'
 	);
 	const unreadCount = $derived(unreadQuery.data ?? 0);
+	const knowledgeCountQuery = useQuery((api as any).knowledgeNotes.getPendingReviewCount, () =>
+		auth.isAuthenticated ? {} : 'skip'
+	);
+	const pendingKnowledgeCount = $derived(knowledgeCountQuery.data?.pendingCount ?? 0);
+	const runningKnowledgeCount = $derived(knowledgeCountQuery.data?.runningCount ?? 0);
+
+	let knowledgeExpanded = $state(false);
 
 	const navItems = [
 		{ title: 'Feed', url: '/feed', icon: User, authOnly: true },
@@ -53,12 +71,30 @@
 		{ title: 'Admin', url: '/admin', icon: Shield, authOnly: true, adminOnly: true }
 	];
 
+	const knowledgeItems = [
+		{ title: 'Dashboard', url: '/knowledge', icon: NotebookText },
+		{ title: 'Topics', url: '/knowledge/topics', icon: List },
+		{ title: 'Notes', url: '/knowledge/notes', icon: BookMarked },
+		{ title: 'Graph', url: '/knowledge/graph', icon: Network },
+		{ title: 'My Learning', url: '/knowledge/my-learning', icon: BookOpen },
+		{ title: 'Review', url: '/knowledge/review', icon: RotateCcw },
+		{ title: 'Goals', url: '/knowledge/goals', icon: Target },
+		{ title: 'Paths', url: '/knowledge/paths', icon: Route },
+		{ title: 'Domains', url: '/knowledge/domains', icon: Globe },
+		{ title: 'Entities', url: '/knowledge/entities', icon: Users },
+		{ title: 'Conflicts', url: '/knowledge/conflicts', icon: AlertTriangle },
+		{ title: 'Agents', url: '/knowledge/agents', icon: Bot }
+	];
+
 	function isActive(href: string) {
 		if (href === '/chat') {
 			return page.url.pathname === '/chat' || page.url.pathname.startsWith('/chat/');
 		}
 		if (href === '/collections') {
 			return page.url.pathname === '/collections' || page.url.pathname.startsWith('/collections/');
+		}
+		if (href === '/knowledge') {
+			return page.url.pathname === '/knowledge' || page.url.pathname.startsWith('/knowledge/');
 		}
 		if (href === '/c') {
 			return page.url.pathname === '/c' || page.url.pathname.startsWith('/c/');
@@ -70,6 +106,10 @@
 		if (sidebar.isMobile) {
 			sidebar.setOpenMobile(false);
 		}
+	}
+
+	function isKnowledgeActive() {
+		return page.url.pathname.startsWith('/knowledge');
 	}
 </script>
 
@@ -114,6 +154,48 @@
 							</Sidebar.MenuItem>
 						{/if}
 					{/each}
+
+					{#if auth.isAuthenticated}
+						<Sidebar.MenuItem>
+							<Sidebar.MenuButton
+								tooltipContent="Knowledge"
+								isActive={isKnowledgeActive()}
+								onclick={() => (knowledgeExpanded = !knowledgeExpanded)}
+							>
+								<NotebookText />
+								<span>Knowledge</span>
+								{#if pendingKnowledgeCount > 0 || runningKnowledgeCount > 0}
+									<span
+										class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground"
+									>
+										{pendingKnowledgeCount > 0
+											? pendingKnowledgeCount > 99
+												? '99+'
+												: pendingKnowledgeCount
+											: runningKnowledgeCount}
+									</span>
+								{/if}
+							</Sidebar.MenuButton>
+						</Sidebar.MenuItem>
+						{#if knowledgeExpanded}
+							{#each knowledgeItems as item (item.url)}
+								<Sidebar.MenuItem>
+									<Sidebar.MenuButton
+										tooltipContent={item.title}
+										isActive={isActive(item.url)}
+										class="pl-8"
+									>
+										{#snippet child({ props })}
+											<a href={item.url} {...props} onclick={closeMobileSidebar}>
+												<item.icon />
+												<span>{item.title}</span>
+											</a>
+										{/snippet}
+									</Sidebar.MenuButton>
+								</Sidebar.MenuItem>
+							{/each}
+						{/if}
+					{/if}
 				</Sidebar.Menu>
 			</Sidebar.GroupContent>
 		</Sidebar.Group>
