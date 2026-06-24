@@ -289,6 +289,797 @@ const schema = defineSchema({
 		.index('by_userAuthId_and_sourceItemId', ['userAuthId', 'sourceItemId'])
 		.index('by_sourceItemId', ['sourceItemId'])
 		.index('by_sourceId_and_publishedAt', ['sourceId', 'publishedAt']),
+	// =====================================================
+	// KNOWLEDGE SYSTEM TABLES (36 tables)
+	// =====================================================
+
+	// Layer 1: Information Sources
+	information_sources: defineTable({
+		userId: v.string(),
+		sourceType: v.union(v.literal('url'), v.literal('upload'), v.literal('text')),
+		title: v.string(),
+		url: v.optional(v.string()),
+		r2Key: v.optional(v.string()),
+		rawText: v.optional(v.string()),
+		sourceItemId: v.optional(v.id('source_items')),
+		status: v.union(
+			v.literal('pending'),
+			v.literal('processing'),
+			v.literal('ready'),
+			v.literal('failed')
+		),
+		currentVersionId: v.optional(v.id('source_versions')),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_userId', ['userId'])
+		.index('by_userId_and_createdAt', ['userId', 'createdAt'])
+		.index('by_status_and_updatedAt', ['status', 'updatedAt'])
+		.index('by_sourceItemId', ['sourceItemId']),
+
+	source_versions: defineTable({
+		sourceId: v.id('information_sources'),
+		versionNumber: v.number(),
+		contentHash: v.string(),
+		r2Key: v.string(),
+		changeDescription: v.optional(v.string()),
+		createdAt: v.number()
+	})
+		.index('by_sourceId', ['sourceId'])
+		.index('by_sourceId_and_versionNumber', ['sourceId', 'versionNumber']),
+
+	source_item_embeddings: defineTable({
+		sourceItemId: v.id('source_items'),
+		model: v.string(),
+		embedding: v.array(v.number()),
+		createdAt: v.number()
+	}).index('by_sourceItemId', ['sourceItemId']),
+
+	source_quality_assessments: defineTable({
+		sourceId: v.id('information_sources'),
+		assessorType: v.union(v.literal('llm'), v.literal('human'), v.literal('community')),
+		assessorId: v.optional(v.string()),
+		factualReliability: v.number(),
+		biasScore: v.number(),
+		expertiseScore: v.number(),
+		rationale: v.optional(v.string()),
+		createdAt: v.number()
+	})
+		.index('by_sourceId', ['sourceId'])
+		.index('by_sourceId_and_assessorType', ['sourceId', 'assessorType']),
+
+	// Layer 2: Extraction
+	knowledge_extraction_jobs: defineTable({
+		sourceId: v.id('information_sources'),
+		sourceVersionId: v.optional(v.id('source_versions')),
+		userId: v.string(),
+		status: v.union(
+			v.literal('pending'),
+			v.literal('running'),
+			v.literal('completed'),
+			v.literal('failed')
+		),
+		stage: v.optional(
+			v.union(
+				v.literal('queued'),
+				v.literal('loading_source'),
+				v.literal('synthesizing'),
+				v.literal('saving'),
+				v.literal('completed'),
+				v.literal('failed')
+			)
+		),
+		model: v.string(),
+		promptVersion: v.string(),
+		outputSummary: v.optional(v.string()),
+		outputR2Key: v.optional(v.string()),
+		tokenUsage: v.optional(
+			v.object({
+				input: v.number(),
+				output: v.number()
+			})
+		),
+		cost: v.optional(v.number()),
+		error: v.optional(v.string()),
+		startedAt: v.number(),
+		completedAt: v.optional(v.number())
+	})
+		.index('by_sourceId', ['sourceId'])
+		.index('by_userId_and_startedAt', ['userId', 'startedAt'])
+		.index('by_userId_and_status', ['userId', 'status']),
+
+	knowledge_extracted_candidates: defineTable({
+		sourceId: v.id('information_sources'),
+		extractionJobId: v.id('knowledge_extraction_jobs'),
+		userId: v.string(),
+		candidateKey: v.string(),
+		cellType: v.union(
+			v.literal('FACT'),
+			v.literal('CONCEPT'),
+			v.literal('PRINCIPLE'),
+			v.literal('PROCEDURE'),
+			v.literal('HEURISTIC'),
+			v.literal('QUESTION')
+		),
+		title: v.string(),
+		summary: v.string(),
+		content: v.string(),
+		r2Key: v.string(),
+		status: v.union(
+			v.literal('pending'),
+			v.literal('approved'),
+			v.literal('merged'),
+			v.literal('rejected')
+		),
+		mergedIntoCellId: v.optional(v.id('knowledge_cells')),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_sourceId', ['sourceId'])
+		.index('by_extractionJobId', ['extractionJobId'])
+		.index('by_userId_and_createdAt', ['userId', 'createdAt'])
+		.index('by_status', ['status']),
+
+	knowledge_candidate_citations: defineTable({
+		candidateId: v.id('knowledge_extracted_candidates'),
+		sourceItemId: v.optional(v.id('source_items')),
+		quote: v.string(),
+		confidence: v.number(),
+		createdAt: v.number()
+	})
+		.index('by_candidateId', ['candidateId'])
+		.index('by_sourceItemId', ['sourceItemId']),
+
+	knowledge_candidate_relationships: defineTable({
+		sourceCandidateId: v.id('knowledge_extracted_candidates'),
+		targetCandidateId: v.id('knowledge_extracted_candidates'),
+		relationshipType: v.union(
+			v.literal('prerequisite_for'),
+			v.literal('contradicts'),
+			v.literal('supports'),
+			v.literal('related_to'),
+			v.literal('part_of'),
+			v.literal('example_of')
+		),
+		confidence: v.number(),
+		createdAt: v.number()
+	})
+		.index('by_sourceCandidateId', ['sourceCandidateId'])
+		.index('by_targetCandidateId', ['targetCandidateId']),
+
+	knowledge_candidate_versions: defineTable({
+		candidateId: v.id('knowledge_extracted_candidates'),
+		content: v.string(),
+		model: v.string(),
+		promptVersion: v.string(),
+		extractionJobId: v.id('knowledge_extraction_jobs'),
+		createdAt: v.number()
+	}).index('by_candidateId', ['candidateId']),
+
+	knowledge_candidate_votes: defineTable({
+		candidateId: v.id('knowledge_extracted_candidates'),
+		model: v.string(),
+		agrees: v.boolean(),
+		confidence: v.number(),
+		rationale: v.optional(v.string()),
+		createdAt: v.number()
+	}).index('by_candidateId', ['candidateId']),
+
+	// Layer 3: Knowledge Graph
+	knowledge_domains: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		icon: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	}).index('by_name', ['name']),
+
+	domain_topics: defineTable({
+		domainId: v.id('knowledge_domains'),
+		topicId: v.id('knowledge_cell_topics'),
+		createdAt: v.number()
+	})
+		.index('by_domainId', ['domainId'])
+		.index('by_topicId', ['topicId']),
+
+	knowledge_cells: defineTable({
+		cellKey: v.string(),
+		cellType: v.union(
+			v.literal('FACT'),
+			v.literal('CONCEPT'),
+			v.literal('PRINCIPLE'),
+			v.literal('PROCEDURE'),
+			v.literal('HEURISTIC'),
+			v.literal('QUESTION')
+		),
+		title: v.string(),
+		summary: v.string(),
+		content: v.string(),
+		r2Key: v.string(),
+		source: v.union(v.literal('llm_extracted'), v.literal('human_created'), v.literal('community')),
+		topicId: v.id('knowledge_cell_topics'),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_cellKey', ['cellKey'])
+		.index('by_topicId', ['topicId'])
+		.index('by_source', ['source'])
+		.index('by_createdAt', ['createdAt']),
+
+	knowledge_cell_versions: defineTable({
+		cellId: v.id('knowledge_cells'),
+		title: v.string(),
+		summary: v.string(),
+		content: v.string(),
+		cellType: v.union(
+			v.literal('FACT'),
+			v.literal('CONCEPT'),
+			v.literal('PRINCIPLE'),
+			v.literal('PROCEDURE'),
+			v.literal('HEURISTIC'),
+			v.literal('QUESTION')
+		),
+		metadata: v.optional(v.any()),
+		validFrom: v.number(),
+		validUntil: v.optional(v.number()),
+		changedBy: v.optional(v.string()),
+		changeReason: v.optional(v.string()),
+		createdAt: v.number()
+	})
+		.index('by_cellId', ['cellId'])
+		.index('by_cellId_and_validFrom', ['cellId', 'validFrom']),
+
+	knowledge_claims: defineTable({
+		cellId: v.id('knowledge_cells'),
+		claimKey: v.string(),
+		statement: v.string(),
+		source: v.union(v.literal('llm_extracted'), v.literal('human_created'), v.literal('community')),
+		status: v.union(v.literal('active'), v.literal('superseded'), v.literal('refuted')),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_cellId', ['cellId'])
+		.index('by_claimKey', ['claimKey'])
+		.index('by_status', ['status']),
+
+	claim_evidence: defineTable({
+		claimId: v.id('knowledge_claims'),
+		sourceItemId: v.id('source_items'),
+		quote: v.string(),
+		confidence: v.number(),
+		evidenceType: v.union(
+			v.literal('study'),
+			v.literal('expert_opinion'),
+			v.literal('data'),
+			v.literal('anecdote')
+		),
+		sampleSize: v.optional(v.number()),
+		createdAt: v.number()
+	})
+		.index('by_claimId', ['claimId'])
+		.index('by_sourceItemId', ['sourceItemId']),
+
+	claim_assessments: defineTable({
+		claimId: v.id('knowledge_claims'),
+		assessmentType: v.union(v.literal('llm'), v.literal('human'), v.literal('community')),
+		userId: v.optional(v.string()),
+		consensus: v.number(),
+		rationale: v.optional(v.string()),
+		createdAt: v.number()
+	})
+		.index('by_claimId', ['claimId'])
+		.index('by_claimId_and_assessmentType', ['claimId', 'assessmentType']),
+
+	knowledge_cell_citations: defineTable({
+		cellId: v.id('knowledge_cells'),
+		sourceItemId: v.optional(v.id('source_items')),
+		quote: v.string(),
+		confidence: v.number(),
+		createdAt: v.number()
+	})
+		.index('by_cellId', ['cellId'])
+		.index('by_sourceItemId', ['sourceItemId']),
+
+	knowledge_cell_relationships: defineTable({
+		sourceCellId: v.id('knowledge_cells'),
+		targetCellId: v.id('knowledge_cells'),
+		relationshipType: v.union(
+			v.literal('prerequisite_for'),
+			v.literal('contradicts'),
+			v.literal('supports'),
+			v.literal('related_to'),
+			v.literal('part_of'),
+			v.literal('example_of')
+		),
+		confidence: v.number(),
+		createdAt: v.number()
+	})
+		.index('by_sourceCellId', ['sourceCellId'])
+		.index('by_targetCellId', ['targetCellId'])
+		.index('by_relationshipType', ['relationshipType']),
+
+	knowledge_cell_topics: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		parentId: v.optional(v.id('knowledge_cell_topics')),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_name', ['name'])
+		.index('by_parentId', ['parentId']),
+
+	knowledge_cell_origins: defineTable({
+		cellId: v.id('knowledge_cells'),
+		candidateId: v.id('knowledge_extracted_candidates'),
+		extractionRunId: v.id('knowledge_extraction_jobs'),
+		contributionWeight: v.number(),
+		createdAt: v.number()
+	})
+		.index('by_cellId', ['cellId'])
+		.index('by_candidateId', ['candidateId']),
+
+	knowledge_cell_quality: defineTable({
+		cellId: v.id('knowledge_cells'),
+		score: v.number(),
+		citationCount: v.number(),
+		averageSourceQuality: v.number(),
+		assessmentCount: v.number(),
+		contradictionCount: v.number(),
+		ageDays: v.number(),
+		lastVerifiedAt: v.number(),
+		verificationStatus: v.union(
+			v.literal('fresh'),
+			v.literal('aging'),
+			v.literal('stale'),
+			v.literal('needs_review')
+		),
+		verificationDue: v.optional(v.number()),
+		computedAt: v.number()
+	})
+		.index('by_cellId', ['cellId'])
+		.index('by_score', ['score'])
+		.index('by_verificationStatus', ['verificationStatus']),
+
+	knowledge_cell_metrics: defineTable({
+		cellId: v.id('knowledge_cells'),
+		certainty: v.number(),
+		evidenceStrength: v.number(),
+		scientificConsensus: v.number(),
+		controversyLevel: v.number(),
+		recency: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	}).index('by_cellId', ['cellId']),
+
+	knowledge_views: defineTable({
+		cellId: v.id('knowledge_cells'),
+		audience: v.union(
+			v.literal('child'),
+			v.literal('student'),
+			v.literal('upsc'),
+			v.literal('expert'),
+			v.literal('general')
+		),
+		explanation: v.string(),
+		simplifiedContent: v.optional(v.string()),
+		generatedBy: v.string(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_cellId', ['cellId'])
+		.index('by_cellId_and_audience', ['cellId', 'audience']),
+
+	// Layer 4: Personal Knowledge
+	user_knowledge_cells: defineTable({
+		userId: v.string(),
+		cellId: v.id('knowledge_cells'),
+		relationship: v.union(
+			v.literal('learning'),
+			v.literal('learned'),
+			v.literal('teaching'),
+			v.literal('reviewing')
+		),
+		progress: v.number(),
+		lastInteractionAt: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_userId', ['userId'])
+		.index('by_userId_and_cellId', ['userId', 'cellId'])
+		.index('by_userId_and_relationship', ['userId', 'relationship']),
+
+	user_cell_mastery: defineTable({
+		userId: v.string(),
+		cellId: v.id('knowledge_cells'),
+		remember: v.boolean(),
+		understand: v.boolean(),
+		apply: v.boolean(),
+		analyze: v.boolean(),
+		evaluate: v.boolean(),
+		create: v.boolean(),
+		lastAssessedAt: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_userId', ['userId'])
+		.index('by_userId_and_cellId', ['userId', 'cellId']),
+
+	knowledge_cell_assessments: defineTable({
+		cellId: v.id('knowledge_cells'),
+		assessmentType: v.union(v.literal('llm'), v.literal('human'), v.literal('community')),
+		userId: v.optional(v.string()),
+		confidence: v.number(),
+		importance: v.number(),
+		difficulty: v.number(),
+		rationale: v.optional(v.string()),
+		createdAt: v.number()
+	})
+		.index('by_cellId', ['cellId'])
+		.index('by_cellId_and_assessmentType', ['cellId', 'assessmentType']),
+
+	knowledge_cell_embeddings: defineTable({
+		cellId: v.id('knowledge_cells'),
+		versionId: v.optional(v.id('knowledge_cell_versions')),
+		contentHash: v.optional(v.string()),
+		model: v.string(),
+		embedding: v.array(v.number()),
+		createdAt: v.number()
+	})
+		.index('by_cellId', ['cellId'])
+		.index('by_cellId_and_versionId', ['cellId', 'versionId']),
+
+	knowledge_cell_events: defineTable({
+		userId: v.string(),
+		cellId: v.id('knowledge_cells'),
+		eventType: v.union(
+			v.literal('read'),
+			v.literal('practice'),
+			v.literal('review'),
+			v.literal('teach'),
+			v.literal('failed_recall'),
+			v.literal('forgotten'),
+			v.literal('incorrect_answer')
+		),
+		context: v.optional(v.string()),
+		durationMs: v.optional(v.number()),
+		createdAt: v.number()
+	})
+		.index('by_userId', ['userId'])
+		.index('by_userId_and_cellId', ['userId', 'cellId'])
+		.index('by_userId_and_eventType', ['userId', 'eventType'])
+		.index('by_cellId', ['cellId']),
+
+	knowledge_cell_reminders: defineTable({
+		userId: v.string(),
+		cellId: v.id('knowledge_cells'),
+		nextReviewAt: v.number(),
+		intervalMs: v.number(),
+		easeFactor: v.number(),
+		repetitionCount: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_userId', ['userId'])
+		.index('by_userId_and_nextReviewAt', ['userId', 'nextReviewAt'])
+		.index('by_userId_and_cellId', ['userId', 'cellId'])
+		.index('by_cellId', ['cellId']),
+
+	// Layer 5: Synthesis
+	knowledge_notes: defineTable({
+		userId: v.string(),
+		title: v.string(),
+		summary: v.string(),
+		content: v.string(),
+		r2Key: v.string(),
+		sourceId: v.optional(v.id('information_sources')),
+		status: v.union(
+			v.literal('draft'),
+			v.literal('review'),
+			v.literal('published'),
+			v.literal('archived')
+		),
+		version: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_userId', ['userId'])
+		.index('by_userId_and_createdAt', ['userId', 'createdAt'])
+		.index('by_userId_and_status', ['userId', 'status'])
+		.index('by_sourceId', ['sourceId']),
+
+	knowledge_note_contributions: defineTable({
+		noteId: v.id('knowledge_notes'),
+		cellId: v.id('knowledge_cells'),
+		contributionWeight: v.number(),
+		blockId: v.optional(v.id('knowledge_note_blocks')),
+		createdAt: v.number()
+	})
+		.index('by_noteId', ['noteId'])
+		.index('by_cellId', ['cellId']),
+
+	knowledge_note_blocks: defineTable({
+		noteId: v.id('knowledge_notes'),
+		blockType: v.union(
+			v.literal('paragraph'),
+			v.literal('list'),
+			v.literal('quote'),
+			v.literal('diagram'),
+			v.literal('question')
+		),
+		content: v.string(),
+		order: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_noteId', ['noteId'])
+		.index('by_noteId_and_order', ['noteId', 'order']),
+
+	// Layer 6: Learning & Education
+	learning_goals: defineTable({
+		userId: v.string(),
+		title: v.string(),
+		description: v.optional(v.string()),
+		goalType: v.union(
+			v.literal('course'),
+			v.literal('curriculum'),
+			v.literal('training'),
+			v.literal('self_study')
+		),
+		status: v.union(
+			v.literal('active'),
+			v.literal('completed'),
+			v.literal('paused'),
+			v.literal('abandoned')
+		),
+		targetDate: v.optional(v.number()),
+		progress: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_userId', ['userId'])
+		.index('by_userId_and_status', ['userId', 'status']),
+
+	learning_goal_topics: defineTable({
+		goalId: v.id('learning_goals'),
+		topicId: v.id('knowledge_cell_topics'),
+		priority: v.number(),
+		createdAt: v.number()
+	})
+		.index('by_goalId', ['goalId'])
+		.index('by_topicId', ['topicId']),
+
+	learning_goal_cells: defineTable({
+		goalId: v.id('learning_goals'),
+		cellId: v.id('knowledge_cells'),
+		status: v.union(v.literal('pending'), v.literal('learning'), v.literal('mastered')),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_goalId', ['goalId'])
+		.index('by_cellId', ['cellId']),
+
+	knowledge_paths: defineTable({
+		userId: v.string(),
+		title: v.string(),
+		description: v.optional(v.string()),
+		domainId: v.optional(v.id('knowledge_domains')),
+		status: v.union(v.literal('draft'), v.literal('active'), v.literal('completed')),
+		totalSteps: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_userId', ['userId'])
+		.index('by_userId_and_status', ['userId', 'status']),
+
+	path_steps: defineTable({
+		pathId: v.id('knowledge_paths'),
+		cellId: v.id('knowledge_cells'),
+		stepOrder: v.number(),
+		isOptional: v.boolean(),
+		createdAt: v.number()
+	})
+		.index('by_pathId', ['pathId'])
+		.index('by_pathId_and_stepOrder', ['pathId', 'stepOrder'])
+		.index('by_cellId', ['cellId']),
+
+	knowledge_recommendations: defineTable({
+		userId: v.string(),
+		recommendedCellId: v.id('knowledge_cells'),
+		reason: v.union(
+			v.literal('gap'),
+			v.literal('prerequisite'),
+			v.literal('related'),
+			v.literal('review'),
+			v.literal('goal'),
+			v.literal('path')
+		),
+		explanation: v.string(),
+		priority: v.number(),
+		status: v.union(v.literal('pending'), v.literal('viewed'), v.literal('completed')),
+		goalId: v.optional(v.id('learning_goals')),
+		pathId: v.optional(v.id('knowledge_paths')),
+		createdAt: v.number()
+	})
+		.index('by_userId', ['userId'])
+		.index('by_userId_and_status', ['userId', 'status'])
+		.index('by_userId_and_priority', ['userId', 'priority'])
+		.index('by_recommendedCellId', ['recommendedCellId'])
+		.index('by_goalId', ['goalId'])
+		.index('by_pathId', ['pathId']),
+
+	conflict_cases: defineTable({
+		cellAId: v.id('knowledge_cells'),
+		cellBId: v.id('knowledge_cells'),
+		conflictType: v.union(
+			v.literal('contradiction'),
+			v.literal('inconsistency'),
+			v.literal('ambiguity')
+		),
+		status: v.union(
+			v.literal('open'),
+			v.literal('investigating'),
+			v.literal('resolved'),
+			v.literal('dismissed')
+		),
+		resolution: v.optional(
+			v.union(
+				v.literal('favor_a'),
+				v.literal('favor_b'),
+				v.literal('both_valid'),
+				v.literal('both_invalid'),
+				v.literal('merged')
+			)
+		),
+		resolutionReason: v.optional(v.string()),
+		resolvedBy: v.optional(v.string()),
+		resolvedAt: v.optional(v.number()),
+		createdAt: v.number()
+	})
+		.index('by_cellAId', ['cellAId'])
+		.index('by_cellBId', ['cellBId'])
+		.index('by_status', ['status']),
+
+	// Layer 7: Agent Orchestration
+	agent_runs: defineTable({
+		agentType: v.string(),
+		workflowId: v.optional(v.id('agent_workflows')),
+		userId: v.optional(v.string()),
+		inputHash: v.string(),
+		status: v.union(
+			v.literal('pending'),
+			v.literal('running'),
+			v.literal('completed'),
+			v.literal('failed')
+		),
+		outputSummary: v.optional(v.string()),
+		outputR2Key: v.optional(v.string()),
+		tokenUsage: v.optional(
+			v.object({
+				input: v.number(),
+				output: v.number()
+			})
+		),
+		cost: v.optional(v.number()),
+		error: v.optional(v.string()),
+		startedAt: v.number(),
+		completedAt: v.optional(v.number()),
+		durationMs: v.optional(v.number())
+	})
+		.index('by_agentType', ['agentType'])
+		.index('by_userId', ['userId'])
+		.index('by_userId_and_createdAt', ['userId', 'startedAt'])
+		.index('by_status', ['status']),
+
+	agent_memories: defineTable({
+		agentType: v.string(),
+		memoryType: v.union(
+			v.literal('source_quality'),
+			v.literal('user_preference'),
+			v.literal('extraction_pattern'),
+			v.literal('verification_rule')
+		),
+		key: v.string(),
+		value: v.any(),
+		confidence: v.number(),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_agentType', ['agentType'])
+		.index('by_agentType_and_memoryType', ['agentType', 'memoryType']),
+
+	agent_workflows: defineTable({
+		name: v.string(),
+		description: v.optional(v.string()),
+		triggerType: v.union(v.literal('manual'), v.literal('scheduled'), v.literal('event')),
+		status: v.union(v.literal('active'), v.literal('paused'), v.literal('archived')),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_name', ['name'])
+		.index('by_status', ['status']),
+
+	workflow_steps: defineTable({
+		workflowId: v.id('agent_workflows'),
+		agentType: v.string(),
+		stepOrder: v.number(),
+		config: v.optional(v.any()),
+		createdAt: v.number()
+	})
+		.index('by_workflowId', ['workflowId'])
+		.index('by_workflowId_and_stepOrder', ['workflowId', 'stepOrder']),
+
+	// Layer 8: Semantic Graph
+	knowledge_entities: defineTable({
+		entityType: v.union(
+			v.literal('person'),
+			v.literal('organization'),
+			v.literal('place'),
+			v.literal('concept'),
+			v.literal('event'),
+			v.literal('technology')
+		),
+		name: v.string(),
+		canonicalName: v.string(),
+		aliases: v.array(v.string()),
+		description: v.optional(v.string()),
+		externalIds: v.optional(v.any()),
+		createdAt: v.number(),
+		updatedAt: v.number()
+	})
+		.index('by_canonicalName', ['canonicalName'])
+		.index('by_entityType', ['entityType']),
+
+	knowledge_entity_relationships: defineTable({
+		sourceEntityId: v.id('knowledge_entities'),
+		targetEntityId: v.id('knowledge_entities'),
+		relationshipType: v.union(
+			v.literal('participated_in'),
+			v.literal('located_in'),
+			v.literal('founded'),
+			v.literal('invented'),
+			v.literal('related_to'),
+			v.literal('member_of')
+		),
+		confidence: v.number(),
+		createdAt: v.number()
+	})
+		.index('by_sourceEntityId', ['sourceEntityId'])
+		.index('by_targetEntityId', ['targetEntityId'])
+		.index('by_relationshipType', ['relationshipType']),
+
+	knowledge_cell_entity_links: defineTable({
+		cellId: v.id('knowledge_cells'),
+		entityId: v.id('knowledge_entities'),
+		relevance: v.number(),
+		createdAt: v.number()
+	})
+		.index('by_cellId', ['cellId'])
+		.index('by_entityId', ['entityId']),
+
+	knowledge_cell_perspective_embeddings: defineTable({
+		cellId: v.id('knowledge_cells'),
+		perspective: v.union(
+			v.literal('general'),
+			v.literal('student'),
+			v.literal('researcher'),
+			v.literal('domain_specific')
+		),
+		domainId: v.optional(v.id('knowledge_domains')),
+		model: v.string(),
+		embedding: v.array(v.number()),
+		createdAt: v.number()
+	})
+		.index('by_cellId', ['cellId'])
+		.index('by_cellId_and_perspective', ['cellId', 'perspective']),
+
+	knowledge_cell_confidence: defineTable({
+		cellId: v.id('knowledge_cells'),
+		confidence: v.number(),
+		confidenceInterval: v.array(v.number()),
+		evidenceCount: v.number(),
+		sampleSize: v.optional(v.number()),
+		computedAt: v.number()
+	}).index('by_cellId', ['cellId']),
 	source_jobs: defineTable({
 		jobType: v.union(
 			v.literal('sync_source'),
@@ -363,7 +1154,20 @@ const schema = defineSchema({
 	deletion_jobs: defineTable({
 		requestKey: v.string(),
 		requestedByAuthId: v.string(),
-		targetType: v.union(v.literal('source'), v.literal('source_item'), v.literal('post')),
+		targetType: v.union(
+			v.literal('source'),
+			v.literal('source_item'),
+			v.literal('post'),
+			v.literal('community'),
+			v.literal('user'),
+			v.literal('knowledge_cell'),
+			v.literal('knowledge_note'),
+			v.literal('information_source'),
+			v.literal('domain'),
+			v.literal('entity'),
+			v.literal('goal'),
+			v.literal('path')
+		),
 		targetId: v.string(),
 		status: v.union(
 			v.literal('queued'),
