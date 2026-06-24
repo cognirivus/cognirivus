@@ -68,6 +68,14 @@ export const deletePostCascadeByDoc = async (
 		await ctx.db.delete(summary._id);
 	}
 
+	const similarLinks = await ctx.db
+		.query('similar_links_cache')
+		.filter((q: any) => q.eq(q.field('entityId'), post._id))
+		.collect();
+	for (const link of similarLinks) {
+		await ctx.db.delete(link._id);
+	}
+
 	await trackPostDeleted(ctx, post);
 	await ctx.db.delete(post._id);
 
