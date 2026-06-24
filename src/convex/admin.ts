@@ -21,6 +21,17 @@ import { JOB_FAILURE_CODE, toFailureMessage } from './lib/jobFailure';
 import { assertDeletionJobTransition, assertR2RetryJobTransition } from './lib/jobTransitions';
 import { deletePostCascadeByDoc } from './lib/postDeletion';
 import { toR2RetryJobResponse, type R2RetryJobResponse } from './lib/serializers';
+import {
+	deleteUserCascadeByAuthId,
+	deleteKnowledgeCellCascadeByCellId,
+	deleteInformationSourceCascade,
+	deleteKnowledgeNoteCascade,
+	deleteDomainCascade,
+	deleteEntityCascade,
+	deleteGoalCascade,
+	deletePathCascade,
+	deleteCommunityCascadeByDoc
+} from './lib/cascadeDeletion';
 
 const stringifyDetails = (value: unknown): string => {
 	try {
@@ -189,7 +200,16 @@ const deletePostDbResultValidator = v.object({
 const deletionJobTargetTypeValidator = v.union(
 	v.literal('source'),
 	v.literal('source_item'),
-	v.literal('post')
+	v.literal('post'),
+	v.literal('community'),
+	v.literal('user'),
+	v.literal('knowledge_cell'),
+	v.literal('knowledge_note'),
+	v.literal('information_source'),
+	v.literal('domain'),
+	v.literal('entity'),
+	v.literal('goal'),
+	v.literal('path')
 );
 
 const deletionJobStatusValidator = v.union(
@@ -333,7 +353,19 @@ type DeletePostPermanentlyResult = {
 	r2Deleted: boolean;
 };
 
-type DeletionJobTargetType = 'source' | 'source_item' | 'post';
+type DeletionJobTargetType =
+	| 'source'
+	| 'source_item'
+	| 'post'
+	| 'community'
+	| 'user'
+	| 'knowledge_cell'
+	| 'knowledge_note'
+	| 'information_source'
+	| 'domain'
+	| 'entity'
+	| 'goal'
+	| 'path';
 
 type DeletionJobClaim = {
 	jobId: Id<'deletion_jobs'>;
@@ -457,6 +489,100 @@ const deleteSubscriptionsForSource = async (ctx: any, sourceId: Id<'sources'>) =
 		const batch = await ctx.db
 			.query('source_subscriptions')
 			.withIndex('by_sourceId_and_updatedAt', (q: any) => q.eq('sourceId', sourceId))
+			.take(200);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
+const deleteInformationSourcesForSourceItem = async (
+	ctx: any,
+	sourceItemId: Id<'source_items'>
+) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('information_sources')
+			.withIndex('by_sourceItemId', (q: any) => q.eq('sourceItemId', sourceItemId))
+			.take(100);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
+const deleteSourceItemEmbeddingsForSourceItem = async (
+	ctx: any,
+	sourceItemId: Id<'source_items'>
+) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('source_item_embeddings')
+			.withIndex('by_sourceItemId', (q: any) => q.eq('sourceItemId', sourceItemId))
+			.take(200);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
+const deleteCandidateCitationsForSourceItem = async (
+	ctx: any,
+	sourceItemId: Id<'source_items'>
+) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('knowledge_candidate_citations')
+			.withIndex('by_sourceItemId', (q: any) => q.eq('sourceItemId', sourceItemId))
+			.take(200);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
+const deleteCellCitationsForSourceItem = async (ctx: any, sourceItemId: Id<'source_items'>) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('knowledge_cell_citations')
+			.withIndex('by_sourceItemId', (q: any) => q.eq('sourceItemId', sourceItemId))
+			.take(200);
+		if (batch.length === 0) {
+			return deleted;
+		}
+		for (const row of batch) {
+			await ctx.db.delete(row._id);
+			deleted += 1;
+		}
+	}
+};
+
+const deleteClaimEvidenceForSourceItem = async (ctx: any, sourceItemId: Id<'source_items'>) => {
+	let deleted = 0;
+	while (true) {
+		const batch = await ctx.db
+			.query('claim_evidence')
+			.withIndex('by_sourceItemId', (q: any) => q.eq('sourceItemId', sourceItemId))
 			.take(200);
 		if (batch.length === 0) {
 			return deleted;
@@ -1226,6 +1352,12 @@ export const deleteSourceCascadeFromDb = internalMutation({
 						deliveryCount += 1;
 					}
 				}
+
+				await deleteInformationSourcesForSourceItem(ctx, sourceItem._id);
+				await deleteSourceItemEmbeddingsForSourceItem(ctx, sourceItem._id);
+				await deleteCandidateCitationsForSourceItem(ctx, sourceItem._id);
+				await deleteCellCitationsForSourceItem(ctx, sourceItem._id);
+				await deleteClaimEvidenceForSourceItem(ctx, sourceItem._id);
 
 				await trackSourceItemDeleted(ctx, sourceItem);
 				await ctx.db.delete(sourceItem._id);
@@ -2206,6 +2338,1094 @@ export const deletePostPermanently = action({
 				action: 'deletePostPermanently',
 				targetType: 'post',
 				targetId: args.postId,
+				status: 'failed',
+				details: failureMessage
+			});
+			throw error;
+		}
+	}
+});
+
+const dashboardCommunityValidator = v.object({
+	_id: v.id('communities'),
+	_creationTime: v.number(),
+	slug: v.string(),
+	name: v.string(),
+	visibility: v.union(v.literal('public'), v.literal('private')),
+	ownerAuthId: v.string(),
+	createdAt: v.number()
+});
+
+const dashboardUserValidator = v.object({
+	_id: v.id('users_profile'),
+	_creationTime: v.number(),
+	authId: v.string(),
+	name: v.string(),
+	email: v.optional(v.string()),
+	createdAt: v.number()
+});
+
+const dashboardKnowledgeCellValidator = v.object({
+	_id: v.id('knowledge_cells'),
+	_creationTime: v.number(),
+	title: v.string(),
+	cellType: v.string(),
+	topicId: v.id('knowledge_cell_topics'),
+	source: v.string(),
+	createdAt: v.number()
+});
+
+const dashboardKnowledgeNoteValidator = v.object({
+	_id: v.id('knowledge_notes'),
+	_creationTime: v.number(),
+	title: v.string(),
+	userId: v.string(),
+	status: v.union(
+		v.literal('draft'),
+		v.literal('review'),
+		v.literal('published'),
+		v.literal('archived')
+	),
+	createdAt: v.number()
+});
+
+const dashboardInformationSourceValidator = v.object({
+	_id: v.id('information_sources'),
+	_creationTime: v.number(),
+	title: v.string(),
+	sourceType: v.union(v.literal('url'), v.literal('upload'), v.literal('text')),
+	status: v.union(
+		v.literal('pending'),
+		v.literal('processing'),
+		v.literal('ready'),
+		v.literal('failed')
+	),
+	createdAt: v.number()
+});
+
+const dashboardDomainValidator = v.object({
+	_id: v.id('knowledge_domains'),
+	_creationTime: v.number(),
+	name: v.string(),
+	description: v.optional(v.string()),
+	createdAt: v.number()
+});
+
+const dashboardEntityValidator = v.object({
+	_id: v.id('knowledge_entities'),
+	_creationTime: v.number(),
+	name: v.string(),
+	entityType: v.string(),
+	createdAt: v.number()
+});
+
+const dashboardGoalValidator = v.object({
+	_id: v.id('learning_goals'),
+	_creationTime: v.number(),
+	title: v.string(),
+	userId: v.string(),
+	goalType: v.string(),
+	status: v.string(),
+	createdAt: v.number()
+});
+
+const dashboardPathValidator = v.object({
+	_id: v.id('knowledge_paths'),
+	_creationTime: v.number(),
+	title: v.string(),
+	userId: v.string(),
+	status: v.union(v.literal('draft'), v.literal('active'), v.literal('completed')),
+	createdAt: v.number()
+});
+
+export const listCommunities = query({
+	args: { limit: v.optional(v.number()) },
+	returns: v.array(dashboardCommunityValidator),
+	handler: async (ctx, args) => {
+		await requireAdminUser(ctx);
+		const rows = await ctx.db
+			.query('communities')
+			.withIndex('by_visibility_and_createdAt')
+			.order('desc')
+			.take(Math.min(args.limit ?? 30, 50));
+		return rows.map((c) => ({
+			_id: c._id,
+			_creationTime: c._creationTime,
+			name: c.name,
+			ownerAuthId: c.ownerAuthId,
+			slug: c.slug,
+			visibility: c.visibility,
+			createdAt: c.createdAt
+		}));
+	}
+});
+
+export const listUsers = query({
+	args: { limit: v.optional(v.number()) },
+	returns: v.array(dashboardUserValidator),
+	handler: async (ctx, args) => {
+		await requireAdminUser(ctx);
+		const rows = await ctx.db
+			.query('users_profile')
+			.withIndex('by_authId')
+			.order('desc')
+			.take(Math.min(args.limit ?? 30, 50));
+		return rows.map((u) => ({
+			_id: u._id,
+			_creationTime: u._creationTime,
+			authId: u.authId,
+			name: u.name,
+			email: u.email,
+			createdAt: u.createdAt
+		}));
+	}
+});
+
+export const listKnowledgeCells = query({
+	args: { limit: v.optional(v.number()) },
+	returns: v.array(dashboardKnowledgeCellValidator),
+	handler: async (ctx, args) => {
+		await requireAdminUser(ctx);
+		const rows = await ctx.db
+			.query('knowledge_cells')
+			.withIndex('by_createdAt')
+			.order('desc')
+			.take(Math.min(args.limit ?? 30, 50));
+		return rows.map((c) => ({
+			_id: c._id,
+			_creationTime: c._creationTime,
+			title: c.title,
+			cellType: c.cellType,
+			topicId: c.topicId,
+			source: c.source,
+			createdAt: c.createdAt
+		}));
+	}
+});
+
+export const listKnowledgeNotes = query({
+	args: { limit: v.optional(v.number()) },
+	returns: v.array(dashboardKnowledgeNoteValidator),
+	handler: async (ctx, args) => {
+		await requireAdminUser(ctx);
+		const rows = await ctx.db
+			.query('knowledge_notes')
+			.withIndex('by_userId_and_createdAt')
+			.order('desc')
+			.take(Math.min(args.limit ?? 30, 50));
+		return rows.map((n) => ({
+			_id: n._id,
+			_creationTime: n._creationTime,
+			title: n.title,
+			userId: n.userId,
+			status: n.status,
+			createdAt: n.createdAt
+		}));
+	}
+});
+
+export const listInformationSources = query({
+	args: { limit: v.optional(v.number()) },
+	returns: v.array(dashboardInformationSourceValidator),
+	handler: async (ctx, args) => {
+		await requireAdminUser(ctx);
+		const rows = await ctx.db
+			.query('information_sources')
+			.withIndex('by_userId_and_createdAt')
+			.order('desc')
+			.take(Math.min(args.limit ?? 30, 50));
+		return rows.map((s) => ({
+			_id: s._id,
+			_creationTime: s._creationTime,
+			title: s.title,
+			sourceType: s.sourceType,
+			status: s.status,
+			createdAt: s.createdAt
+		}));
+	}
+});
+
+export const listDomains = query({
+	args: { limit: v.optional(v.number()) },
+	returns: v.array(dashboardDomainValidator),
+	handler: async (ctx, args) => {
+		await requireAdminUser(ctx);
+		return await ctx.db
+			.query('knowledge_domains')
+			.withIndex('by_name')
+			.order('asc')
+			.take(Math.min(args.limit ?? 30, 50));
+	}
+});
+
+export const listEntities = query({
+	args: { limit: v.optional(v.number()) },
+	returns: v.array(dashboardEntityValidator),
+	handler: async (ctx, args) => {
+		await requireAdminUser(ctx);
+		const rows = await ctx.db
+			.query('knowledge_entities')
+			.withIndex('by_canonicalName')
+			.order('asc')
+			.take(Math.min(args.limit ?? 30, 50));
+		return rows.map((e) => ({
+			_id: e._id,
+			_creationTime: e._creationTime,
+			name: e.name,
+			entityType: e.entityType,
+			createdAt: e.createdAt
+		}));
+	}
+});
+
+export const listGoals = query({
+	args: { limit: v.optional(v.number()) },
+	returns: v.array(dashboardGoalValidator),
+	handler: async (ctx, args) => {
+		await requireAdminUser(ctx);
+		const rows = await ctx.db
+			.query('learning_goals')
+			.withIndex('by_userId')
+			.order('desc')
+			.take(Math.min(args.limit ?? 30, 50));
+		return rows.map((g) => ({
+			_id: g._id,
+			_creationTime: g._creationTime,
+			title: g.title,
+			userId: g.userId,
+			goalType: g.goalType,
+			status: g.status,
+			createdAt: g.createdAt
+		}));
+	}
+});
+
+export const listPaths = query({
+	args: { limit: v.optional(v.number()) },
+	returns: v.array(dashboardPathValidator),
+	handler: async (ctx, args) => {
+		await requireAdminUser(ctx);
+		const rows = await ctx.db
+			.query('knowledge_paths')
+			.withIndex('by_userId')
+			.order('desc')
+			.take(Math.min(args.limit ?? 30, 50));
+		return rows.map((p) => ({
+			_id: p._id,
+			_creationTime: p._creationTime,
+			title: p.title,
+			userId: p.userId,
+			status: p.status,
+			createdAt: p.createdAt
+		}));
+	}
+});
+
+export const getCommunityDoc = internalQuery({
+	args: { communityId: v.id('communities') },
+	returns: v.union(v.null(), v.any()),
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.communityId);
+	}
+});
+
+export const deleteCommunityCascadeFromDb = internalMutation({
+	args: { communityId: v.id('communities') },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		const community = await ctx.db.get(args.communityId);
+		if (!community) return { deleted: false, r2Keys: [] };
+		const result = await deleteCommunityCascadeByDoc(ctx, community);
+		return { deleted: result.deleted, r2Keys: result.r2Keys };
+	}
+});
+
+export const deleteCommunityPermanently = action({
+	args: { communityId: v.id('communities') },
+	returns: v.object({
+		deleted: v.boolean(),
+		communityId: v.id('communities'),
+		r2DeletedCount: v.number()
+	}),
+	handler: async (
+		ctx,
+		args
+	): Promise<{ deleted: boolean; communityId: Id<'communities'>; r2DeletedCount: number }> => {
+		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('community', args.communityId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{
+				requestKey,
+				requestedByAuthId: authUser._id,
+				targetType: 'community',
+				targetId: args.communityId
+			}
+		);
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<any>(claim.result);
+			if (previous) return previous;
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress.'
+					: (claim.error ?? 'Deletion was already attempted.')
+			);
+		}
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deleteCommunityPermanently',
+			targetType: 'community',
+			targetId: args.communityId,
+			status: 'started'
+		});
+		try {
+			const result = await ctx.runMutation((internal as any).admin.deleteCommunityCascadeFromDb, {
+				communityId: args.communityId
+			});
+			const r2DeletedCount =
+				result.r2Keys.length > 0
+					? await deleteR2Keys(ctx, {
+							entityType: 'community',
+							entityId: args.communityId,
+							r2Keys: result.r2Keys
+						})
+					: 0;
+			const response = { deleted: result.deleted, communityId: args.communityId, r2DeletedCount };
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: JSON.stringify(response)
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteCommunityPermanently',
+				targetType: 'community',
+				targetId: args.communityId,
+				status: 'succeeded'
+			});
+			return response;
+		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_COMMUNITY_FAILED,
+				error,
+				'Community deletion failed.'
+			);
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: failureMessage
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteCommunityPermanently',
+				targetType: 'community',
+				targetId: args.communityId,
+				status: 'failed',
+				details: failureMessage
+			});
+			throw error;
+		}
+	}
+});
+
+export const deleteUserCascadeFromDb = internalMutation({
+	args: { authId: v.string() },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		return await deleteUserCascadeByAuthId(ctx, args.authId);
+	}
+});
+
+export const deleteUserPermanently = action({
+	args: { authId: v.string() },
+	returns: v.object({
+		deleted: v.boolean(),
+		authId: v.string(),
+		r2DeletedCount: v.number()
+	}),
+	handler: async (
+		ctx,
+		args
+	): Promise<{ deleted: boolean; authId: string; r2DeletedCount: number }> => {
+		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('user', args.authId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{ requestKey, requestedByAuthId: authUser._id, targetType: 'user', targetId: args.authId }
+		);
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<any>(claim.result);
+			if (previous) return previous;
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress.'
+					: (claim.error ?? 'Deletion was already attempted.')
+			);
+		}
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deleteUserPermanently',
+			targetType: 'user',
+			targetId: args.authId,
+			status: 'started'
+		});
+		try {
+			const result = await ctx.runMutation((internal as any).admin.deleteUserCascadeFromDb, {
+				authId: args.authId
+			});
+			const r2DeletedCount =
+				result.r2Keys.length > 0
+					? await deleteR2Keys(ctx, {
+							entityType: 'user',
+							entityId: args.authId,
+							r2Keys: result.r2Keys
+						})
+					: 0;
+			const response = { deleted: result.deleted, authId: args.authId, r2DeletedCount };
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: JSON.stringify(response)
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteUserPermanently',
+				targetType: 'user',
+				targetId: args.authId,
+				status: 'succeeded'
+			});
+			return response;
+		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_USER_FAILED,
+				error,
+				'User deletion failed.'
+			);
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: failureMessage
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteUserPermanently',
+				targetType: 'user',
+				targetId: args.authId,
+				status: 'failed',
+				details: failureMessage
+			});
+			throw error;
+		}
+	}
+});
+
+export const deleteKnowledgeCellCascadeFromDb = internalMutation({
+	args: { cellId: v.id('knowledge_cells') },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		return await deleteKnowledgeCellCascadeByCellId(ctx, args.cellId);
+	}
+});
+
+export const deleteKnowledgeCellPermanently = action({
+	args: { cellId: v.id('knowledge_cells') },
+	returns: v.object({
+		deleted: v.boolean(),
+		cellId: v.id('knowledge_cells'),
+		r2Deleted: v.boolean()
+	}),
+	handler: async (
+		ctx,
+		args
+	): Promise<{ deleted: boolean; cellId: Id<'knowledge_cells'>; r2Deleted: boolean }> => {
+		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('knowledge_cell', args.cellId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{
+				requestKey,
+				requestedByAuthId: authUser._id,
+				targetType: 'knowledge_cell',
+				targetId: args.cellId
+			}
+		);
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<any>(claim.result);
+			if (previous) return previous;
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress.'
+					: (claim.error ?? 'Deletion was already attempted.')
+			);
+		}
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deleteKnowledgeCellPermanently',
+			targetType: 'knowledge_cell',
+			targetId: args.cellId,
+			status: 'started'
+		});
+		try {
+			const result = await ctx.runMutation(
+				(internal as any).admin.deleteKnowledgeCellCascadeFromDb,
+				{ cellId: args.cellId }
+			);
+			const r2Deleted = result.r2Key
+				? (await deleteR2Keys(ctx, {
+						entityType: 'knowledge_cell',
+						entityId: args.cellId,
+						r2Keys: [result.r2Key]
+					})) > 0
+				: false;
+			const response = { deleted: result.deleted, cellId: args.cellId, r2Deleted };
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: JSON.stringify(response)
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteKnowledgeCellPermanently',
+				targetType: 'knowledge_cell',
+				targetId: args.cellId,
+				status: 'succeeded'
+			});
+			return response;
+		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_KNOWLEDGE_CELL_FAILED,
+				error,
+				'Knowledge cell deletion failed.'
+			);
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: failureMessage
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteKnowledgeCellPermanently',
+				targetType: 'knowledge_cell',
+				targetId: args.cellId,
+				status: 'failed',
+				details: failureMessage
+			});
+			throw error;
+		}
+	}
+});
+
+export const deleteKnowledgeNoteCascadeFromDb = internalMutation({
+	args: { noteId: v.id('knowledge_notes') },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		return await deleteKnowledgeNoteCascade(ctx, args.noteId);
+	}
+});
+
+export const deleteKnowledgeNotePermanently = action({
+	args: { noteId: v.id('knowledge_notes') },
+	returns: v.object({
+		deleted: v.boolean(),
+		noteId: v.id('knowledge_notes'),
+		r2Deleted: v.boolean()
+	}),
+	handler: async (
+		ctx,
+		args
+	): Promise<{ deleted: boolean; noteId: Id<'knowledge_notes'>; r2Deleted: boolean }> => {
+		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('knowledge_note', args.noteId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{
+				requestKey,
+				requestedByAuthId: authUser._id,
+				targetType: 'knowledge_note',
+				targetId: args.noteId
+			}
+		);
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<any>(claim.result);
+			if (previous) return previous;
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress.'
+					: (claim.error ?? 'Deletion was already attempted.')
+			);
+		}
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deleteKnowledgeNotePermanently',
+			targetType: 'knowledge_note',
+			targetId: args.noteId,
+			status: 'started'
+		});
+		try {
+			const result = await ctx.runMutation(
+				(internal as any).admin.deleteKnowledgeNoteCascadeFromDb,
+				{ noteId: args.noteId }
+			);
+			const r2Deleted = result.r2Key
+				? (await deleteR2Keys(ctx, {
+						entityType: 'knowledge_note',
+						entityId: args.noteId,
+						r2Keys: [result.r2Key]
+					})) > 0
+				: false;
+			const response = { deleted: result.deleted, noteId: args.noteId, r2Deleted };
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: JSON.stringify(response)
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteKnowledgeNotePermanently',
+				targetType: 'knowledge_note',
+				targetId: args.noteId,
+				status: 'succeeded'
+			});
+			return response;
+		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_KNOWLEDGE_NOTE_FAILED,
+				error,
+				'Knowledge note deletion failed.'
+			);
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: failureMessage
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteKnowledgeNotePermanently',
+				targetType: 'knowledge_note',
+				targetId: args.noteId,
+				status: 'failed',
+				details: failureMessage
+			});
+			throw error;
+		}
+	}
+});
+
+export const deleteInformationSourceCascadeFromDb = internalMutation({
+	args: { sourceId: v.id('information_sources') },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		return await deleteInformationSourceCascade(ctx, args.sourceId);
+	}
+});
+
+export const deleteInformationSourcePermanently = action({
+	args: { sourceId: v.id('information_sources') },
+	returns: v.object({
+		deleted: v.boolean(),
+		sourceId: v.id('information_sources'),
+		r2DeletedCount: v.number()
+	}),
+	handler: async (
+		ctx,
+		args
+	): Promise<{ deleted: boolean; sourceId: Id<'information_sources'>; r2DeletedCount: number }> => {
+		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('information_source', args.sourceId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{
+				requestKey,
+				requestedByAuthId: authUser._id,
+				targetType: 'information_source',
+				targetId: args.sourceId
+			}
+		);
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<any>(claim.result);
+			if (previous) return previous;
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress.'
+					: (claim.error ?? 'Deletion was already attempted.')
+			);
+		}
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deleteInformationSourcePermanently',
+			targetType: 'information_source',
+			targetId: args.sourceId,
+			status: 'started'
+		});
+		try {
+			const result = await ctx.runMutation(
+				(internal as any).admin.deleteInformationSourceCascadeFromDb,
+				{ sourceId: args.sourceId }
+			);
+			const response = { deleted: result.deleted, sourceId: args.sourceId, r2DeletedCount: 0 };
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: JSON.stringify(response)
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteInformationSourcePermanently',
+				targetType: 'information_source',
+				targetId: args.sourceId,
+				status: 'succeeded'
+			});
+			return response;
+		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_INFORMATION_SOURCE_FAILED,
+				error,
+				'Information source deletion failed.'
+			);
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: failureMessage
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteInformationSourcePermanently',
+				targetType: 'information_source',
+				targetId: args.sourceId,
+				status: 'failed',
+				details: failureMessage
+			});
+			throw error;
+		}
+	}
+});
+
+export const deleteDomainCascadeFromDb = internalMutation({
+	args: { domainId: v.id('knowledge_domains') },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		return await deleteDomainCascade(ctx, args.domainId);
+	}
+});
+
+export const deleteDomainPermanently = action({
+	args: { domainId: v.id('knowledge_domains') },
+	returns: v.object({
+		deleted: v.boolean(),
+		domainId: v.id('knowledge_domains')
+	}),
+	handler: async (ctx, args): Promise<{ deleted: boolean; domainId: Id<'knowledge_domains'> }> => {
+		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('domain', args.domainId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{ requestKey, requestedByAuthId: authUser._id, targetType: 'domain', targetId: args.domainId }
+		);
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<any>(claim.result);
+			if (previous) return previous;
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress.'
+					: (claim.error ?? 'Deletion was already attempted.')
+			);
+		}
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deleteDomainPermanently',
+			targetType: 'domain',
+			targetId: args.domainId,
+			status: 'started'
+		});
+		try {
+			const result = await ctx.runMutation((internal as any).admin.deleteDomainCascadeFromDb, {
+				domainId: args.domainId
+			});
+			const response = { deleted: result.deleted, domainId: args.domainId };
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: JSON.stringify(response)
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteDomainPermanently',
+				targetType: 'domain',
+				targetId: args.domainId,
+				status: 'succeeded'
+			});
+			return response;
+		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_DOMAIN_FAILED,
+				error,
+				'Domain deletion failed.'
+			);
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: failureMessage
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteDomainPermanently',
+				targetType: 'domain',
+				targetId: args.domainId,
+				status: 'failed',
+				details: failureMessage
+			});
+			throw error;
+		}
+	}
+});
+
+export const deleteEntityCascadeFromDb = internalMutation({
+	args: { entityId: v.id('knowledge_entities') },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		return await deleteEntityCascade(ctx, args.entityId);
+	}
+});
+
+export const deleteEntityPermanently = action({
+	args: { entityId: v.id('knowledge_entities') },
+	returns: v.object({
+		deleted: v.boolean(),
+		entityId: v.id('knowledge_entities')
+	}),
+	handler: async (ctx, args): Promise<{ deleted: boolean; entityId: Id<'knowledge_entities'> }> => {
+		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('entity', args.entityId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{ requestKey, requestedByAuthId: authUser._id, targetType: 'entity', targetId: args.entityId }
+		);
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<any>(claim.result);
+			if (previous) return previous;
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress.'
+					: (claim.error ?? 'Deletion was already attempted.')
+			);
+		}
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deleteEntityPermanently',
+			targetType: 'entity',
+			targetId: args.entityId,
+			status: 'started'
+		});
+		try {
+			const result = await ctx.runMutation((internal as any).admin.deleteEntityCascadeFromDb, {
+				entityId: args.entityId
+			});
+			const response = { deleted: result.deleted, entityId: args.entityId };
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: JSON.stringify(response)
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteEntityPermanently',
+				targetType: 'entity',
+				targetId: args.entityId,
+				status: 'succeeded'
+			});
+			return response;
+		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_ENTITY_FAILED,
+				error,
+				'Entity deletion failed.'
+			);
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: failureMessage
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteEntityPermanently',
+				targetType: 'entity',
+				targetId: args.entityId,
+				status: 'failed',
+				details: failureMessage
+			});
+			throw error;
+		}
+	}
+});
+
+export const deleteGoalCascadeFromDb = internalMutation({
+	args: { goalId: v.id('learning_goals') },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		return await deleteGoalCascade(ctx, args.goalId);
+	}
+});
+
+export const deleteGoalPermanently = action({
+	args: { goalId: v.id('learning_goals') },
+	returns: v.object({
+		deleted: v.boolean(),
+		goalId: v.id('learning_goals')
+	}),
+	handler: async (ctx, args): Promise<{ deleted: boolean; goalId: Id<'learning_goals'> }> => {
+		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('goal', args.goalId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{ requestKey, requestedByAuthId: authUser._id, targetType: 'goal', targetId: args.goalId }
+		);
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<any>(claim.result);
+			if (previous) return previous;
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress.'
+					: (claim.error ?? 'Deletion was already attempted.')
+			);
+		}
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deleteGoalPermanently',
+			targetType: 'goal',
+			targetId: args.goalId,
+			status: 'started'
+		});
+		try {
+			const result = await ctx.runMutation((internal as any).admin.deleteGoalCascadeFromDb, {
+				goalId: args.goalId
+			});
+			const response = { deleted: result.deleted, goalId: args.goalId };
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: JSON.stringify(response)
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteGoalPermanently',
+				targetType: 'goal',
+				targetId: args.goalId,
+				status: 'succeeded'
+			});
+			return response;
+		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_GOAL_FAILED,
+				error,
+				'Goal deletion failed.'
+			);
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: failureMessage
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deleteGoalPermanently',
+				targetType: 'goal',
+				targetId: args.goalId,
+				status: 'failed',
+				details: failureMessage
+			});
+			throw error;
+		}
+	}
+});
+
+export const deletePathCascadeFromDb = internalMutation({
+	args: { pathId: v.id('knowledge_paths') },
+	returns: v.any(),
+	handler: async (ctx, args) => {
+		return await deletePathCascade(ctx, args.pathId);
+	}
+});
+
+export const deletePathPermanently = action({
+	args: { pathId: v.id('knowledge_paths') },
+	returns: v.object({
+		deleted: v.boolean(),
+		pathId: v.id('knowledge_paths')
+	}),
+	handler: async (ctx, args): Promise<{ deleted: boolean; pathId: Id<'knowledge_paths'> }> => {
+		const authUser = await requireAdminUser(ctx);
+		const requestKey = createDeletionRequestKey('path', args.pathId);
+		const claim: DeletionJobClaim = await ctx.runMutation(
+			(internal as any).admin.claimDeletionJob,
+			{ requestKey, requestedByAuthId: authUser._id, targetType: 'path', targetId: args.pathId }
+		);
+		if (!claim.shouldRun) {
+			const previous = parseStoredDeleteResult<any>(claim.result);
+			if (previous) return previous;
+			throw new Error(
+				claim.status === 'running' || claim.status === 'queued'
+					? 'Deletion already in progress.'
+					: (claim.error ?? 'Deletion was already attempted.')
+			);
+		}
+		await logAdminAuditEvent(ctx, {
+			actorAuthId: authUser._id,
+			action: 'deletePathPermanently',
+			targetType: 'path',
+			targetId: args.pathId,
+			status: 'started'
+		});
+		try {
+			const result = await ctx.runMutation((internal as any).admin.deletePathCascadeFromDb, {
+				pathId: args.pathId
+			});
+			const response = { deleted: result.deleted, pathId: args.pathId };
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'done',
+				processed: result.deleted ? 1 : 0,
+				result: JSON.stringify(response)
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deletePathPermanently',
+				targetType: 'path',
+				targetId: args.pathId,
+				status: 'succeeded'
+			});
+			return response;
+		} catch (error) {
+			const failureMessage = toFailureMessage(
+				JOB_FAILURE_CODE.ADMIN_DELETE_PATH_FAILED,
+				error,
+				'Path deletion failed.'
+			);
+			await ctx.runMutation((internal as any).admin.finishDeletionJob, {
+				jobId: claim.jobId,
+				status: 'failed',
+				processed: 0,
+				error: failureMessage
+			});
+			await logAdminAuditEvent(ctx, {
+				actorAuthId: authUser._id,
+				action: 'deletePathPermanently',
+				targetType: 'path',
+				targetId: args.pathId,
 				status: 'failed',
 				details: failureMessage
 			});
