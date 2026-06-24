@@ -63,7 +63,7 @@
 		"@convex-dev/rate-limiter": "^0.3.2",
 		"@convex-dev/workflow": "^0.3.4",
 		"@convex-dev/workpool": "^0.3.2",
-		"@openrouter/ai-sdk-provider": "^1.5.4",
+		"@openrouter/ai-sdk-provider": "^2.9.1",
 		"@workos/authkit-sveltekit": "^0.1.0",
 		"convex": "^1.31.7",
 		"convex-svelte": "^0.0.12",
